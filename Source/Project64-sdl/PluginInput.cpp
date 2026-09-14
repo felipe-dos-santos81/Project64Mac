@@ -9,11 +9,14 @@
 #include <Project64-plugin-spec/Input.h>
 #include <SDL3/SDL.h>
 #include <stdio.h>
-#include <string.h>
 
 #define PLUGIN_NAME "Project64 SDL3 input 1.0"
 
-static CONTROL_INFO g_ControlInfo;
+// N64 stick range is -80..80; the SDL axis range is -32768..32767.
+static const int16_t STICK_DEAD_ZONE = 4000;  // below this an axis reads as centred
+static const int16_t STICK_THRESHOLD = 16000; // above this an axis counts as a button press
+static const int N64_AXIS_MAX = 80;
+
 static SDL_Gamepad * g_Gamepad = nullptr;
 
 static void OpenFirstGamepad(void)
@@ -45,12 +48,11 @@ static void CloseGamepad(void)
 
 static int8_t AxisToN64(int16_t value)
 {
-    // SDL: -32768..32767, N64: -80..80 with a small dead zone
-    if (value > -4000 && value < 4000)
+    if (value > -STICK_DEAD_ZONE && value < STICK_DEAD_ZONE)
     {
         return 0;
     }
-    return (int8_t)((value * 80) / 32767);
+    return (int8_t)((value * N64_AXIS_MAX) / 32767);
 }
 
 EXPORT void CALL GetDllInfo(PLUGIN_INFO * PluginInfo)
@@ -64,15 +66,15 @@ EXPORT void CALL GetDllInfo(PLUGIN_INFO * PluginInfo)
 
 EXPORT void CALL InitiateControllers(CONTROL_INFO * ControlInfo)
 {
-    g_ControlInfo = *ControlInfo;
+    // Controls points at the core's own array, so these writes land there directly.
     for (int i = 0; i < 4; i++)
     {
-        g_ControlInfo.Controls[i].Present = PRESENT_NONE;
-        g_ControlInfo.Controls[i].RawData = false;
-        g_ControlInfo.Controls[i].Plugin = PLUGIN_NONE;
+        ControlInfo->Controls[i].Present = PRESENT_NONE;
+        ControlInfo->Controls[i].RawData = false;
+        ControlInfo->Controls[i].Plugin = PLUGIN_NONE;
     }
-    g_ControlInfo.Controls[0].Present = PRESENT_CONT;
-    g_ControlInfo.Controls[0].Plugin = PLUGIN_MEMPAK;
+    ControlInfo->Controls[0].Present = PRESENT_CONT;
+    ControlInfo->Controls[0].Plugin = PLUGIN_MEMPAK;
 }
 
 EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
@@ -101,10 +103,10 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         Keys->L_DPAD = k[SDL_SCANCODE_J];
         Keys->R_DPAD = k[SDL_SCANCODE_L];
         int x = 0, y = 0;
-        if (k[SDL_SCANCODE_LEFT]) x -= 80;
-        if (k[SDL_SCANCODE_RIGHT]) x += 80;
-        if (k[SDL_SCANCODE_DOWN]) y -= 80;
-        if (k[SDL_SCANCODE_UP]) y += 80;
+        if (k[SDL_SCANCODE_LEFT]) x -= N64_AXIS_MAX;
+        if (k[SDL_SCANCODE_RIGHT]) x += N64_AXIS_MAX;
+        if (k[SDL_SCANCODE_DOWN]) y -= N64_AXIS_MAX;
+        if (k[SDL_SCANCODE_UP]) y += N64_AXIS_MAX;
         Keys->X_AXIS = (int8_t)x;
         Keys->Y_AXIS = (int8_t)y;
     }
@@ -123,17 +125,17 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         Keys->START_BUTTON |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_START);
         Keys->L_TRIG |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
         Keys->R_TRIG |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        Keys->Z_TRIG |= SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
+        Keys->Z_TRIG |= SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > STICK_THRESHOLD;
         Keys->U_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
         Keys->D_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
         Keys->L_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
         Keys->R_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
         int16_t rx = SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
         int16_t ry = SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
-        Keys->R_CBUTTON |= rx > 16000;
-        Keys->L_CBUTTON |= rx < -16000;
-        Keys->D_CBUTTON |= ry > 16000;
-        Keys->U_CBUTTON |= ry < -16000;
+        Keys->R_CBUTTON |= rx > STICK_THRESHOLD;
+        Keys->L_CBUTTON |= rx < -STICK_THRESHOLD;
+        Keys->D_CBUTTON |= ry > STICK_THRESHOLD;
+        Keys->U_CBUTTON |= ry < -STICK_THRESHOLD;
         if (Keys->X_AXIS == 0 && Keys->Y_AXIS == 0)
         {
             Keys->X_AXIS = AxisToN64(SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFTX));

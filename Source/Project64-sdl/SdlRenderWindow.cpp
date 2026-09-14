@@ -1,5 +1,4 @@
 #include "SdlRenderWindow.h"
-#include <OpenGL/OpenGL.h> // CGLGetCurrentContext, CGLFlushDrawable
 #include <OpenGL/gl.h>
 #include <Common/Trace.h>
 #include <Project64-core/TraceModulesProject64.h>
@@ -11,9 +10,20 @@ CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, C
     m_Window(Window),
     m_Context(Context),
     m_Cgl(Cgl),
+    m_DumpAt(300),
     m_FrameCount(0),
     m_FrameDumped(false)
 {
+    const char * Path = getenv("PJ64_FRAME_DUMP");
+    if (Path != nullptr)
+    {
+        m_DumpPath = Path;
+    }
+    const char * FrameEnv = getenv("PJ64_FRAME_DUMP_AT");
+    if (FrameEnv != nullptr)
+    {
+        m_DumpAt = (uint32_t)atoi(FrameEnv);
+    }
 }
 
 void CSdlRenderWindow::GfxThreadInit()
@@ -46,15 +56,13 @@ void CSdlRenderWindow::GfxThreadDone()
 // only way to see what was drawn without capturing the whole screen.
 void CSdlRenderWindow::DumpFrame()
 {
-    const char * Path = getenv("PJ64_FRAME_DUMP");
-    if (Path == nullptr || Path[0] == '\0' || m_FrameDumped)
+    if (m_FrameDumped || m_DumpPath.empty())
     {
         return;
     }
-    const char * FrameEnv = getenv("PJ64_FRAME_DUMP_AT");
-    uint32_t DumpAt = FrameEnv != nullptr ? (uint32_t)atoi(FrameEnv) : 300;
+    const char * Path = m_DumpPath.c_str();
     m_FrameCount += 1;
-    if (m_FrameCount < DumpAt)
+    if (m_FrameCount < m_DumpAt)
     {
         return;
     }
@@ -98,10 +106,11 @@ void CSdlRenderWindow::SwapWindow()
     // context it does not own, and this thread waits on the main thread: a deadlock on the
     // very first swap. Presenting is exactly CGLFlushDrawable on the context that is
     // current here, so do that directly and leave SDL out of it.
-    CGLContextObj cgl = CGLGetCurrentContext();
-    if (cgl != nullptr)
+    // m_Cgl was captured on the main thread and bound here by GfxThreadInit, so it is
+    // already the current context - no need to ask GL for it again every frame.
+    if (m_Cgl != nullptr)
     {
-        CGLFlushDrawable(cgl);
+        CGLFlushDrawable(m_Cgl);
         return;
     }
     // No context current on this thread. SDL_GL_SwapWindow is the only option left, but

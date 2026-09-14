@@ -4,22 +4,18 @@
 #include <Project64-core/Multilanguage.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
-#include <Project64-core/Settings.h>
 #include <Project64-core/TraceModulesProject64.h>
 #include <stdio.h>
 
-CSdlNotification::CSdlNotification()
+void CSdlNotification::Report(enum TraceSeverity Severity, const char * Prefix, const char * Message) const
 {
-}
-
-CSdlNotification::~CSdlNotification()
-{
+    WriteTrace(TraceUserInterface, Severity, "%s", Message);
+    fprintf(stderr, "[Project64] %s%s\n", Prefix, Message);
 }
 
 void CSdlNotification::DisplayError(const char * Message) const
 {
-    WriteTrace(TraceUserInterface, TraceError, "%s", Message);
-    fprintf(stderr, "[Project64] error: %s\n", Message);
+    Report(TraceError, "error: ", Message);
 }
 
 void CSdlNotification::DisplayError(LanguageStringID StringID) const
@@ -49,8 +45,7 @@ void CSdlNotification::FatalError(LanguageStringID StringID) const
 
 void CSdlNotification::DisplayWarning(const char * Message) const
 {
-    WriteTrace(TraceUserInterface, TraceWarning, "%s", Message);
-    fprintf(stderr, "[Project64] warning: %s\n", Message);
+    Report(TraceWarning, "warning: ", Message);
 }
 
 void CSdlNotification::DisplayWarning(LanguageStringID StringID) const
@@ -63,8 +58,7 @@ void CSdlNotification::DisplayWarning(LanguageStringID StringID) const
 
 void CSdlNotification::DisplayMessage(int /*DisplayTime*/, const char * Message) const
 {
-    WriteTrace(TraceUserInterface, TraceInfo, "%s", Message);
-    fprintf(stderr, "[Project64] %s\n", Message);
+    Report(TraceInfo, "", Message);
 }
 
 void CSdlNotification::DisplayMessage(int DisplayTime, LanguageStringID StringID) const

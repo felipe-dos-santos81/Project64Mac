@@ -38,6 +38,22 @@ static std::string ExecutableDirectory(void)
     return slash == std::string::npos ? "." : dir.substr(0, slash);
 }
 
+// Tears down whatever SDL state exists and returns ExitCode, so each failure path is one
+// line and a new one cannot forget a step. Null arguments are skipped.
+static int ShutdownSdl(SDL_Window * Window, SDL_GLContext Context, int ExitCode)
+{
+    if (Context != nullptr)
+    {
+        SDL_GL_DestroyContext(Context);
+    }
+    if (Window != nullptr)
+    {
+        SDL_DestroyWindow(Window);
+    }
+    SDL_Quit();
+    return ExitCode;
+}
+
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).
 static void ConfigurePlugins(void)
 {
@@ -83,16 +99,13 @@ int main(int argc, char ** argv)
     if (window == nullptr)
     {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
-        SDL_Quit();
-        return 1;
+        return ShutdownSdl(nullptr, nullptr, 1);
     }
     SDL_GLContext context = SDL_GL_CreateContext(window);
     if (context == nullptr)
     {
         fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
+        return ShutdownSdl(window, nullptr, 1);
     }
     // Release the context on the main thread; the emulation thread takes it in GfxThreadInit.
     // Capture the underlying CGL context while it is current here on the main thread;
@@ -105,10 +118,7 @@ int main(int argc, char ** argv)
     if (!AppInit(&notify, baseDir.c_str(), 0, nullptr))
     {
         fprintf(stderr, "AppInit failed\n");
-        SDL_GL_DestroyContext(context);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
+        return ShutdownSdl(window, context, 1);
     }
     ConfigurePlugins();
 
@@ -119,10 +129,7 @@ int main(int argc, char ** argv)
     {
         fprintf(stderr, "Failed to load ROM: %s\n", argv[1]);
         AppCleanup();
-        SDL_GL_DestroyContext(context);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
+        return ShutdownSdl(window, context, 1);
     }
 
     bool running = true;
@@ -145,8 +152,5 @@ int main(int argc, char ** argv)
 
     CN64System::CloseSystem(); // stops the CPU thread and deletes g_BaseSystem
     AppCleanup();
-    SDL_GL_DestroyContext(context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 0;
+    return ShutdownSdl(window, context, 0);
 }
