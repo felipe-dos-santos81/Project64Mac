@@ -7,8 +7,12 @@
 // loop) and polls the first gamepad, both of which SDL3 documents as safe
 // from any thread.
 #include <Project64-plugin-spec/Input.h>
+#include <Common/GridKeys.h>
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #define PLUGIN_NAME "Project64 SDL3 input 1.0"
 
@@ -18,6 +22,46 @@ static const int16_t STICK_THRESHOLD = 16000; // above this an axis counts as a 
 static const int N64_AXIS_MAX = 80;
 
 static SDL_Gamepad * g_Gamepad = nullptr;
+static GridKeys * g_GridKeys = nullptr;
+static bool g_GridKeysChecked = false;
+
+// The orchestrator maps a GridKeys and passes its descriptor in PJ64_GRID_KEYS_ENV.
+// Reading it here means every tile sees the one keyboard owned by the control strip.
+// Without the variable this is a normal single-ROM run and SDL's own state is used.
+static void OpenGridKeys(void)
+{
+    if (g_GridKeysChecked)
+    {
+        return;
+    }
+    g_GridKeysChecked = true;
+    const char * FdEnv = getenv(PJ64_GRID_KEYS_ENV);
+    if (FdEnv == nullptr)
+    {
+        return;
+    }
+    void * Mapped = mmap(nullptr, sizeof(GridKeys), PROT_READ, MAP_SHARED, atoi(FdEnv), 0);
+    if (Mapped == MAP_FAILED)
+    {
+        fprintf(stderr, "input: could not map %s=%s\n", PJ64_GRID_KEYS_ENV, FdEnv);
+        return;
+    }
+    g_GridKeys = (GridKeys *)Mapped;
+}
+
+// Verification only. With PJ64_GRID_SELFTEST set, report once which of two known keys
+// the snapshot carried, so Scripts/grid_selftest.sh can prove the broadcast.
+static void SelftestReport(const bool * Keys)
+{
+    static bool Reported = false;
+    if (Reported || getenv("PJ64_GRID_SELFTEST") == nullptr)
+    {
+        return;
+    }
+    Reported = true;
+    fprintf(stderr, "grid-selftest pid=%d a=%d start=%d\n",
+        (int)getpid(), Keys[SDL_SCANCODE_X] ? 1 : 0, Keys[SDL_SCANCODE_RETURN] ? 1 : 0);
+}
 
 static void OpenFirstGamepad(void)
 {
@@ -85,7 +129,15 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         return;
     }
 
+    bool Snapshot[SDL_SCANCODE_COUNT];
     const bool * k = SDL_GetKeyboardState(nullptr);
+    OpenGridKeys();
+    if (g_GridKeys != nullptr)
+    {
+        GridKeysSnapshot(g_GridKeys, Snapshot);
+        SelftestReport(Snapshot);
+        k = Snapshot;
+    }
     if (k != nullptr)
     {
         Keys->A_BUTTON = k[SDL_SCANCODE_X];
