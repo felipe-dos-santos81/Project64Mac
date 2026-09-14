@@ -1,0 +1,218 @@
+// Project64 - A Nintendo 64 emulator
+// Grid orchestrator: one child process per ROM, laid out near-square, with a control
+// strip that owns the keyboard. See Docs/superpowers/specs/2026-09-14-multi-rom-grid-design.md
+// GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
+#include "GridHost.h"
+#include <SDL3/SDL.h>
+#include <mach-o/dyld.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <string>
+#include <vector>
+
+static const int MAX_TILES = 16;
+static const int STRIP_HEIGHT = 28;
+static const int MIN_TILE_W = 320;
+static const int MIN_TILE_H = 240;
+
+static volatile sig_atomic_t g_StopRequested = 0;
+
+static void HandleStopSignal(int /*sig*/)
+{
+    g_StopRequested = 1;
+}
+
+static std::string ExecutablePath(void)
+{
+    char Buf[4096];
+    uint32_t Size = sizeof(Buf);
+    if (_NSGetExecutablePath(Buf, &Size) != 0)
+    {
+        return "";
+    }
+    char Resolved[4096];
+    if (realpath(Buf, Resolved) == nullptr)
+    {
+        return "";
+    }
+    return std::string(Resolved);
+}
+
+int GridHostRun(int argc, char ** argv)
+{
+    const int RomCount = argc - 2;
+    char ** Roms = argv + 2;
+    if (RomCount < 1 || RomCount > MAX_TILES)
+    {
+        fprintf(stderr, "usage: %s --grid rom1 .. rom%d (got %d)\n", argv[0], MAX_TILES, RomCount);
+        return 2;
+    }
+    for (int i = 0; i < RomCount; i++)
+    {
+        if (access(Roms[i], R_OK) != 0)
+        {
+            fprintf(stderr, "cannot read %s\n", Roms[i]);
+            return 2;
+        }
+    }
+
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_Rect Area;
+    if (!SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &Area))
+    {
+        fprintf(stderr, "SDL_GetDisplayUsableBounds failed: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // Near-square grid. Integer sqrt so no floating point is involved.
+    int Cols = 1;
+    while (Cols * Cols < RomCount)
+    {
+        Cols += 1;
+    }
+    const int Rows = (RomCount + Cols - 1) / Cols;
+    const int CellW = Area.w / Cols;
+    const int CellH = (Area.h - STRIP_HEIGHT) / Rows;
+    int TileH = CellH < CellW * 3 / 4 ? CellH : CellW * 3 / 4;
+    if (TileH < MIN_TILE_H)
+    {
+        TileH = MIN_TILE_H;
+    }
+    int TileW = TileH * 4 / 3;
+    if (TileW < MIN_TILE_W)
+    {
+        TileW = MIN_TILE_W;
+    }
+    const int GridW = Cols * TileW;
+    const int GridH = Rows * TileH;
+    const int OriginX = Area.x + (Area.w - GridW) / 2;
+    const int OriginY = Area.y + (Area.h - STRIP_HEIGHT - GridH) / 2;
+
+    SDL_Window * Strip = SDL_CreateWindow("Project64 grid - Esc to quit", Area.w, STRIP_HEIGHT,
+        SDL_WINDOW_ALWAYS_ON_TOP);
+    if (Strip == nullptr)
+    {
+        fprintf(stderr, "SDL_CreateWindow (strip) failed: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+    SDL_SetWindowPosition(Strip, Area.x, Area.y + Area.h - STRIP_HEIGHT);
+    SDL_RaiseWindow(Strip);
+
+    const std::string Exe = ExecutablePath();
+    if (Exe.empty())
+    {
+        fprintf(stderr, "could not resolve the executable path\n");
+        SDL_DestroyWindow(Strip);
+        SDL_Quit();
+        return 1;
+    }
+
+    std::vector<pid_t> Children;
+    for (int i = 0; i < RomCount; i++)
+    {
+        const int Row = i / Cols;
+        const int Col = i % Cols;
+        const int X = OriginX + Col * TileW + (CellW - TileW) / 2;
+        const int Y = OriginY + Row * TileH + (CellH - TileH) / 2;
+        const pid_t Pid = fork();
+        if (Pid == 0)
+        {
+            char Rect[64];
+            snprintf(Rect, sizeof(Rect), "%d,%d,%d,%d", X, Y, TileW, TileH);
+            setenv("PJ64_AUDIO_MUTE", "1", 1);
+            char * ChildArgv[] = {
+                const_cast<char *>(Exe.c_str()),
+                const_cast<char *>("--tile"),
+                Roms[i],
+                const_cast<char *>("--tile-rect"),
+                Rect,
+                nullptr,
+            };
+            execv(Exe.c_str(), ChildArgv);
+            _exit(127);
+        }
+        if (Pid < 0)
+        {
+            fprintf(stderr, "fork failed for %s\n", Roms[i]);
+            continue;
+        }
+        Children.push_back(Pid);
+    }
+    if (Children.empty())
+    {
+        fprintf(stderr, "no tiles started\n");
+        SDL_DestroyWindow(Strip);
+        SDL_Quit();
+        return 1;
+    }
+
+    signal(SIGINT, HandleStopSignal);
+    signal(SIGTERM, HandleStopSignal);
+
+    while (!g_StopRequested)
+    {
+        SDL_Event Ev;
+        while (SDL_PollEvent(&Ev))
+        {
+            if (Ev.type == SDL_EVENT_QUIT || Ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+            {
+                g_StopRequested = 1;
+            }
+            if (Ev.type == SDL_EVENT_KEY_DOWN && Ev.key.key == SDLK_ESCAPE)
+            {
+                g_StopRequested = 1;
+            }
+        }
+        int Status = 0;
+        pid_t Done = 0;
+        while ((Done = waitpid(-1, &Status, WNOHANG)) > 0)
+        {
+            fprintf(stderr, "tile pid %d exited (status %d)\n", (int)Done, Status);
+        }
+        SDL_Delay(10);
+    }
+
+    for (size_t i = 0; i < Children.size(); i++)
+    {
+        kill(Children[i], SIGTERM);
+    }
+    for (int Pass = 0; Pass < 10; Pass++)
+    {
+        bool AnyAlive = false;
+        for (size_t i = 0; i < Children.size(); i++)
+        {
+            if (waitpid(Children[i], nullptr, WNOHANG) == 0)
+            {
+                AnyAlive = true;
+            }
+        }
+        if (!AnyAlive)
+        {
+            break;
+        }
+        SDL_Delay(100);
+    }
+    for (size_t i = 0; i < Children.size(); i++)
+    {
+        kill(Children[i], SIGKILL);
+    }
+    for (size_t i = 0; i < Children.size(); i++)
+    {
+        waitpid(Children[i], nullptr, 0);
+    }
+
+    SDL_DestroyWindow(Strip);
+    SDL_Quit();
+    return 0;
+}

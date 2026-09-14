@@ -3,6 +3,7 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "SdlNotification.h"
 #include "SdlRenderWindow.h"
+#include "GridHost.h"
 #include <Project64-core/AppInit.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
@@ -88,6 +89,10 @@ int main(int argc, char ** argv)
     {
         printf("Project64 macOS SDL3 frontend\n");
         return 0;
+    }
+    if (argc >= 2 && strcmp(argv[1], "--grid") == 0)
+    {
+        return GridHostRun(argc, argv);
     }
     bool TileMode = false;
     SDL_Rect TileRect = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};

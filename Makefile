@@ -288,7 +288,7 @@ VIDEO_SRC = $(addprefix Project64-video/, 3dmath.cpp Combine.cpp Config.cpp CRC.
   TextureEnhancer/tc-1.1+/dxtn.c TextureEnhancer/tc-1.1+/wrapper.c TextureEnhancer/tc-1.1+/texstore.c)
 AUDIO_SRC = $(addprefix Project64-audio/, AudioMain.cpp AudioSettings.cpp trace.cpp Driver/SoundBase.cpp Driver/SdlAudio.cpp)
 INPUT_SRC = Project64-sdl/PluginInput.cpp
-FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp)
+FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
