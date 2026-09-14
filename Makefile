@@ -431,6 +431,8 @@ config: ## [STEP 7b] Install ROM database, enhancements and language files next 
 	@cp -f Config/Project64.rdb Config/Project64.rdx Config/Audio.rdb Config/Video.rdb $(BIN)/Config/
 	@# -n, not -f: cheats and enhancement settings are user data once installed.
 	@cp -Rn Config/Cheats Config/Enhancements $(BIN)/Config/ 2>/dev/null || true
+	@# -n: the mapping is user data once installed.
+	@cp -n Config/input.yaml $(BIN)/Config/ 2>/dev/null || true
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 

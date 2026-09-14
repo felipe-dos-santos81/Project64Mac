@@ -1,0 +1,47 @@
+# Input bindings for the SDL3 input plugin. Optional.
+#
+# A control named here gets exactly one input, replacing its built-in binding (which is
+# a keyboard key and a gamepad input at once). An omitted control keeps its built-in
+# binding. Delete this file to restore every built-in binding.
+#
+# Forms:
+#   {key: <name>}                         SDL scancode name: X, Return, Space, Up, Left
+#   {button: <name>}                      SDL gamepad name: a, b, x, y, start, leftshoulder, dpup
+#   {axis: <name>} or {axis: <name>, sign: +/-}   SDL gamepad axis: lefttrigger, rightx, righty
+#   {stick: left} / {stick: right}        a whole stick (Stick only)
+#   {keys: {up:…, down:…, left:…, right:…}}       four keys as a digital stick (Stick only)
+
+bindings:
+  A:         {key: X}
+  B:         {key: C}
+  Z:         {key: Z}
+  Start:     {key: Return}
+  L:         {key: Q}
+  R:         {key: E}
+  CUp:       {key: W}
+  CDown:     {key: S}
+  CLeft:     {key: A}
+  CRight:    {key: D}
+  DPadUp:    {key: I}
+  DPadDown:  {key: K}
+  DPadLeft:  {key: J}
+  DPadRight: {key: L}
+  Stick:     {keys: {up: Up, down: Down, left: Left, right: Right}}
+
+# Gamepad alternative: replace the `bindings:` block above with this one.
+# bindings:
+#   A:         {button: a}
+#   B:         {button: b}
+#   Z:         {axis: lefttrigger}
+#   Start:     {button: start}
+#   L:         {button: leftshoulder}
+#   R:         {button: rightshoulder}
+#   CUp:       {axis: righty, sign: -}
+#   CDown:     {axis: righty, sign: +}
+#   CLeft:     {axis: rightx, sign: -}
+#   CRight:    {axis: rightx, sign: +}
+#   DPadUp:    {button: dpup}
+#   DPadDown:  {button: dpdown}
+#   DPadLeft:  {button: dpleft}
+#   DPadRight: {button: dpright}
+#   Stick:     {stick: left}
