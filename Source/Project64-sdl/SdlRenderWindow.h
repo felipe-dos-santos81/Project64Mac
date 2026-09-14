@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <OpenGL/OpenGL.h>
 #include <string>
+#include <vector>
 
 // Owns nothing; the SDL_Window and SDL_GLContext belong to main().
 // GfxThreadInit/SwapWindow/GfxThreadDone are called by the core on the
@@ -18,6 +19,9 @@ public:
 
 private:
     void DumpFrame();
+    bool ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height);
+    double NonBlackShare(const std::vector<uint8_t> & Pixels, int Width, int Height) const;
+    void WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height);
 
     SDL_Window * m_Window;
     SDL_GLContext m_Context;
@@ -32,4 +36,10 @@ private:
     uint32_t m_DumpAt;
     uint32_t m_FrameCount;
     bool m_FrameDumped;
+    // Non-black wait, driven by PJ64_FRAME_DUMP_MIN_NONBLACK. 0 keeps the old
+    // write-once-at-DumpAt behavior; PJ64_FRAME_DUMP_MAX caps the wait.
+    double m_MinNonBlack;
+    uint32_t m_MaxFrame;
+    double m_BestNonBlack;
+    std::vector<uint8_t> m_BestPixels;
 };

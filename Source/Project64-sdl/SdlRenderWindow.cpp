@@ -6,13 +6,20 @@
 #include <stdlib.h>
 #include <vector>
 
+// How often DumpFrame re-checks the back buffer while waiting for a non-black frame.
+// Reading every frame would slow the emulation being waited on.
+static const uint32_t DumpCheckInterval = 30;
+
 CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl) :
     m_Window(Window),
     m_Context(Context),
     m_Cgl(Cgl),
     m_DumpAt(300),
     m_FrameCount(0),
-    m_FrameDumped(false)
+    m_FrameDumped(false),
+    m_MinNonBlack(0.0),
+    m_MaxFrame(3600),
+    m_BestNonBlack(0.0)
 {
     const char * Path = getenv("PJ64_FRAME_DUMP");
     if (Path != nullptr)
@@ -23,6 +30,16 @@ CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, C
     if (FrameEnv != nullptr)
     {
         m_DumpAt = (uint32_t)atoi(FrameEnv);
+    }
+    const char * MinEnv = getenv("PJ64_FRAME_DUMP_MIN_NONBLACK");
+    if (MinEnv != nullptr)
+    {
+        m_MinNonBlack = atof(MinEnv);
+    }
+    const char * MaxEnv = getenv("PJ64_FRAME_DUMP_MAX");
+    if (MaxEnv != nullptr)
+    {
+        m_MaxFrame = (uint32_t)atoi(MaxEnv);
     }
 }
 
@@ -54,32 +71,110 @@ void CSdlRenderWindow::GfxThreadDone()
 // counter reaches PJ64_FRAME_DUMP_AT (default 300, late enough to pass the black frames a
 // game shows while it boots). This frontend has no UI, so reading the back buffer is the
 // only way to see what was drawn without capturing the whole screen.
+//
+// With PJ64_FRAME_DUMP_MIN_NONBLACK set, the dump instead waits for the first frame whose
+// non-black share clears that percentage, so a boot-time black frame is never the one
+// captured. PJ64_FRAME_DUMP_MAX bounds the wait; at the cap the best frame seen is written.
 void CSdlRenderWindow::DumpFrame()
 {
     if (m_FrameDumped || m_DumpPath.empty())
     {
         return;
     }
-    const char * Path = m_DumpPath.c_str();
     m_FrameCount += 1;
     if (m_FrameCount < m_DumpAt)
     {
         return;
     }
 
-    GLint Viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, Viewport);
-    GLint Width = Viewport[2], Height = Viewport[3];
-    if (Width <= 0 || Height <= 0)
+    // No threshold: write the first frame at PJ64_FRAME_DUMP_AT, exactly as before.
+    if (m_MinNonBlack <= 0.0)
+    {
+        std::vector<uint8_t> Pixels;
+        int Width = 0, Height = 0;
+        if (ReadBackBuffer(Pixels, Width, Height))
+        {
+            WriteFrame(Pixels, Width, Height);
+        }
+        return;
+    }
+
+    bool AtCap = m_FrameCount >= m_MaxFrame;
+    if (!AtCap && (m_FrameCount - m_DumpAt) % DumpCheckInterval != 0)
     {
         return;
     }
 
-    std::vector<uint8_t> Pixels((size_t)Width * (size_t)Height * 3);
+    std::vector<uint8_t> Pixels;
+    int Width = 0, Height = 0;
+    if (!ReadBackBuffer(Pixels, Width, Height))
+    {
+        return;
+    }
+
+    double Share = NonBlackShare(Pixels, Width, Height);
+    if (Share >= m_MinNonBlack)
+    {
+        WriteFrame(Pixels, Width, Height);
+        return;
+    }
+    if (Share > m_BestNonBlack)
+    {
+        m_BestNonBlack = Share;
+        m_BestPixels = Pixels;
+    }
+    if (AtCap)
+    {
+        WriteTrace(TraceUserInterface, TraceInfo,
+            "Frame cap %u reached with %.1f%% non-black (wanted %.1f%%)",
+            (unsigned)m_MaxFrame, Share, m_MinNonBlack);
+        WriteFrame(m_BestPixels.empty() ? Pixels : m_BestPixels, Width, Height);
+    }
+}
+
+bool CSdlRenderWindow::ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height)
+{
+    GLint Viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, Viewport);
+    Width = (int)Viewport[2];
+    Height = (int)Viewport[3];
+    if (Width <= 0 || Height <= 0)
+    {
+        return false;
+    }
+    Pixels.resize((size_t)Width * (size_t)Height * 3);
     glReadBuffer(GL_BACK);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, Width, Height, GL_RGB, GL_UNSIGNED_BYTE, &Pixels[0]);
+    return true;
+}
 
+// Share of sampled pixels that are not black, over a sparse grid (every 8th pixel on each
+// axis) so the check stays cheap. A pixel is non-black when any channel exceeds 16, which
+// ignores low-level dither noise on an otherwise black frame.
+double CSdlRenderWindow::NonBlackShare(const std::vector<uint8_t> & Pixels, int Width, int Height) const
+{
+    const int Stride = 8;
+    const uint8_t Threshold = 16;
+    size_t Total = 0, NonBlack = 0;
+    for (int y = 0; y < Height; y += Stride)
+    {
+        for (int x = 0; x < Width; x += Stride)
+        {
+            size_t i = ((size_t)y * (size_t)Width + (size_t)x) * 3;
+            Total += 1;
+            if (Pixels[i] > Threshold || Pixels[i + 1] > Threshold || Pixels[i + 2] > Threshold)
+            {
+                NonBlack += 1;
+            }
+        }
+    }
+    return Total == 0 ? 0.0 : 100.0 * (double)NonBlack / (double)Total;
+}
+
+void CSdlRenderWindow::WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height)
+{
+    const char * Path = m_DumpPath.c_str();
     FILE * File = fopen(Path, "wb");
     if (File == nullptr)
     {
@@ -87,14 +182,14 @@ void CSdlRenderWindow::DumpFrame()
         m_FrameDumped = true;
         return;
     }
-    fprintf(File, "P6\n%d %d\n255\n", (int)Width, (int)Height);
-    for (GLint Row = Height - 1; Row >= 0; Row--) // GL's origin is bottom left, a PPM's is top left
+    fprintf(File, "P6\n%d %d\n255\n", Width, Height);
+    for (int Row = Height - 1; Row >= 0; Row--) // GL's origin is bottom left, a PPM's is top left
     {
         fwrite(&Pixels[(size_t)Row * (size_t)Width * 3], 1, (size_t)Width * 3, File);
     }
     fclose(File);
     m_FrameDumped = true;
-    WriteTrace(TraceUserInterface, TraceInfo, "Wrote frame %u (%dx%d) to %s", (unsigned)m_FrameCount, (int)Width, (int)Height, Path);
+    WriteTrace(TraceUserInterface, TraceInfo, "Wrote frame %u (%dx%d) to %s", (unsigned)m_FrameCount, Width, Height, Path);
 }
 
 void CSdlRenderWindow::SwapWindow()
