@@ -1,0 +1,30 @@
+# Build output
+/build
+/Bin/macOS
+*.o
+*.a
+
+# Game files, never committed
+/Roms
+
+# Generated from Version.h.in
+/Source/Project64-audio/Version.h
+/Source/Project64-core/Version.h
+/Source/Project64-video/Version.h
+/Source/Project64-rsp-core/Version.h
+
+# Written at runtime
+/Config/Cheats-User
+/Config/Enhancements-User
+/Config/Project64.cache3
+/Config/Project64.cfg
+/Config/Project64.rdn
+/Config/Project64.sc3
+/Config/Project64.zcache
+/Save
+
+# Coding-agent scratch
+/.claude
+/.superpowers
+
+.DS_Store
