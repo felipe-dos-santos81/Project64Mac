@@ -335,11 +335,11 @@ $(SOFTFLOAT_OBJS): CFLAGS += -Wno-implicit-function-declaration
 $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
-$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS): CPPFLAGS += $(SDL_CFLAGS)
+$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(SDL_CFLAGS)
 $(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest input-config-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -453,6 +453,10 @@ rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
 grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/grid_selftest.sh "$(rom)"
+
+input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
+	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)
+	@$(BUILD)/input-config-test
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
