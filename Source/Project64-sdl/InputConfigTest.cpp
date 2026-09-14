@@ -44,7 +44,7 @@ int main()
 
     const char * Gamepad =
         "bindings:\n"
-        "  A: {button: south}\n"
+        "  A: {button: a}\n"
         "  Z: {axis: lefttrigger, sign: +}\n"
         "  CUp: {axis: righty, sign: -}\n"
         "  Stick: {stick: left}\n";

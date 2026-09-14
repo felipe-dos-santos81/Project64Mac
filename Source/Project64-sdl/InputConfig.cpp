@@ -178,22 +178,7 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     if (Form == "button")
     {
         const std::string Name = Value[Form].as<std::string>();
-        SDL_GamepadButton B = SDL_GetGamepadButtonFromString(Name.c_str());
-        if (B == SDL_GAMEPAD_BUTTON_INVALID)
-        {
-            // SDL's string table names the face buttons a/b/x/y; accept the enum's
-            // south/east/west/north names the docs use.
-            static const struct { const char * Name; SDL_GamepadButton Button; } kFace[] = {
-                { "south", SDL_GAMEPAD_BUTTON_SOUTH },
-                { "east", SDL_GAMEPAD_BUTTON_EAST },
-                { "west", SDL_GAMEPAD_BUTTON_WEST },
-                { "north", SDL_GAMEPAD_BUTTON_NORTH },
-            };
-            for (const auto & Face : kFace)
-            {
-                if (Name == Face.Name) { B = Face.Button; break; }
-            }
-        }
+        const SDL_GamepadButton B = SDL_GetGamepadButtonFromString(Name.c_str());
         if (B == SDL_GAMEPAD_BUTTON_INVALID) { ConfigError(Path, Value[Form], "unknown gamepad button \"" + Name + "\""); return false; }
         Out = MakeButton(B);
         return true;
