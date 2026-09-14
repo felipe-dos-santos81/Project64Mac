@@ -145,6 +145,8 @@ int GridHostRun(int argc, char ** argv)
     if (KeyFd < 0 || ftruncate(KeyFd, (off_t)sizeof(GridKeys)) != 0)
     {
         fprintf(stderr, "could not create the key snapshot\n");
+        shm_unlink(ShmName);
+        close(KeyFd);
         SDL_DestroyWindow(Strip);
         SDL_Quit();
         return 1;
@@ -153,6 +155,7 @@ int GridHostRun(int argc, char ** argv)
     if (MappedKeys == MAP_FAILED)
     {
         fprintf(stderr, "could not map the key snapshot\n");
+        shm_unlink(ShmName);
         close(KeyFd);
         SDL_DestroyWindow(Strip);
         SDL_Quit();
