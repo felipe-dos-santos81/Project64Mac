@@ -71,6 +71,7 @@ int main()
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: X, button: a}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: middle}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: left}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {keys: {up: Up}}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {keys: {up: NoSuchKey, down: Down, left: Left, right: Right}}\n")));
     CHECK(!C.Load(WriteTemp("bindings: [1, 2]\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
