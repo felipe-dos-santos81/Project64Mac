@@ -53,8 +53,8 @@ fi
 
 if [ "$FAIL" -eq 0 ]; then
     echo "ok: $COUNT tiles received the key pattern"
+    rm -f "$LOG"
 else
     echo "log: $LOG" >&2
 fi
-rm -f "$LOG"
 exit "$FAIL"

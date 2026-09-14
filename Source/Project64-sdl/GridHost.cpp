@@ -115,8 +115,10 @@ int GridHostRun(int argc, char ** argv)
     const int OriginX = Area.x + (Area.w - GridW) / 2;
     const int OriginY = Area.y + (Area.h - STRIP_HEIGHT - GridH) / 2;
 
-    SDL_Window * Strip = SDL_CreateWindow("Project64 grid - Esc to quit", Area.w, STRIP_HEIGHT,
-        SDL_WINDOW_ALWAYS_ON_TOP);
+    char Title[64];
+    snprintf(Title, sizeof(Title), "Project64 grid - %d game%s - Esc to quit", RomCount,
+        RomCount == 1 ? "" : "s");
+    SDL_Window * Strip = SDL_CreateWindow(Title, Area.w, STRIP_HEIGHT, SDL_WINDOW_ALWAYS_ON_TOP);
     if (Strip == nullptr)
     {
         fprintf(stderr, "SDL_CreateWindow (strip) failed: %s\n", SDL_GetError());
@@ -226,6 +228,7 @@ int GridHostRun(int argc, char ** argv)
 
     int Status = 0;
     pid_t Done = 0;
+    const Uint64 LoopStart = SDL_GetTicks();
     while (!g_StopRequested)
     {
         SDL_Event Ev;
@@ -244,6 +247,18 @@ int GridHostRun(int argc, char ** argv)
         {
             fprintf(stderr, "tile pid %d exited (status %d)\n", (int)Done, Status);
             RemoveChild(Children, Done);
+        }
+        // If the app was not frontmost at launch, macOS may never give the strip keyboard
+        // focus, so every tile sees an all-zero key state and ignores the keyboard. Say so
+        // once, after SDL has had time to deliver any focus it was going to grant.
+        static bool Warned = false;
+        if (!Warned && SDL_GetTicks() - LoopStart >= 1000)
+        {
+            Warned = true;
+            if (SDL_GetKeyboardFocus() != Strip)
+            {
+                fprintf(stderr, "grid has no keyboard focus; click the control strip to give it focus\n");
+            }
         }
         const bool * State = SDL_GetKeyboardState(nullptr);
         if (Selftest)
