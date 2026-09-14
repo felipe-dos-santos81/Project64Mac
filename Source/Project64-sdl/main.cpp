@@ -12,6 +12,8 @@
 #include <SDL3/SDL.h>
 #include <OpenGL/OpenGL.h>
 #include <mach-o/dyld.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +56,22 @@ static int ShutdownSdl(SDL_Window * Window, SDL_GLContext Context, int ExitCode)
     return ExitCode;
 }
 
+// A tile is a child of the orchestrator. macOS has no PDEATHSIG, so if the orchestrator is
+// killed hard the tile is reparented; exit then rather than lingering as a stray emulator.
+static int SDLCALL ParentWatchThread(void * /*data*/)
+{
+    pid_t Parent = getppid();
+    for (;;)
+    {
+        SDL_Delay(1000);
+        if (getppid() != Parent)
+        {
+            _exit(0);
+        }
+    }
+    return 0;
+}
+
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).
 static void ConfigurePlugins(void)
 {
@@ -71,7 +89,30 @@ int main(int argc, char ** argv)
         printf("Project64 macOS SDL3 frontend\n");
         return 0;
     }
-    if (argc < 2)
+    bool TileMode = false;
+    SDL_Rect TileRect = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
+    const char * RomPath = nullptr;
+    if (argc >= 2 && strcmp(argv[1], "--tile") == 0)
+    {
+        if (argc < 5 || strcmp(argv[3], "--tile-rect") != 0)
+        {
+            fprintf(stderr, "usage: %s --tile <rom> --tile-rect X,Y,W,H\n", argv[0]);
+            return 2;
+        }
+        RomPath = argv[2];
+        if (sscanf(argv[4], "%d,%d,%d,%d", &TileRect.x, &TileRect.y, &TileRect.w, &TileRect.h) != 4
+            || TileRect.w <= 0 || TileRect.h <= 0)
+        {
+            fprintf(stderr, "bad --tile-rect: %s\n", argv[4]);
+            return 2;
+        }
+        TileMode = true;
+    }
+    else if (argc >= 2)
+    {
+        RomPath = argv[1];
+    }
+    if (RomPath == nullptr)
     {
         fprintf(stderr, "usage: %s <rom file>\n", argv[0]);
         return 2;
@@ -95,11 +136,25 @@ int main(int argc, char ** argv)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_Window * window = SDL_CreateWindow("Project64", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_OPENGL);
+    Uint64 WindowFlags = SDL_WINDOW_OPENGL;
+    if (TileMode)
+    {
+        WindowFlags |= SDL_WINDOW_NOT_FOCUSABLE;
+    }
+    SDL_Window * window = SDL_CreateWindow("Project64", TileRect.w, TileRect.h, WindowFlags);
     if (window == nullptr)
     {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         return ShutdownSdl(nullptr, nullptr, 1);
+    }
+    if (TileMode)
+    {
+        SDL_SetWindowPosition(window, TileRect.x, TileRect.y);
+        // The video plugin renders at PJ64_TILE_SIZE; keep it equal to the window so the
+        // game cannot land unscaled in a corner.
+        char Size[32];
+        snprintf(Size, sizeof(Size), "%dx%d", TileRect.w, TileRect.h);
+        setenv("PJ64_TILE_SIZE", Size, 1);
     }
     SDL_GLContext context = SDL_GL_CreateContext(window);
     if (context == nullptr)
@@ -125,11 +180,16 @@ int main(int argc, char ** argv)
     CSdlRenderWindow renderWindow(window, context, cglContext);
     g_Plugins->SetRenderWindows(&renderWindow, nullptr);
 
-    if (!CN64System::RunFileImage(argv[1]))
+    if (!CN64System::RunFileImage(RomPath))
     {
-        fprintf(stderr, "Failed to load ROM: %s\n", argv[1]);
+        fprintf(stderr, "Failed to load ROM: %s\n", RomPath);
         AppCleanup();
         return ShutdownSdl(window, context, 1);
+    }
+
+    if (TileMode)
+    {
+        SDL_CreateThread(ParentWatchThread, "pj64-parent-watch", nullptr);
     }
 
     bool running = true;
