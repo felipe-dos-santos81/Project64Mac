@@ -3,6 +3,9 @@
 // strip that owns the keyboard. See Docs/superpowers/specs/2026-09-14-multi-rom-grid-design.md
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "GridHost.h"
+#include <Common/GridKeys.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <SDL3/SDL.h>
 #include <mach-o/dyld.h>
 #include <signal.h>
@@ -132,6 +135,47 @@ int GridHostRun(int argc, char ** argv)
         return 1;
     }
 
+    // One mapped snapshot, one writer (this process), many readers (the tiles). The name is
+    // unlinked at once: children inherit the descriptor, never the name, so a crash here
+    // leaves nothing behind.
+    char ShmName[64];
+    snprintf(ShmName, sizeof(ShmName), "/pj64grid-%d", (int)getpid());
+    const int KeyFd = shm_open(ShmName, O_CREAT | O_RDWR, 0600);
+    GridKeys * Keys = nullptr;
+    if (KeyFd < 0 || ftruncate(KeyFd, (off_t)sizeof(GridKeys)) != 0)
+    {
+        fprintf(stderr, "could not create the key snapshot\n");
+        SDL_DestroyWindow(Strip);
+        SDL_Quit();
+        return 1;
+    }
+    void * MappedKeys = mmap(nullptr, sizeof(GridKeys), PROT_READ | PROT_WRITE, MAP_SHARED, KeyFd, 0);
+    if (MappedKeys == MAP_FAILED)
+    {
+        fprintf(stderr, "could not map the key snapshot\n");
+        close(KeyFd);
+        SDL_DestroyWindow(Strip);
+        SDL_Quit();
+        return 1;
+    }
+    Keys = (GridKeys *)MappedKeys;
+    memset(Keys, 0, sizeof(GridKeys));
+    shm_unlink(ShmName);
+    fcntl(KeyFd, F_SETFD, 0); // shm_open sets FD_CLOEXEC; the children need it open
+
+    const bool Selftest = getenv("PJ64_GRID_SELFTEST") != nullptr;
+    bool Pattern[SDL_SCANCODE_COUNT];
+    memset(Pattern, 0, sizeof(Pattern));
+    Pattern[SDL_SCANCODE_X] = true;
+    Pattern[SDL_SCANCODE_RETURN] = true;
+    // In self-test mode, publish before any tile starts so a tile can never read the
+    // zero-filled mapping first and report a false negative. A normal run starts with
+    // nothing pressed, and the mapping is already zero.
+    if (Selftest)
+    {
+        GridKeysPublish(Keys, Pattern);
+    }
+
     std::vector<pid_t> Children;
     for (int i = 0; i < RomCount; i++)
     {
@@ -145,6 +189,9 @@ int GridHostRun(int argc, char ** argv)
             char Rect[64];
             snprintf(Rect, sizeof(Rect), "%d,%d,%d,%d", X, Y, TileW, TileH);
             setenv("PJ64_AUDIO_MUTE", "1", 1);
+            char FdText[16];
+            snprintf(FdText, sizeof(FdText), "%d", KeyFd);
+            setenv(PJ64_GRID_KEYS_ENV, FdText, 1);
             char * ChildArgv[] = {
                 const_cast<char *>(Exe.c_str()),
                 const_cast<char *>("--tile"),
@@ -195,6 +242,15 @@ int GridHostRun(int argc, char ** argv)
             fprintf(stderr, "tile pid %d exited (status %d)\n", (int)Done, Status);
             RemoveChild(Children, Done);
         }
+        const bool * State = SDL_GetKeyboardState(nullptr);
+        if (Selftest)
+        {
+            GridKeysPublish(Keys, Pattern);
+        }
+        else if (State != nullptr)
+        {
+            GridKeysPublish(Keys, State);
+        }
         SDL_Delay(10);
     }
 
@@ -222,6 +278,9 @@ int GridHostRun(int argc, char ** argv)
     {
         waitpid(Children[i], nullptr, 0);
     }
+
+    munmap(Keys, sizeof(GridKeys));
+    close(KeyFd);
 
     SDL_DestroyWindow(Strip);
     SDL_Quit();

@@ -43,6 +43,15 @@ make run rom=Roms/super_mario_64.z64
 Any path works — `./Bin/macOS/Project64 /path/to/game.z64`. Use `.z64`, `.n64`, `.v64`
 or a `.zip` containing one of them; 7-Zip archives are not supported.
 
+## Grid mode
+
+`./Bin/macOS/Project64 --grid a.z64 b.z64 c.z64 …` opens 1–16 games side by side in a
+near-square grid and sends every keystroke to all of them. A small always-on-top strip
+along the bottom owns the keyboard (the tiles never take focus); Esc or closing the strip
+quits everything. Tiles render at the largest 4:3 size that fits their cell and are muted.
+Each game is a separate process running the normal single-ROM path, so one game cannot take
+down the others.
+
 ## What works
 
 Super Mario 64 renders, plays audio and runs at full speed, with keyboard and gamepad
