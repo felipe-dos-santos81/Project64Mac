@@ -5,7 +5,6 @@
 #include <Project64-rsp-core/Version.h>
 #include <Settings/Settings.h>
 #include <stdio.h>
-#include <string.h>
 
 /*
 Function: CloseDLL
@@ -36,13 +35,9 @@ Output: None
 */
 EXPORT void GetDllInfo(PLUGIN_INFO * PluginInfo)
 {
-    PluginInfo->Version = 0x0103;
+    PluginInfo->Version = RSP_SPECS_VERSION;
     PluginInfo->Type = PLUGIN_TYPE_RSP;
-#ifdef _DEBUG
-    sprintf(PluginInfo->Name, "RSP Basic Debug Plugin %s", VER_FILE_VERSION_STR);
-#else
-    sprintf(PluginInfo->Name, "RSP Basic Plugin %s", VER_FILE_VERSION_STR);
-#endif
+    snprintf(PluginInfo->Name, sizeof(PluginInfo->Name), "RSP Basic Plugin %s", VER_FILE_VERSION_STR);
     PluginInfo->Reserved2 = false;
     PluginInfo->Reserved1 = true;
 }

@@ -1,11 +1,11 @@
 #pragma once
+#include <Common/Trace.h>
 #include <Project64-core/Notification.h>
 
 class CSdlNotification : public CNotification
 {
 public:
-    CSdlNotification();
-    ~CSdlNotification();
+    CSdlNotification() = default;
 
     void DisplayError(const char * Message) const;
     void DisplayError(LanguageStringID StringID) const;
@@ -23,6 +23,9 @@ public:
     void ChangeFullScreen(void) const;
 
 private:
-    CSdlNotification(const CSdlNotification &);
-    CSdlNotification & operator=(const CSdlNotification &);
+    CSdlNotification(const CSdlNotification &) = delete;
+    CSdlNotification & operator=(const CSdlNotification &) = delete;
+
+    // Every message ends up here: trace at the given level, then one stderr line.
+    void Report(enum TraceSeverity Severity, const char * Prefix, const char * Message) const;
 };

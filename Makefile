@@ -21,11 +21,16 @@ OPT       ?= -O2 -g
 SDL_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
 SDL_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
 CPPFLAGS   = -I$(SRC) -I$(SRC)/3rdParty -I$(SRC)/3rdParty/asmjit/src -DASMJIT_STATIC
+# Vendored upstream code is not warning-clean, so warnings are off by default and
+# turned back on per object group (see FRONTEND_OBJS below) for hand-written code.
+WARN       = -w
+# -MMD -MP: emit a .d file per object listing the headers it used, so editing a header
+# rebuilds what includes it. -MP adds phony targets so a deleted header is not a hard error.
+DEPFLAGS   = -MMD -MP
 # c++14, not c++11: Project64-rsp-core/Recompiler/RspCodeBlock.cpp uses std::make_unique.
-CXXFLAGS   = $(ARCH) -std=c++14 $(OPT) -fPIC -w $(CPPFLAGS)
-CFLAGS     = $(ARCH) -std=gnu99 $(OPT) -fPIC -w $(CPPFLAGS)
+CXXFLAGS   = $(ARCH) -std=c++14 $(OPT) -fPIC $(WARN) $(DEPFLAGS) $(CPPFLAGS)
+CFLAGS     = $(ARCH) -std=gnu99 $(OPT) -fPIC $(WARN) $(DEPFLAGS) $(CPPFLAGS)
 LDFLAGS    = $(ARCH)
-rom       ?=
 
 objs = $(addprefix $(BUILD)/, $(addsuffix .o, $(basename $(1))))
 
@@ -224,8 +229,9 @@ SOFTFLOAT_SRC = \
   3rdParty/softfloat-3e/source/ui64_to_f32.c 3rdParty/softfloat-3e/source/ui64_to_f64.c
 
 # RSPRegisterHandler lives in rsp-core but the core's SPRegistersHandler links against
-# it, so the core archive needs it too. The RSP plugin builds its own copy; they are
-# separate binaries, so there is no duplicate symbol.
+# it, so the core archive needs it too. RSPCORE_SRC's wildcard over that same directory
+# maps to the identical object path, so it is compiled once and linked into both
+# binaries - do not "fix" this into two separate compiles.
 CORE_SRC = Project64-rsp-core/cpu/RSPRegisterHandler.cpp \
   $(addprefix Project64-core/, AppInit.cpp Logging.cpp Settings.cpp \
   Multilanguage/Language.cpp Settings/LoggingSettings.cpp \
@@ -296,6 +302,13 @@ VIDEO_OBJS    = $(call objs,$(VIDEO_SRC))
 AUDIO_OBJS    = $(call objs,$(AUDIO_SRC))
 INPUT_OBJS    = $(call objs,$(INPUT_SRC))
 FRONTEND_OBJS = $(call objs,$(FRONTEND_SRC))
+ALL_OBJS      = $(COMMON_OBJS) $(SETTINGS_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) $(ASMJIT_OBJS) \
+  $(SOFTFLOAT_OBJS) $(CORE_OBJS) $(RSP_OBJS) $(VIDEO_OBJS) $(AUDIO_OBJS) $(INPUT_OBJS) \
+  $(FRONTEND_OBJS)
+
+# The four plugin dylibs, named once: the build rules and the smoke test both use this.
+PLUGIN_DYLIBS = $(PLUGINS)/GFX/Project64-video.dylib $(PLUGINS)/Audio/Project64-audio.dylib \
+  $(PLUGINS)/RSP/Project64-rsp.dylib $(PLUGINS)/Input/Project64-input-sdl.dylib
 
 VERSION_HEADERS = $(addprefix $(SRC)/, Project64-core/Version.h Project64-video/Version.h \
   Project64-audio/Version.h Project64-rsp-core/Version.h)
@@ -321,7 +334,7 @@ $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
 $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS): CPPFLAGS += $(SDL_CFLAGS)
-$(FRONTEND_OBJS): CXXFLAGS = $(ARCH) -std=c++14 $(OPT) -fPIC -Wall $(CPPFLAGS)
+$(FRONTEND_OBJS): WARN = -Wall
 
 .PHONY: help deps version common core rsp video audio input frontend config all run test clean
 
@@ -349,33 +362,26 @@ $(SRC)/%/Version.h: $(SRC)/%/Version.h.in
 
 common: $(LIBDIR)/libCommon.a $(LIBDIR)/libSettings.a $(LIBDIR)/libzlib.a $(LIBDIR)/libpng.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libsoftfloat.a ## [STEP 1] Build Common, Settings, zlib, png, asmjit, softfloat static libs
 
-$(LIBDIR)/libCommon.a: $(COMMON_OBJS)
+# One recipe for every static library; each rule below only names its objects.
+# 'rm -f' first so a source dropped from a list does not leave a stale member behind.
+$(LIBDIR)/%.a:
 	@mkdir -p $(dir $@)
-	ar rcs $@ $^
-$(LIBDIR)/libSettings.a: $(SETTINGS_OBJS)
-	@mkdir -p $(dir $@)
-	ar rcs $@ $^
-$(LIBDIR)/libzlib.a: $(ZLIB_OBJS)
-	@mkdir -p $(dir $@)
-	ar rcs $@ $^
-$(LIBDIR)/libpng.a: $(PNG_OBJS)
-	@mkdir -p $(dir $@)
-	ar rcs $@ $^
-$(LIBDIR)/libsoftfloat.a: $(SOFTFLOAT_OBJS)
-	@mkdir -p $(dir $@)
+	@rm -f $@
 	ar rcs $@ $^
 
+$(LIBDIR)/libCommon.a: $(COMMON_OBJS)
+$(LIBDIR)/libSettings.a: $(SETTINGS_OBJS)
+$(LIBDIR)/libzlib.a: $(ZLIB_OBJS)
+$(LIBDIR)/libpng.a: $(PNG_OBJS)
+$(LIBDIR)/libsoftfloat.a: $(SOFTFLOAT_OBJS)
+
 $(LIBDIR)/libasmjit.a: $(ASMJIT_OBJS)
-	@mkdir -p $(dir $@)
-	ar rcs $@ $^
 # ── Stage 2 · Emulator core ──────────────────────────────────────────────────
 
 core: $(LIBDIR)/libProject64-core.a ## [STEP 2] Build the Project64 core static library
 
 $(CORE_OBJS): $(SRC)/Project64-core/Version.h
 $(LIBDIR)/libProject64-core.a: $(CORE_OBJS)
-	@mkdir -p $(dir $@)
-	ar rcs $@ $^
 
 # ── Stages 3–6 · Plugins ─────────────────────────────────────────────────────
 
@@ -435,8 +441,7 @@ run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z6
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
-	@for p in $(PLUGINS)/GFX/Project64-video.dylib $(PLUGINS)/Audio/Project64-audio.dylib \
-	          $(PLUGINS)/RSP/Project64-rsp.dylib $(PLUGINS)/Input/Project64-input-sdl.dylib; do \
+	@for p in $(PLUGIN_DYLIBS); do \
 		nm -gU $$p | grep -q ' _GetDllInfo$$' || { echo "$$p: missing GetDllInfo"; exit 1; }; \
 		echo "ok: $$p"; \
 	done
@@ -454,3 +459,7 @@ $(BUILD)/%.o: $(SRC)/%.cpp
 $(BUILD)/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# Header dependencies recorded by -MMD on the previous build. Absent on a clean tree,
+# which is why this is '-include': there is nothing to be stale about yet.
+-include $(ALL_OBJS:.o=.d)

@@ -2,6 +2,7 @@
 #include <Project64-core/Plugins/Plugin.h>
 #include <SDL3/SDL.h>
 #include <OpenGL/OpenGL.h>
+#include <string>
 
 // Owns nothing; the SDL_Window and SDL_GLContext belong to main().
 // GfxThreadInit/SwapWindow/GfxThreadDone are called by the core on the
@@ -24,7 +25,11 @@ private:
     // SDL_GL_MakeCurrent as main-thread-only, and it marshals, so the emulation thread
     // binds the underlying CGL context itself instead.
     CGLContextObj m_Cgl;
-    // Frame dumping, driven by PJ64_FRAME_DUMP; see DumpFrame.
+    // Frame dumping, driven by PJ64_FRAME_DUMP; see DumpFrame. Both environment
+    // variables are read once at construction - they cannot change mid-run, and
+    // DumpFrame is on the per-frame present path.
+    std::string m_DumpPath;
+    uint32_t m_DumpAt;
     uint32_t m_FrameCount;
     bool m_FrameDumped;
 };
