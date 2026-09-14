@@ -92,8 +92,18 @@ void ChangeSize()
     g_width = g_ScreenWidth;
     g_height = g_ScreenHeight;
 #else
-    g_width = ev_fullscreen ? GetFullScreenResWidth(g_settings->FullScreenRes()) : GetScreenResWidth(g_settings->ScreenRes());
-    g_height = ev_fullscreen ? GetFullScreenResHeight(g_settings->FullScreenRes()) : GetScreenResHeight(g_settings->ScreenRes());
+    int TileW = 0, TileH = 0;
+    const char * TileSize = getenv("PJ64_TILE_SIZE");
+    if (TileSize != nullptr && sscanf(TileSize, "%dx%d", &TileW, &TileH) == 2 && TileW > 0 && TileH > 0)
+    {
+        g_width = TileW;
+        g_height = TileH;
+    }
+    else
+    {
+        g_width = ev_fullscreen ? GetFullScreenResWidth(g_settings->FullScreenRes()) : GetScreenResWidth(g_settings->ScreenRes());
+        g_height = ev_fullscreen ? GetFullScreenResHeight(g_settings->FullScreenRes()) : GetScreenResHeight(g_settings->ScreenRes());
+    }
 #endif
     g_scr_res_x = g_res_x = g_width;
     g_scr_res_y = g_res_y = g_height;
