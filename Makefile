@@ -336,7 +336,7 @@ $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
 $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS): CPPFLAGS += $(SDL_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run test clean rom-test
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -439,8 +439,16 @@ run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z6
 	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64"; exit 1; }
 	./$(BIN)/Project64 "$(rom)"
 
+grid: all ## [STEP 8] Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
+	@test -n "$(roms)" || { echo 'usage: make grid roms="a.z64 b.z64"'; exit 1; }
+	./$(BIN)/Project64 --grid $(roms)
+
 rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
 	python3 Scripts/run_rom_pack.py
+
+grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid-selftest rom=/path/to/game.z64)
+	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
+	Scripts/grid_selftest.sh "$(rom)"
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version

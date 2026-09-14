@@ -17,11 +17,13 @@ pulled back in by accident.
 ## Commands
 
 ```sh
-make -j8 all              # the normal build; a few minutes from clean
-make test                 # smoke test
+make -j8 all                             # the normal build; a few minutes from clean
+make test                                # smoke test
 make run rom=Roms/game.z64
-make clean                # removes build/macos, Bin/macOS, generated Version.h files
-make help                 # every target with its stage number
+make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
+make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
+make clean                               # removes build/macos, Bin/macOS, generated Version.h files
+make help                                # every target with its stage number
 ```
 
 `make test` is the whole automated suite: the frontend must run `--version`, and each
@@ -49,6 +51,9 @@ measures ~89% non-black pixels; below 80% something broke. `PJ64_TRACE` raises t
 levels (see README). The core and each plugin hold their own trace state, so one value
 covers all of them and each ignores names it does not know.
 
+`make grid-selftest rom=…` is the grid's end-to-end proof: one ROM in four tiles, each of
+which must report the strip's key pattern. It needs a window server and takes ~40 s.
+
 ## Architecture
 
 **Four dylibs and a frontend across a C ABI.** The core is a static library linked into
@@ -65,6 +70,15 @@ main thread, release the context, capture the underlying `CGLContextObj`, `AppIn
 point the four `Plugin_*_Current` settings at the dylib paths, then
 `CN64System::RunFileImage(argv[1])`. After that the main thread only pumps SDL events
 and watches for `g_BaseSystem` going null.
+
+**Grid mode runs one process per ROM.** `Source/Project64-sdl/GridHost.cpp` turns
+`--grid a b c` into an orchestrator that lays out 4:3 tiles, spawns
+`Project64 --tile <rom> --tile-rect …` per ROM, and kills them on quit; each child is the
+ordinary single-ROM path. The core and the plugins hold process-global singleton state, so
+a tile cannot be a thread. The strip's keyboard reaches every tile through a `GridKeys`
+seqlock in `Source/Common/GridKeys.h` over an inherited `shm_open` descriptor, and
+`PJ64_TILE_SIZE` / `PJ64_AUDIO_MUTE` give each tile its render size and silence. All of it
+is opt-in: with no `--grid` and those variables unset, behavior is unchanged.
 
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are

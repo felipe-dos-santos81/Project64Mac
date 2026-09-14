@@ -30,9 +30,9 @@ build stages.
 No game data ships with this repository and the build produces none — you supply your
 own ROM files.
 
-There is no ROM browser here: the frontend takes one ROM path as its argument. The
-convention is a `Roms/` folder at the repository root, git-ignored so game files are
-never committed.
+There is no ROM browser: the frontend takes ROM paths as arguments — one by default, or
+several in grid mode. The convention is a `Roms/` folder at the repository root,
+git-ignored so game files are never committed.
 
 ```sh
 mkdir -p Roms
@@ -45,12 +45,15 @@ or a `.zip` containing one of them; 7-Zip archives are not supported.
 
 ## Grid mode
 
-`./Bin/macOS/Project64 --grid a.z64 b.z64 c.z64 …` opens 1–16 games side by side in a
-near-square grid and sends every keystroke to all of them. A small always-on-top strip
-along the bottom owns the keyboard (the tiles never take focus); Esc or closing the strip
-quits everything. Tiles render at the largest 4:3 size that fits their cell and are muted.
-Each game is a separate process running the normal single-ROM path, so one game cannot take
-down the others.
+`make grid roms="Roms/a.z64 Roms/b.z64"` — or `./Bin/macOS/Project64 --grid a.z64 b.z64 …`
+— opens 1–16 games side by side in a near-square grid and sends every keystroke to all of
+them. A small always-on-top strip along the bottom owns the keyboard (the tiles never take
+focus); Esc or closing the strip quits everything. Tiles render at the largest 4:3 size
+that fits their cell and are muted. Each game is a separate process running the normal
+single-ROM path, so one game cannot take down the others.
+
+`make grid-selftest rom=Roms/a.z64` proves the broadcast by running one ROM in four tiles
+and checking each read the strip's key state.
 
 ## What works
 
