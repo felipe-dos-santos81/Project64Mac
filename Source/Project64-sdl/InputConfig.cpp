@@ -5,6 +5,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <dlfcn.h>
 #include <string>
 
 InputConfig::InputConfig()
@@ -279,5 +280,28 @@ bool InputConfig::Load(const char * Path)
     {
         m_Bindings[i] = Next[i];
     }
+    return true;
+}
+
+// The plugin lives at <bin>/Plugin/Input/<name>.dylib. Stripping the file name and then
+// Input/ and Plugin/ (three strips) reaches <bin>, where Config/input.yaml sits.
+// Resolving from the dylib keeps the result independent of the working directory, which
+// "make run" and "make grid" both rely on.
+bool DefaultConfigPath(char * Out, size_t Size)
+{
+    Dl_info Info;
+    if (dladdr((void *)&DefaultConfigPath, &Info) == 0 || Info.dli_fname == nullptr)
+    {
+        return false;
+    }
+    std::string Dir = Info.dli_fname;
+    for (int i = 0; i < 3; i++)
+    {
+        const size_t Slash = Dir.find_last_of('/');
+        if (Slash == std::string::npos) return false;
+        Dir.erase(Slash);
+    }
+    const std::string Path = Dir + "/Config/input.yaml";
+    snprintf(Out, Size, "%s", Path.c_str());
     return true;
 }

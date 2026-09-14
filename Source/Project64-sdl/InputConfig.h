@@ -48,4 +48,6 @@ private:
     std::vector<Binding> m_Bindings[(int)N64Control::Count];
 };
 
+bool DefaultConfigPath(char * Out, size_t Size);
+
 #endif

@@ -10,6 +10,7 @@
 #include <Common/GridKeys.h>
 #include "InputConfig.h"
 #include <SDL3/SDL.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -282,4 +283,15 @@ EXPORT void CALL WM_KeyUp(uint32_t /*wParam*/, uint32_t /*lParam*/)
 
 EXPORT void CALL PluginLoaded(void)
 {
+    const char * Env = getenv("PJ64_INPUT_YAML");
+    if (Env != nullptr && Env[0] != '\0')
+    {
+        InputConfig::Get().Load(Env);
+        return;
+    }
+    char Path[PATH_MAX];
+    if (DefaultConfigPath(Path, sizeof(Path)) && access(Path, R_OK) == 0)
+    {
+        InputConfig::Get().Load(Path);
+    }
 }
