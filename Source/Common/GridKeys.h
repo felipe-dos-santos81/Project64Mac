@@ -3,6 +3,7 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #pragma once
 #include <SDL3/SDL.h>
+#include <atomic>
 #include <stdint.h>
 #include <string.h>
 
@@ -20,7 +21,9 @@ struct GridKeys
 inline void GridKeysPublish(GridKeys * Keys, const bool * State)
 {
     Keys->Seq = Keys->Seq + 1; // odd: a write is in flight
+    std::atomic_thread_fence(std::memory_order_release); // Seq=odd before the data stores
     memcpy(Keys->Keys, State, sizeof Keys->Keys);
+    std::atomic_thread_fence(std::memory_order_release); // data stores before Seq=even
     Keys->Seq = Keys->Seq + 1; // even: stable
 }
 
@@ -33,7 +36,9 @@ inline void GridKeysSnapshot(const GridKeys * Keys, bool * Out)
         {
             continue; // a writer is mid-publish
         }
+        std::atomic_thread_fence(std::memory_order_acquire); // Seq=even before the data loads
         memcpy(Out, Keys->Keys, sizeof Keys->Keys);
+        std::atomic_thread_fence(std::memory_order_acquire); // data loads before re-reading Seq
         if (Keys->Seq == Before)
         {
             return;
