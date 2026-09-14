@@ -5,6 +5,7 @@
 #include <Project64-audio/trace.h>
 #include <Common/CriticalSection.h>
 #include <string.h>
+#include <stdlib.h>
 
 
 SdlAudioDriver::SdlAudioDriver() :
@@ -18,6 +19,12 @@ SdlAudioDriver::SdlAudioDriver() :
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
     {
         WriteTrace(TraceAudioInitShutdown, TraceError, "SDL_InitSubSystem(AUDIO) failed: %s", SDL_GetError());
+    }
+    // A grid tile sets this so no device is opened. OpenStream then takes the existing
+    // silence-drain path, keeping audio emulation running without sound.
+    if (getenv("PJ64_AUDIO_MUTE") != nullptr)
+    {
+        m_DeviceUnavailable = true;
     }
     WriteTrace(TraceAudioInitShutdown, TraceDebug, "Done");
 }
