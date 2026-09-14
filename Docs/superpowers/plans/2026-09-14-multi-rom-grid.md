@@ -154,7 +154,7 @@ Expected: the audio dylib builds with no new warnings.
 
 Run:
 ```sh
-PJ64_TRACE=AudioInitShutdown \
+PJ64_TRACE=AudioInitShutdown=debug \
   perl -e 'alarm 20; exec @ARGV' -- ./Bin/macOS/Project64 \
   /Users/felipe.dos.santos/Downloads/N64ROMsPACK/super_mario_64_usa.z64 2>&1 | grep -i "audio" | head
 ```
@@ -164,7 +164,7 @@ Expected: a line containing `Opened SDL audio stream`.
 
 Run:
 ```sh
-PJ64_AUDIO_MUTE=1 PJ64_TRACE=AudioInitShutdown \
+PJ64_AUDIO_MUTE=1 PJ64_TRACE=AudioInitShutdown=debug \
   perl -e 'alarm 20; exec @ARGV' -- ./Bin/macOS/Project64 \
   /Users/felipe.dos.santos/Downloads/N64ROMsPACK/super_mario_64_usa.z64 2>&1 | grep -i "audio" | head
 ```
