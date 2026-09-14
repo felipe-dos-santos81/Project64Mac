@@ -99,7 +99,7 @@ below. `--grid` and `--tile` are recognised before the single-ROM path so
 | Variable | Set by | Read by | Meaning |
 | --- | --- | --- | --- |
 | `PJ64_GRID_KEYS_FD` | orchestrator | input plugin | fd of the inherited snapshot; presence selects snapshot input |
-| `PJ64_TILE_SIZE` | orchestrator | video plugin | `WxH` render and window size for this tile |
+| `PJ64_TILE_SIZE` | tile (from `--tile-rect`) | video plugin | `WxH` render and window size for this tile |
 | `PJ64_AUDIO_MUTE` | orchestrator | audio plugin | force the existing no-device silent path |
 | `PJ64_GRID_SELFTEST` | caller | strip + tiles | write a fixed key pattern / trace the bits read (verification only) |
 
@@ -161,7 +161,8 @@ draining code.
 **`main.cpp`.** `--grid` → `GridHostRun(argc, argv)`. `--tile` → the existing path with
 window flags and geometry from `--tile-rect`, and a watcher thread that polls `getppid()`
 once a second and exits when reparented (macOS has no `PDEATHSIG`, so this is what stops
-orphaned tiles after a hard kill of the orchestrator).
+orphaned tiles after a hard kill of the orchestrator). Tile mode sets `PJ64_TILE_SIZE` from
+its own `--tile-rect`, so the window size and the render resolution cannot disagree.
 
 ## Part 4 — Lifecycle and error handling
 
