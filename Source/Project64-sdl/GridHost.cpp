@@ -42,6 +42,20 @@ static std::string ExecutablePath(void)
     return std::string(Resolved);
 }
 
+// Drops one reaped pid so later kill/wait loops never touch a pid the OS may reuse.
+static void RemoveChild(std::vector<pid_t> & Children, pid_t Child)
+{
+    for (size_t i = 0; i < Children.size(); i++)
+    {
+        if (Children[i] == Child)
+        {
+            Children[i] = Children.back();
+            Children.pop_back();
+            return;
+        }
+    }
+}
+
 int GridHostRun(int argc, char ** argv)
 {
     const int RomCount = argc - 2;
@@ -160,6 +174,8 @@ int GridHostRun(int argc, char ** argv)
     signal(SIGINT, HandleStopSignal);
     signal(SIGTERM, HandleStopSignal);
 
+    int Status = 0;
+    pid_t Done = 0;
     while (!g_StopRequested)
     {
         SDL_Event Ev;
@@ -174,11 +190,10 @@ int GridHostRun(int argc, char ** argv)
                 g_StopRequested = 1;
             }
         }
-        int Status = 0;
-        pid_t Done = 0;
         while ((Done = waitpid(-1, &Status, WNOHANG)) > 0)
         {
             fprintf(stderr, "tile pid %d exited (status %d)\n", (int)Done, Status);
+            RemoveChild(Children, Done);
         }
         SDL_Delay(10);
     }
@@ -187,17 +202,13 @@ int GridHostRun(int argc, char ** argv)
     {
         kill(Children[i], SIGTERM);
     }
-    for (int Pass = 0; Pass < 10; Pass++)
+    for (int Pass = 0; Pass < 10 && !Children.empty(); Pass++)
     {
-        bool AnyAlive = false;
-        for (size_t i = 0; i < Children.size(); i++)
+        while ((Done = waitpid(-1, nullptr, WNOHANG)) > 0)
         {
-            if (waitpid(Children[i], nullptr, WNOHANG) == 0)
-            {
-                AnyAlive = true;
-            }
+            RemoveChild(Children, Done);
         }
-        if (!AnyAlive)
+        if (Children.empty())
         {
             break;
         }
