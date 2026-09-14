@@ -61,6 +61,9 @@ With no UI, two environment variables are the way to see inside a running build:
   modules — or a bare level for all of them — and echoes to stderr.
 - `PJ64_FRAME_DUMP=/tmp/frame.ppm`, with optional `PJ64_FRAME_DUMP_AT=400`, writes one
   frame from the back buffer as a binary PPM.
+- `PJ64_FRAME_DUMP_MIN_NONBLACK=<percent>`, with optional `PJ64_FRAME_DUMP_MAX=<frame>`,
+  makes the dump wait for the first frame whose non-black share clears the percentage
+  instead of writing unconditionally at `PJ64_FRAME_DUMP_AT`.
 
 ## License
 

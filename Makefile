@@ -439,6 +439,9 @@ run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z6
 	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64"; exit 1; }
 	./$(BIN)/Project64 "$(rom)"
 
+rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
+	python3 Scripts/run_rom_pack.py
+
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
 	@for p in $(PLUGIN_DYLIBS); do \
