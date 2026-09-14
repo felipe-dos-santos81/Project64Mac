@@ -8,9 +8,11 @@ A permanent fork of [Project64](https://github.com/project64/project64) reduced 
 platform: macOS on Apple Silicon, built by a hand-written `Makefile` with SDL3 and
 OpenGL.
 
-`origin` is upstream Project64, **not** a fork of it. Never push. `develop` is the
-default branch and is deliberately far ahead of `origin/develop` — never `git pull` on
-it, that would drag upstream's Windows-era history back in.
+`origin` is this fork's own repository (`felipe-dos-santos81/Project64Mac`), **not**
+upstream Project64 — upstream is not configured as a remote at all. `main` is the
+default and only long-lived branch, and its history was squashed to a single root
+commit, so upstream's Windows-era history is not reachable from here and cannot be
+pulled back in by accident.
 
 ## Commands
 
