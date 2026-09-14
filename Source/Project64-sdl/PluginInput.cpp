@@ -8,6 +8,7 @@
 // from any thread.
 #include <Project64-plugin-spec/Input.h>
 #include <Common/GridKeys.h>
+#include "InputConfig.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,6 +125,29 @@ EXPORT void CALL InitiateControllers(CONTROL_INFO * ControlInfo)
     ControlInfo->Controls[0].Plugin = PLUGIN_MEMPAK;
 }
 
+static void SetControl(BUTTONS * Keys, N64Control Control)
+{
+    switch (Control)
+    {
+    case N64Control::A: Keys->A_BUTTON = 1; break;
+    case N64Control::B: Keys->B_BUTTON = 1; break;
+    case N64Control::Z: Keys->Z_TRIG = 1; break;
+    case N64Control::Start: Keys->START_BUTTON = 1; break;
+    case N64Control::L: Keys->L_TRIG = 1; break;
+    case N64Control::R: Keys->R_TRIG = 1; break;
+    case N64Control::CUp: Keys->U_CBUTTON = 1; break;
+    case N64Control::CDown: Keys->D_CBUTTON = 1; break;
+    case N64Control::CLeft: Keys->L_CBUTTON = 1; break;
+    case N64Control::CRight: Keys->R_CBUTTON = 1; break;
+    case N64Control::DPadUp: Keys->U_DPAD = 1; break;
+    case N64Control::DPadDown: Keys->D_DPAD = 1; break;
+    case N64Control::DPadLeft: Keys->L_DPAD = 1; break;
+    case N64Control::DPadRight: Keys->R_DPAD = 1; break;
+    case N64Control::Stick: break;
+    default: break;
+    }
+}
+
 EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
 {
     Keys->Value = 0;
@@ -142,30 +166,38 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         memcpy(Raw, Snapshot, sizeof(Raw));
         k = Snapshot;
     }
-    if (k != nullptr)
+
+    const InputConfig & Config = InputConfig::Get();
+    bool StickFromKeys = false;
+
+    for (int i = 0; i < (int)N64Control::Count; i++)
     {
-        Keys->A_BUTTON = k[SDL_SCANCODE_X];
-        Keys->B_BUTTON = k[SDL_SCANCODE_C];
-        Keys->Z_TRIG = k[SDL_SCANCODE_Z];
-        Keys->START_BUTTON = k[SDL_SCANCODE_RETURN];
-        Keys->L_TRIG = k[SDL_SCANCODE_Q];
-        Keys->R_TRIG = k[SDL_SCANCODE_E];
-        Keys->U_CBUTTON = k[SDL_SCANCODE_W];
-        Keys->D_CBUTTON = k[SDL_SCANCODE_S];
-        Keys->L_CBUTTON = k[SDL_SCANCODE_A];
-        Keys->R_CBUTTON = k[SDL_SCANCODE_D];
-        Keys->U_DPAD = k[SDL_SCANCODE_I];
-        Keys->D_DPAD = k[SDL_SCANCODE_K];
-        Keys->L_DPAD = k[SDL_SCANCODE_J];
-        Keys->R_DPAD = k[SDL_SCANCODE_L];
-        int x = 0, y = 0;
-        if (k[SDL_SCANCODE_LEFT]) x -= N64_AXIS_MAX;
-        if (k[SDL_SCANCODE_RIGHT]) x += N64_AXIS_MAX;
-        if (k[SDL_SCANCODE_DOWN]) y -= N64_AXIS_MAX;
-        if (k[SDL_SCANCODE_UP]) y += N64_AXIS_MAX;
-        Keys->X_AXIS = (int8_t)x;
-        Keys->Y_AXIS = (int8_t)y;
+        for (const Binding & B : Config.Bindings((N64Control)i))
+        {
+            if (B.kind == Binding::Kind::Key)
+            {
+                if (k != nullptr && k[B.code])
+                {
+                    SetControl(Keys, (N64Control)i);
+                }
+            }
+            else if (B.kind == Binding::Kind::Keys && k != nullptr)
+            {
+                int x = 0, y = 0;
+                if (k[B.LeftKey]) x -= N64_AXIS_MAX;
+                if (k[B.RightKey]) x += N64_AXIS_MAX;
+                if (k[B.DownKey]) y -= N64_AXIS_MAX;
+                if (k[B.UpKey]) y += N64_AXIS_MAX;
+                Keys->X_AXIS = (int8_t)x;
+                Keys->Y_AXIS = (int8_t)y;
+                if (x != 0 || y != 0)
+                {
+                    StickFromKeys = true;
+                }
+            }
+        }
     }
+
     SelftestReport(Raw, Keys);
 
     OpenFirstGamepad();
@@ -177,26 +209,31 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
             CloseGamepad();
             return;
         }
-        Keys->A_BUTTON |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
-        Keys->B_BUTTON |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_WEST);
-        Keys->START_BUTTON |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_START);
-        Keys->L_TRIG |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        Keys->R_TRIG |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        Keys->Z_TRIG |= SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > STICK_THRESHOLD;
-        Keys->U_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
-        Keys->D_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
-        Keys->L_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
-        Keys->R_DPAD |= SDL_GetGamepadButton(g_Gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
-        int16_t rx = SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
-        int16_t ry = SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
-        Keys->R_CBUTTON |= rx > STICK_THRESHOLD;
-        Keys->L_CBUTTON |= rx < -STICK_THRESHOLD;
-        Keys->D_CBUTTON |= ry > STICK_THRESHOLD;
-        Keys->U_CBUTTON |= ry < -STICK_THRESHOLD;
-        if (Keys->X_AXIS == 0 && Keys->Y_AXIS == 0)
+        for (int i = 0; i < (int)N64Control::Count; i++)
         {
-            Keys->X_AXIS = AxisToN64(SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFTX));
-            Keys->Y_AXIS = (int8_t)-AxisToN64(SDL_GetGamepadAxis(g_Gamepad, SDL_GAMEPAD_AXIS_LEFTY));
+            for (const Binding & B : Config.Bindings((N64Control)i))
+            {
+                if (B.kind == Binding::Kind::Button)
+                {
+                    if (SDL_GetGamepadButton(g_Gamepad, (SDL_GamepadButton)B.code))
+                    {
+                        SetControl(Keys, (N64Control)i);
+                    }
+                }
+                else if (B.kind == Binding::Kind::Axis)
+                {
+                    const int16_t v = SDL_GetGamepadAxis(g_Gamepad, (SDL_GamepadAxis)B.code);
+                    if (B.positive ? v > STICK_THRESHOLD : v < -STICK_THRESHOLD)
+                    {
+                        SetControl(Keys, (N64Control)i);
+                    }
+                }
+                else if (B.kind == Binding::Kind::Stick && !StickFromKeys)
+                {
+                    Keys->X_AXIS = AxisToN64(SDL_GetGamepadAxis(g_Gamepad, (SDL_GamepadAxis)B.code));
+                    Keys->Y_AXIS = (int8_t)-AxisToN64(SDL_GetGamepadAxis(g_Gamepad, (SDL_GamepadAxis)(B.code + 1)));
+                }
+            }
         }
     }
 }
