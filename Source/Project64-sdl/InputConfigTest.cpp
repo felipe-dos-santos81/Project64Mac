@@ -61,6 +61,24 @@ int main()
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Keys);
     CHECK(C.Bindings(N64Control::Stick)[0].UpKey == SDL_SCANCODE_UP);
 
+    CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
+    const size_t ABefore = C.Bindings(N64Control::A).size();
+
+    CHECK(!C.Load(WriteTemp("bindings:\n  Nope: {key: X}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: NoSuchKey}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {button: sout}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: X}\n  A: {key: Y}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: X, button: a}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: middle}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: left}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {keys: {up: NoSuchKey, down: Down, left: Left, right: Right}}\n")));
+    CHECK(!C.Load(WriteTemp("bindings: [1, 2]\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
+    CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml"));
+
+    CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
+    CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");
     return 0;

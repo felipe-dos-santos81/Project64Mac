@@ -217,10 +217,15 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
             ConfigError(Path, Arg, "keys needs up, down, left, right");
             return false;
         }
-        Out = MakeStickKeys(SDL_GetScancodeFromName(Arg["up"].as<std::string>().c_str()),
-                            SDL_GetScancodeFromName(Arg["down"].as<std::string>().c_str()),
-                            SDL_GetScancodeFromName(Arg["left"].as<std::string>().c_str()),
-                            SDL_GetScancodeFromName(Arg["right"].as<std::string>().c_str()));
+        static const char * kDirections[] = { "up", "down", "left", "right" };
+        SDL_Scancode Sc[4];
+        for (int i = 0; i < 4; i++)
+        {
+            const std::string Name = Arg[kDirections[i]].as<std::string>();
+            Sc[i] = SDL_GetScancodeFromName(Name.c_str());
+            if (Sc[i] == SDL_SCANCODE_UNKNOWN) { ConfigError(Path, Arg[kDirections[i]], "unknown key \"" + Name + "\""); return false; }
+        }
+        Out = MakeStickKeys(Sc[0], Sc[1], Sc[2], Sc[3]);
         return true;
     }
     ConfigError(Path, Value, "unknown form \"" + Form + "\"");
@@ -242,6 +247,7 @@ bool InputConfig::Load(const char * Path)
 
     std::vector<Binding> Next[(int)N64Control::Count];
     DefaultBindings(Next);
+    bool Seen[(int)N64Control::Count] = { false };
 
     try
     {
@@ -254,6 +260,8 @@ bool InputConfig::Load(const char * Path)
                 const std::string ControlName = Entry.first.as<std::string>();
                 const int Index = ControlFromName(ControlName);
                 if (Index < 0) { ConfigError(Path, Entry.first, "unknown control \"" + ControlName + "\""); return false; }
+                if (Seen[Index]) { ConfigError(Path, Entry.first, "control named twice"); return false; }
+                Seen[Index] = true;
                 Binding B;
                 if (!ParseBinding(Path, Entry.second, (N64Control)Index, B)) return false;
                 Next[Index].clear();
