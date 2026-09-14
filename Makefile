@@ -20,6 +20,8 @@ ARCH       = -arch arm64
 OPT       ?= -O2 -g
 SDL_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
 SDL_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+YAML_CFLAGS := $(shell pkg-config --cflags yaml-cpp 2>/dev/null)
+YAML_LIBS   := $(shell pkg-config --libs yaml-cpp 2>/dev/null)
 CPPFLAGS   = -I$(SRC) -I$(SRC)/3rdParty -I$(SRC)/3rdParty/asmjit/src -DASMJIT_STATIC
 # Vendored upstream code is not warning-clean, so warnings are off by default and
 # turned back on per object group (see FRONTEND_OBJS below) for hand-written code.
@@ -287,7 +289,7 @@ VIDEO_SRC = $(addprefix Project64-video/, 3dmath.cpp Combine.cpp Config.cpp CRC.
   TextureEnhancer/TxReSample.cpp TextureEnhancer/TxDbg.cpp TextureEnhancer/tc-1.1+/fxt1.c \
   TextureEnhancer/tc-1.1+/dxtn.c TextureEnhancer/tc-1.1+/wrapper.c TextureEnhancer/tc-1.1+/texstore.c)
 AUDIO_SRC = $(addprefix Project64-audio/, AudioMain.cpp AudioSettings.cpp trace.cpp Driver/SoundBase.cpp Driver/SdlAudio.cpp)
-INPUT_SRC = Project64-sdl/PluginInput.cpp
+INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
@@ -334,6 +336,7 @@ $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
 $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS): CPPFLAGS += $(SDL_CFLAGS)
+$(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
 .PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest test clean
@@ -351,7 +354,8 @@ deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
 	@command -v pkg-config >/dev/null || { echo "pkg-config not found: brew install pkg-config"; exit 1; }
 	@pkg-config --exists sdl3 || { echo "SDL3 not found: brew install sdl3"; exit 1; }
-	@echo "deps ok: SDL3 $$(pkg-config --modversion sdl3), $$($(CXX) --version | head -1)"
+	@pkg-config --exists yaml-cpp || { echo "yaml-cpp not found: brew install yaml-cpp"; exit 1; }
+	@echo "deps ok: SDL3 $$(pkg-config --modversion sdl3), yaml-cpp $$(pkg-config --modversion yaml-cpp), $$($(CXX) --version | head -1)"
 
 version: $(VERSION_HEADERS) ## Generate Version.h from Version.h.in for core, video, audio, rsp-core
 
@@ -406,7 +410,7 @@ $(PLUGINS)/Audio/Project64-audio.dylib: $(AUDIO_OBJS) $(LIBDIR)/libSettings.a $(
 input: $(PLUGINS)/Input/Project64-input-sdl.dylib ## [STEP 6] Build the SDL3 keyboard/gamepad input plugin
 $(PLUGINS)/Input/Project64-input-sdl.dylib: $(INPUT_OBJS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^ $(SDL_LIBS)
+	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
 # ── Stage 7 · Frontend ───────────────────────────────────────────────────────
 
