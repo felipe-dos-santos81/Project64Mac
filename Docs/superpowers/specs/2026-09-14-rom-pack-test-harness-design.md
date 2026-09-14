@@ -44,6 +44,8 @@ A game is a failure if any of the following holds:
 | `no_dump` | process exits 0 without writing a dump |
 | `png_error` | the dump is non-black but `sips` fails to convert it |
 
+> Erratum: the implementation classifies any non-zero exit with no dump as `load_error`; per-ROM stderr is preserved in `.pj64-run/<rom>.log`.
+
 Everything else is `ok`.
 
 ## Part 1 — Emulator change

@@ -230,16 +230,20 @@ def main():
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = {pool.submit(process, binary, rom, args, work_dir, screenshots): rom
                    for rom in roms}
-        for future in as_completed(futures):
-            rom = futures[future]
-            done += 1
-            try:
-                line = future.result()
-                print("[%d/%d] %s" % (done, len(roms), line))
-            except Exception as exc:  # one bad game must not stop the batch
-                result_file(work_dir, rom).write_text(
-                    "%s\tfail\tcrash\t\t0.0\n" % rom.name)
-                print("[%d/%d] %s ERROR %s" % (done, len(roms), rom.name, exc))
+        try:
+            for future in as_completed(futures):
+                rom = futures[future]
+                done += 1
+                try:
+                    line = future.result()
+                    print("[%d/%d] %s" % (done, len(roms), line))
+                except Exception as exc:  # one bad game must not stop the batch
+                    result_file(work_dir, rom).write_text(
+                        "%s\tfail\tcrash\t\t0.0\n" % rom.name)
+                    print("[%d/%d] %s ERROR %s" % (done, len(roms), rom.name, exc))
+        except KeyboardInterrupt:
+            pool.shutdown(wait=False, cancel_futures=True)
+            print("Interrupted; %d game(s) finished, writing a partial report" % done)
 
     total, failed = aggregate(work_dir, out_dir)
     print("Wrote %s (%d rows, %d failed)" % (out_dir / "report.tsv", total, failed))

@@ -336,7 +336,7 @@ $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
 $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS): CPPFLAGS += $(SDL_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run test clean rom-test
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
