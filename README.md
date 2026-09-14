@@ -55,7 +55,7 @@ no settings UI, so configuration means editing `Bin/macOS/Config/Project64.cfg`.
 
 ## Diagnostics
 
-With no UI, two environment variables are the way to see inside a running build:
+With no UI, three environment variables are the way to see inside a running build:
 
 - `PJ64_TRACE='Glide64=debug,AudioDriver=verbose'` raises trace levels for the named
   modules — or a bare level for all of them — and echoes to stderr.

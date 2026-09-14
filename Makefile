@@ -343,7 +343,7 @@ $(FRONTEND_OBJS): WARN = -Wall
 help: ## Print this help message
 	@printf '\033[01;32m${SERVICE} — Apple Silicon build with SDL3\033[00;37m\n\n'
 	@printf "\033[33mUsage:\033[0m\n  make [target] [arg=\"val\"...]\n\n\033[33mTargets:\033[0m\n"
-	@grep -E '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -hE '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; \
 		{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
