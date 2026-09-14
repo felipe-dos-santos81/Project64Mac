@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -49,9 +50,10 @@ static void OpenGridKeys(void)
     g_GridKeys = (GridKeys *)Mapped;
 }
 
-// Verification only. With PJ64_GRID_SELFTEST set, report once which of two known keys
-// the snapshot carried, so Scripts/grid_selftest.sh can prove the broadcast.
-static void SelftestReport(const bool * Keys)
+// Verification only. With PJ64_GRID_SELFTEST set, report once both that the snapshot
+// carried the strip's pattern (recv) and what the controller produced from it (a, start),
+// so Scripts/grid_selftest.sh proves delivery and mapping together.
+static void SelftestReport(const bool * Raw, const BUTTONS * Out)
 {
     static bool Reported = false;
     if (Reported || getenv("PJ64_GRID_SELFTEST") == nullptr)
@@ -59,8 +61,9 @@ static void SelftestReport(const bool * Keys)
         return;
     }
     Reported = true;
-    fprintf(stderr, "grid-selftest pid=%d a=%d start=%d\n",
-        (int)getpid(), Keys[SDL_SCANCODE_X] ? 1 : 0, Keys[SDL_SCANCODE_RETURN] ? 1 : 0);
+    const int Recv = (Raw[SDL_SCANCODE_X] && Raw[SDL_SCANCODE_RETURN]) ? 1 : 0;
+    fprintf(stderr, "grid-selftest pid=%d recv=%d a=%d start=%d\n",
+        (int)getpid(), Recv, Out->A_BUTTON ? 1 : 0, Out->START_BUTTON ? 1 : 0);
 }
 
 static void OpenFirstGamepad(void)
@@ -130,12 +133,13 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
     }
 
     bool Snapshot[SDL_SCANCODE_COUNT];
+    bool Raw[SDL_SCANCODE_COUNT] = { false };
     const bool * k = SDL_GetKeyboardState(nullptr);
     OpenGridKeys();
     if (g_GridKeys != nullptr)
     {
         GridKeysSnapshot(g_GridKeys, Snapshot);
-        SelftestReport(Snapshot);
+        memcpy(Raw, Snapshot, sizeof(Raw));
         k = Snapshot;
     }
     if (k != nullptr)
@@ -162,6 +166,7 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         Keys->X_AXIS = (int8_t)x;
         Keys->Y_AXIS = (int8_t)y;
     }
+    SelftestReport(Raw, Keys);
 
     OpenFirstGamepad();
     if (g_Gamepad != nullptr)

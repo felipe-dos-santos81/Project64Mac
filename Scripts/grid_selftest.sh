@@ -40,8 +40,8 @@ if [ "$PIDS" -lt "$TILES" ]; then
     echo "FAIL: expected $TILES distinct tile pids, got $PIDS" >&2
     FAIL=1
 fi
-if printf '%s\n' "$REPORTS" | grep '^grid-selftest ' | grep -v 'a=1 start=1' | grep -q .; then
-    echo "FAIL: a tile did not receive the key pattern" >&2
+if printf '%s\n' "$REPORTS" | grep '^grid-selftest ' | grep -v 'recv=1 a=1 start=1' | grep -q .; then
+    echo "FAIL: a tile did not deliver or map the key pattern" >&2
     FAIL=1
 fi
 
