@@ -42,6 +42,7 @@ A game is a failure if any of the following holds:
 | `hang` | no dump within the per-game timeout; the process group is killed |
 | `black` | a dump is written but its non-black share is below the threshold |
 | `no_dump` | process exits 0 without writing a dump |
+| `png_error` | the dump is non-black but `sips` fails to convert it |
 
 Everything else is `ok`.
 
@@ -114,7 +115,8 @@ The binary path is resolved relative to the script location: `<repo>/Bin/macOS/P
 4. On `ok`, convert `<rom_filename>` → `<out>/Screenshots/<rom_filename>.png` with
    `sips -s format png`. The temp PPM is deleted afterward in every case.
 5. Write `<out>/.pj64-run/<rom_filename>.result` (one file per ROM, no shared-file
-   locking). The parent aggregates all results into `report.tsv` and `failures.txt`.
+   locking). The parent aggregates all result files into `report.tsv` and
+   `failures.txt`. Result files persist between runs so resume can reuse them.
 
 ### Resume
 
@@ -134,7 +136,8 @@ Makefile target.
   sorted by filename. `status` is `ok` or `fail`; `reason` is `ok` for passes and the
   failure code otherwise; `nonblack_pct` is the true full-buffer percentage.
 - `failures.txt` — plain list of failed ROM filenames, one per line.
-- `.pj64-run/` — scratch PPMs and per-ROM result files, removed at the end of a clean run.
+- `.pj64-run/` — scratch PPMs (deleted after each ROM) and per-ROM `.result` files
+  (kept so a re-run can resume).
 
 ## Part 4 — Makefile
 
