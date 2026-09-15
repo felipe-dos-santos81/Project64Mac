@@ -50,8 +50,9 @@ struct PointerState
     // Face tracker -> plugin and overlay.
     std::atomic<uint32_t> Gestures;      // PointerGesture bits
     std::atomic<uint32_t> Face;          // FaceStatus
-    // Plugin at load -> overlay. Written before the ROM opens; plain storage.
+    // Plugin at load -> overlay and frontend. Written before the ROM opens.
     std::atomic<uint32_t> OverlayWanted;
+    std::atomic<uint32_t> FaceWanted;    // 1 when the layout binds a face gesture
     char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     // Plugin each GetKeys -> overlay.

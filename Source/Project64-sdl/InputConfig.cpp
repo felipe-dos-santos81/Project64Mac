@@ -52,6 +52,21 @@ bool InputConfig::UsesPointer() const
     return false;
 }
 
+bool InputConfig::UsesFace() const
+{
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Face)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
                                 char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE]) const
 {

@@ -73,6 +73,7 @@ int main()
         "  B: {face: head-left}\n";
     CHECK(C.Load(WriteTemp(Pointer)));
     CHECK(C.UsesPointer());
+    CHECK(C.UsesFace());                              // Z and B are gestures
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Zone);
     CHECK(C.Bindings(N64Control::A)[0].code == POINTER_ZONE_CENTRE);
@@ -94,6 +95,15 @@ int main()
 
     CHECK(C.Load(WriteTemp(Valid)));
     CHECK(!C.UsesPointer());                          // keyboard-only file: no overlay
+    CHECK(!C.UsesFace());
+
+    const char * ZonesOnly =
+        "bindings:\n"
+        "  Stick: {stick: pointer}\n"
+        "  A: {zone: centre}\n";
+    CHECK(C.Load(WriteTemp(ZonesOnly)));
+    CHECK(C.UsesPointer());
+    CHECK(!C.UsesFace());                             // pointer without gestures: no camera
 
     CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
     const size_t ABefore = C.Bindings(N64Control::A).size();
@@ -127,6 +137,7 @@ int main()
 
     CHECK(C.Load("Config/mouse/sm64.yaml"));          // every shipped mouse layout must parse
     CHECK(C.UsesPointer());
+    CHECK(C.UsesFace());                              // sm64.yaml binds Z, B and R to gestures
     CHECK(C.Load("Config/mouse/goldeneye.yaml"));
     CHECK(C.Load("Config/mouse/mk64.yaml"));
 

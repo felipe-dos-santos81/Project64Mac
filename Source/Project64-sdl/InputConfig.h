@@ -52,6 +52,10 @@ public:
     // what turns the overlay on.
     bool UsesPointer() const;
 
+    // True when any binding is a face gesture, which is what starts the camera when
+    // PJ64_FACE is unset.
+    bool UsesFace() const;
+
     // Overlay labels: for each zone and each gesture, the label of the control bound to
     // it, or "" when nothing is.
     void PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],

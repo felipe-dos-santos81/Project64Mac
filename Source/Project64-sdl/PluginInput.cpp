@@ -388,6 +388,9 @@ static void PublishPointerLabels(void)
     Config.PointerLabels(g_Pointer->Labels, g_Pointer->GestureLabels);
     g_Pointer->LatchedZone.store(POINTER_ZONE_NONE);
     g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
+    // The frontend's main loop polls this to start the camera; it may run on another
+    // thread than the one loading the dylib, hence release here and acquire there.
+    g_Pointer->FaceWanted.store(Config.UsesFace() ? 1u : 0u, std::memory_order_release);
 }
 
 EXPORT void CALL PluginLoaded(void)
