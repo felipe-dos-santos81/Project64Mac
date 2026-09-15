@@ -339,7 +339,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(BUILD)/Project64-sdl/InputConfigT
 $(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest input-config-test pointer-layout-test test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest input-config-test pointer-layout-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -434,6 +434,8 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mapping and langu
 	@cp -Rn Config/Cheats Config/Enhancements $(BIN)/Config/ 2>/dev/null || true
 	@# -n: the mapping is user data once installed.
 	@cp -n Config/input.yaml $(BIN)/Config/ 2>/dev/null || true
+	@# -Rn: mouse layouts are user data once installed.
+	@cp -Rn Config/mouse $(BIN)/Config/ 2>/dev/null || true
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
@@ -442,9 +444,9 @@ all: deps common core rsp video audio input frontend config ## Build everything 
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
-run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64)
-	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64"; exit 1; }
-	./$(BIN)/Project64 "$(rom)"
+run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/sm64.yaml] [face=1])
+	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64 [input=<yaml>] [face=1]"; exit 1; }
+	$(if $(input),PJ64_INPUT_YAML="$(input)") $(if $(face),PJ64_FACE=1) ./$(BIN)/Project64 "$(rom)"
 
 grid: all ## [STEP 8] Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
 	@test -n "$(roms)" || { echo 'usage: make grid roms="a.z64 b.z64"'; exit 1; }
@@ -456,6 +458,10 @@ rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
 grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/grid_selftest.sh "$(rom)"
+
+pointer-selftest: ## Prove the injected-pointer path maps centre to A and top4 to Start (usage: make pointer-selftest rom=/path/to/game.z64)
+	@test -n "$(rom)" || { echo "usage: make pointer-selftest rom=/path/to/game.z64"; exit 1; }
+	Scripts/pointer_selftest.sh "$(rom)"
 
 input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
 	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)

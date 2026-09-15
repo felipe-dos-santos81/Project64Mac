@@ -1,5 +1,6 @@
 // Project64 - A Nintendo 64 emulator
-// SDL3 frontend for macOS. Windowed only; the cursor is never grabbed or hidden.
+// SDL3 frontend for macOS. Windowed only; the cursor is never grabbed or hidden. The main
+// loop publishes the mouse for the input plugin (see Common/PointerState.h).
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "SdlNotification.h"
 #include "SdlRenderWindow.h"
@@ -12,6 +13,9 @@
 #include <Project64-core/Settings/SettingsID.h>
 #include <SDL3/SDL.h>
 #include <OpenGL/OpenGL.h>
+#include <Common/PointerState.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <mach-o/dyld.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -71,6 +75,79 @@ static int SDLCALL ParentWatchThread(void * /*data*/)
         }
     }
     return 0;
+}
+
+// One mapped PointerState for this process: the main loop writes the mouse sample, the
+// face tracker writes gesture bits, the input plugin reads both and writes labels back.
+// The plugin is a dylib in this process, so the descriptor is passed by number in the
+// environment exactly as the grid passes its key snapshot. The name is unlinked at once.
+static PointerState * CreatePointerState(void)
+{
+    char ShmName[64];
+    snprintf(ShmName, sizeof(ShmName), "/pj64ptr-%d", (int)getpid());
+    const int Fd = shm_open(ShmName, O_CREAT | O_RDWR, 0600);
+    if (Fd < 0 || ftruncate(Fd, (off_t)sizeof(PointerState)) != 0)
+    {
+        fprintf(stderr, "could not create the pointer state; mouse bindings are inactive\n");
+        if (Fd >= 0) { shm_unlink(ShmName); close(Fd); }
+        return nullptr;
+    }
+    void * Mapped = mmap(nullptr, sizeof(PointerState), PROT_READ | PROT_WRITE, MAP_SHARED, Fd, 0);
+    shm_unlink(ShmName);
+    if (Mapped == MAP_FAILED)
+    {
+        fprintf(stderr, "could not map the pointer state; mouse bindings are inactive\n");
+        close(Fd);
+        return nullptr;
+    }
+    PointerState * State = (PointerState *)Mapped;
+    memset(State, 0, sizeof(PointerState));
+    State->LatchedZone.store(-1);
+    char FdText[16];
+    snprintf(FdText, sizeof(FdText), "%d", Fd);
+    setenv(PJ64_POINTER_ENV, FdText, 1);
+    return State;
+}
+
+// PJ64_POINTER_INJECT=x,y,button replaces the sampled mouse with a fixed sample so the
+// pointer path can be proven without a mouse (Scripts/pointer_selftest.sh).
+static bool ParsePointerInject(PointerSample * Out)
+{
+    const char * Env = getenv("PJ64_POINTER_INJECT");
+    if (Env == nullptr)
+    {
+        return false;
+    }
+    int Button = 0;
+    if (sscanf(Env, "%f,%f,%d", &Out->X, &Out->Y, &Button) != 3)
+    {
+        fprintf(stderr, "bad PJ64_POINTER_INJECT: %s (want x,y,button)\n", Env);
+        return false;
+    }
+    Out->Inside = true;
+    Out->Button = Button != 0;
+    return true;
+}
+
+// Main thread only: SDL3 documents SDL_GetMouseState as main-thread only.
+static void PublishMouse(PointerState * State, SDL_Window * Window, const PointerSample * Inject)
+{
+    PointerSample S;
+    SDL_GetWindowSize(Window, &S.W, &S.H);
+    if (Inject != nullptr)
+    {
+        S.X = Inject->X;
+        S.Y = Inject->Y;
+        S.Inside = true;
+        S.Button = Inject->Button;
+    }
+    else
+    {
+        const SDL_MouseButtonFlags Buttons = SDL_GetMouseState(&S.X, &S.Y);
+        S.Inside = SDL_GetMouseFocus() == Window;
+        S.Button = (Buttons & SDL_BUTTON_LMASK) != 0;
+    }
+    PointerPublish(State, S);
 }
 
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).
@@ -173,6 +250,10 @@ int main(int argc, char ** argv)
     CGLContextObj cglContext = CGLGetCurrentContext();
     SDL_GL_MakeCurrent(window, nullptr);
 
+    PointerState * pointer = CreatePointerState();
+    PointerSample inject;
+    const bool injecting = ParsePointerInject(&inject);
+
     CSdlNotification notify;
     std::string baseDir = ExecutableDirectory();
     if (!AppInit(&notify, baseDir.c_str(), 0, nullptr))
@@ -207,6 +288,10 @@ int main(int argc, char ** argv)
             {
                 running = false;
             }
+        }
+        if (pointer != nullptr)
+        {
+            PublishMouse(pointer, window, injecting ? &inject : nullptr);
         }
         if (g_BaseSystem == nullptr)
         {
