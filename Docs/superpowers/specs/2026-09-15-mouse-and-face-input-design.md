@@ -2,6 +2,8 @@
 
 Date: 2026-09-15
 Status: approved (design), implementation not started
+Superseded in part: Part 2 (the 4x4 grid) and Part 4 (the overlay) by
+`2026-09-15-mouse-panel-design.md`; the rest stands.
 
 ## Goal
 

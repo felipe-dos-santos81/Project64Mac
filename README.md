@@ -79,11 +79,17 @@ make run rom=Roms/sm64.z64 input=Config/mouse/super_mario_64_usa.yaml          #
 make run rom=Roms/sm64.z64 input=Config/mouse/super_mario_64_usa.yaml face=0   # mouse only
 ```
 
-The window is a 4x4 grid drawn faintly over the game. The inner block is the stick: the
-cursor's distance from the centre is the tilt, and a click there is one button (A in the
-Mario layout). The twelve outer cells are buttons: hover and click, hold to hold. The zone
-under the cursor when you press stays pressed until you release, so "click A, then tilt"
-is a running jump. `PJ64_OVERLAY=0` hides the drawing.
+With a mouse layout the window is 640x640: the game, unscaled, in the top 640x480 and a
+panel of buttons below it. The game image is the stick. The cursor's distance from the
+centre is the tilt, full at 160 px with a 16 px dead zone, and four faint lines split the
+image into direction quadrants so the one your tilt points into lights up. A click
+anywhere in the game image is one button (A in the Mario layout), and the button under
+the cursor when you press stays pressed until you release, so "click A, then tilt" is a
+running jump. The panel is a cross of four cells on the left, a cross on the right and
+five slots between them: hover and click, hold to hold. A quick flick from the game down
+to a button keeps the stick where it was until the cursor lands, so reaching for a button
+never reads as a backward tilt; `PJ64_POINTER_FLICK=<px>` tunes that (default 24, `0`
+disables it). `PJ64_OVERLAY=0` hides the lines over the game; the panel always draws.
 
 When the layout binds a face gesture the webcam starts by itself (`face=1` or `--face`
 forces it, `face=0` or `PJ64_FACE=0` keeps it off) and adds three held buttons: raising
@@ -93,22 +99,26 @@ fixed in System Settings > Privacy & Security > Camera. Frames stay in memory an
 never saved, shown, or logged.
 
 `PJ64_FACE_DEBUG=1` prints the two measures once a second, and `PJ64_FACE_BROW` /
-`PJ64_FACE_YAW` override the thresholds (defaults 0.035 and 0.25). A dot in the
-bottom-left corner shows the tracker: hollow while looking for a face, filled while
-tracking, crossed when the camera is unavailable.
+`PJ64_FACE_YAW` override the thresholds (defaults 0.035 and 0.25). A dot in the panel,
+under the middle slots, shows the tracker: hollow while looking for a face, filled while
+tracking, crossed when the camera is unavailable; the three gesture labels beside it light
+up while held.
 
-Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `left2`,
-`left3`, `right2`, `right3`, `bottom1`-`bottom4`, `centre`) and
-`{face: eyebrows|head-left|head-right}`, plus `{stick: pointer}` for `Stick`. Shipped:
-`super_mario_64_usa.yaml`, `goldeneye_007_u.yaml`, `mario_kart_64_u.yaml`. Everything
-without the camera keeps working when the camera is denied or absent, though the buttons
-mapped only to face gestures are unavailable.
+Layout files use two more binding forms, `{zone: <name>}` and
+`{face: eyebrows|head-left|head-right}`, plus `{stick: pointer}` for `Stick`. The zones are
+`game` (the game image), `pad-up`, `pad-down`, `pad-left`, `pad-right` (the left cross),
+`c-up`, `c-down`, `c-left`, `c-right` (the right cross) and `mid1` to `mid5`; any control
+can take any slot. Shipped: `super_mario_64_usa.yaml`, `goldeneye_007_u.yaml`,
+`mario_kart_64_u.yaml`. Everything without the camera keeps working when the camera is
+denied or absent, though the buttons mapped only to face gestures are unavailable.
 
 Name a layout after the ROM and it loads without `input=`: `Roms/sm64.yaml` beside
 `Roms/sm64.z64`, or `Config/mouse/sm64.yaml` under the binary — the shipped layouts are
 named after their ROM's own base name (`super_mario_64_usa.yaml` and so on). The first
 that exists wins, the frontend prints `input layout: <path>` when it picks one, and an
-explicit `input=` beats both. Grid tiles ignore per-game files.
+explicit `input=` beats both. Grid tiles ignore per-game files. `make all` refreshes the
+shipped layouts beside the binary on every build, so keep a layout of your own beside the
+ROM rather than editing the installed copy.
 
 `make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, the same way
 `make grid-selftest` proves the grid's key broadcast.
@@ -118,8 +128,8 @@ explicit `input=` beats both. Grid tiles ignore per-game files.
 Super Mario 64 renders, plays audio and runs at full speed, with keyboard input through
 SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`, and a
 one-button mouse with optional face gestures works with a layout from `Config/mouse/` (see
-"Playing with a mouse"). The window is fixed at 640x480 and the mouse cursor is never
-captured.
+"Playing with a mouse"). The window is 640x480, or 640x640 with a mouse layout, and the
+mouse cursor is never captured.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is
