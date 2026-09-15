@@ -14,8 +14,8 @@ Apple Silicon, not as a maintained release.
 
 ## Build
 
-Prerequisites: Xcode command line tools and Homebrew SDL3
-(`brew install sdl3 pkg-config`).
+Prerequisites: Xcode command line tools plus Homebrew SDL3 and yaml-cpp
+(`brew install sdl3 pkg-config yaml-cpp`).
 
 ```sh
 make            # core, four plugins, frontend, and the ROM database beside the binary
@@ -55,11 +55,20 @@ single-ROM path, so one game cannot take down the others.
 `make grid-selftest rom=Roms/a.z64` proves the broadcast by running one ROM in four tiles
 and checking each read the strip's key state.
 
+## Input mapping
+
+Bindings are read once at startup from `Bin/macOS/Config/input.yaml`
+(`PJ64_INPUT_YAML=/path` overrides it); delete the file for the built-in mapping. Each
+control takes exactly one input — `{key: X}`, `{button: a}`, `{axis: rightx, sign: -}`,
+and for `Stick` also `{stick: left}` or `{keys: {up: Up, …}}` — so naming a control replaces
+its built-in binding. The shipped file maps the **keyboard**; its commented block is the
+full gamepad alternative. A file with a mistake is ignored whole, with one line on stderr.
+
 ## What works
 
-Super Mario 64 renders, plays audio and runs at full speed, with keyboard and gamepad
-input through SDL3. The window is fixed at 640x480 and the mouse cursor is never
-captured.
+Super Mario 64 renders, plays audio and runs at full speed, with keyboard input through
+SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`. The
+window is fixed at 640x480 and the mouse cursor is never captured.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is

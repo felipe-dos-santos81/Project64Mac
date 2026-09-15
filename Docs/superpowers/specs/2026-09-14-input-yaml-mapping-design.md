@@ -139,7 +139,7 @@ bindings:
 | Form | Meaning | Allowed on |
 |---|---|---|
 | `{key: <name>}` | Keyboard key, named by SDL scancode name (`X`, `Return`, `Space`, `Up`, `Left`). | any control except `Stick` |
-| `{button: <name>}` | Gamepad button, named by SDL gamepad name (`south`, `west`, `start`, `leftshoulder`, `dpup`). | any control except `Stick` |
+| `{button: <name>}` | Gamepad button, named by SDL gamepad name (`a`, `b`, `x`, `y`, `start`, `leftshoulder`, `dpup`). | any control except `Stick` |
 | `{axis: <name>}` and optional `sign: +`/`-` | Gamepad axis crossing the button threshold in that direction; `sign` defaults to `+`. | any control except `Stick` |
 | `{stick: left}` or `{stick: right}` | A whole gamepad stick, analog, fixed deadzone, Y inverted. | `Stick` only |
 | `{keys: {up:…, down:…, left:…, right:…}}` | Four keys acting as a digital stick. | `Stick` only |

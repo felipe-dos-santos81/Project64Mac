@@ -80,6 +80,11 @@ seqlock in `Source/Common/GridKeys.h` over an inherited `shm_open` descriptor, a
 `PJ64_TILE_SIZE` / `PJ64_AUDIO_MUTE` give each tile its render size and silence. All of it
 is opt-in: with no `--grid` and those variables unset, behavior is unchanged.
 
+**Input bindings are data.** `Source/Project64-sdl/InputConfig.{h,cpp}` owns the N64 control
+set, the built-in default table (each control's keyboard *and* gamepad source) and the YAML
+reader; `PluginLoaded` loads `Config/input.yaml` once and `GetKeys` only evaluates the
+resolved table. yaml-cpp is a declared Homebrew dependency, linked into the input dylib.
+
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are
 main-thread-only on macOS and marshal there, which deadlocks on the first swap because
@@ -101,6 +106,9 @@ Only the `Aarch64` backend directory survives.
   databases, every game falls back to defaults, and the RSP reports "uCode crc not found
   in INI" and never runs the graphics task. `make all` includes this step; a hand-rolled
   build sequence must not skip it.
+- **A listed input control loses its other source.** The shipped `Config/input.yaml` maps the
+  keyboard, so a fresh build's gamepad does nothing until the commented gamepad block is
+  swapped in. The built-in keyboard+gamepad pairing returns when the file is deleted.
 - **`Config/` and `Lang/` are tracked runtime data**, not build inputs. Never delete
   from them.
 - **Line endings are mixed.** 132 tracked files are CRLF (including
