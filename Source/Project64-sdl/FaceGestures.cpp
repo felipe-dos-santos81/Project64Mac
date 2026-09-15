@@ -24,9 +24,6 @@ static const ChannelSpec kChannels[POINTER_GESTURE_COUNT] = {
     { FACE_EYE_RIGHT, -1.0f },  // wink-right
 };
 
-// Task 2 enables the eight new channels; until then only the first three are evaluated.
-static const int kActiveChannels = 3;
-
 GestureClassifier::GestureClassifier(const GestureThresholds & Thresholds) :
     m_T(Thresholds),
     m_HaveBaseline(false),
@@ -113,13 +110,30 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
         for (int i = 0; i < FACE_MEASURE_COUNT; i++) m_Baseline[i] = S.M[i];
     }
 
-    for (int g = 0; g < kActiveChannels; g++)
+    // Raw conditions first, so the winks can look at the other eye's state before any
+    // channel steps.
+    bool Raw[POINTER_GESTURE_COUNT];
+    for (int g = 0; g < POINTER_GESTURE_COUNT; g++)
     {
         const ChannelSpec & Spec = kChannels[g];
         const float Set = Threshold(Spec.Measure);
         const float Release = Set * m_T.ReleaseFraction;
         const float Delta = (S.M[Spec.Measure] - m_Baseline[Spec.Measure]) * Spec.Sign;
-        m_Channel[g].Step(Delta > (m_Channel[g].Active ? Release : Set), m_T.DebounceFrames);
+        Raw[g] = Delta > (m_Channel[g].Active ? Release : Set);
+    }
+    // A blink is not a wink: each wink needs the other eye open, meaning not closed past
+    // its own release level.
+    const float EyeRelease = m_T.Eye * m_T.ReleaseFraction;
+    const bool LeftClosed = (m_Baseline[FACE_EYE_LEFT] - S.M[FACE_EYE_LEFT]) > EyeRelease;
+    const bool RightClosed = (m_Baseline[FACE_EYE_RIGHT] - S.M[FACE_EYE_RIGHT]) > EyeRelease;
+    const int WinkLeft = PointerGestureIndex(POINTER_GESTURE_WINK_LEFT);
+    const int WinkRight = PointerGestureIndex(POINTER_GESTURE_WINK_RIGHT);
+    Raw[WinkLeft] = Raw[WinkLeft] && !RightClosed;
+    Raw[WinkRight] = Raw[WinkRight] && !LeftClosed;
+
+    for (int g = 0; g < POINTER_GESTURE_COUNT; g++)
+    {
+        m_Channel[g].Step(Raw[g], m_T.DebounceFrames);
     }
 
     // Baselines move only at rest. Also hold them while a channel is counting toward a
@@ -127,7 +141,7 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
     for (int i = 0; i < FACE_MEASURE_COUNT; i++)
     {
         bool Frozen = false;
-        for (int g = 0; g < kActiveChannels; g++)
+        for (int g = 0; g < POINTER_GESTURE_COUNT; g++)
         {
             if (kChannels[g].Measure == i && (m_Channel[g].Active || m_Channel[g].Count > 0)) Frozen = true;
         }

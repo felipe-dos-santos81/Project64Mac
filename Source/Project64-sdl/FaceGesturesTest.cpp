@@ -150,6 +150,93 @@ int main()
         CHECK(Feed(C, T, 1, true, 0.115f, 0.0f) == POINTER_GESTURE_EYEBROWS);
     }
 
+    // A face at rest for the new measures: mouth nearly shut, a resting lip width, both
+    // eyes open at the same aperture.
+    auto Rest = [](double T) {
+        GestureSample S = Sample(true, T);
+        S.M[FACE_BROW] = 0.10f;
+        S.M[FACE_MOUTH] = 0.02f;
+        S.M[FACE_SMILE] = 0.50f;
+        S.M[FACE_EYE_LEFT] = 0.30f;
+        S.M[FACE_EYE_RIGHT] = 0.30f;
+        return S;
+    };
+    {
+        // Mouth and smile each set after two frames and clear after two at rest.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0));
+        GestureSample S = Rest(0);
+        S.M[FACE_MOUTH] = 0.09f;                                  // +0.07 > 0.06
+        CHECK(FeedSample(C, T, 1, S) == 0);
+        CHECK(FeedSample(C, T, 1, S) == POINTER_GESTURE_MOUTH_OPEN);
+        S.M[FACE_SMILE] = 0.56f;                                  // +0.06 > 0.05
+        CHECK(FeedSample(C, T, 2, S) == (POINTER_GESTURE_MOUTH_OPEN | POINTER_GESTURE_SMILE));
+        CHECK(FeedSample(C, T, 2, Rest(0)) == 0);
+        // The mouth baseline was frozen during the hold.
+        CHECK(C.Baseline(FACE_MOUTH) < 0.025f);
+    }
+    {
+        // Pitch: nose up sets head-up, nose down sets head-down. Roll: left ear down is
+        // tilt-left, right ear down is tilt-right.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0));
+        GestureSample S = Rest(0);
+        S.M[FACE_PITCH] = 0.25f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_HEAD_UP);
+        S.M[FACE_PITCH] = -0.25f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_HEAD_DOWN);
+        S.M[FACE_PITCH] = 0.0f;
+        S.M[FACE_ROLL] = -0.30f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_TILT_LEFT);
+        S.M[FACE_ROLL] = 0.30f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_TILT_RIGHT);
+        // Roll and yaw are independent: a tilt with a turn reports both.
+        S.M[FACE_YAW] = -0.30f;
+        CHECK(FeedSample(C, T, 2, S) == (POINTER_GESTURE_TILT_RIGHT | POINTER_GESTURE_HEAD_LEFT));
+    }
+    {
+        // Winks: one eye closing while the other stays open. A blink is neither.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0));
+        GestureSample S = Rest(0);
+        S.M[FACE_EYE_LEFT] = 0.15f;                               // -0.15 beyond 0.12
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_WINK_LEFT);
+        CHECK(FeedSample(C, T, 2, Rest(0)) == 0);
+        S = Rest(0);
+        S.M[FACE_EYE_RIGHT] = 0.15f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_WINK_RIGHT);
+        CHECK(FeedSample(C, T, 2, Rest(0)) == 0);
+        S = Rest(0);
+        S.M[FACE_EYE_LEFT] = 0.15f;
+        S.M[FACE_EYE_RIGHT] = 0.15f;                              // blink
+        CHECK(FeedSample(C, T, 5, S) == 0);
+        CHECK(FeedSample(C, T, 2, Rest(0)) == 0);
+        // A wink that turns into a blink releases: the other eye closing past its release
+        // level (0.12 * 0.6 = 0.072 below baseline) ends the wink within two frames.
+        S = Rest(0);
+        S.M[FACE_EYE_LEFT] = 0.15f;
+        CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_WINK_LEFT);
+        S.M[FACE_EYE_RIGHT] = 0.20f;                              // -0.10: past release
+        CHECK(FeedSample(C, T, 2, S) == 0);
+        // The eye baselines were frozen through all of that.
+        CHECK(C.Baseline(FACE_EYE_LEFT) > 0.29f && C.Baseline(FACE_EYE_RIGHT) > 0.29f);
+    }
+    {
+        // A custom mouth threshold is honoured.
+        GestureThresholds Loose;
+        Loose.Mouth = 0.01f;
+        Loose.DebounceFrames = 1;
+        GestureClassifier C(Loose);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0));
+        GestureSample S = Rest(0);
+        S.M[FACE_MOUTH] = 0.035f;
+        CHECK(FeedSample(C, T, 1, S) == POINTER_GESTURE_MOUTH_OPEN);
+    }
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: face gestures\n");
     return 0;
