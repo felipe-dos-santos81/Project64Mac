@@ -3,14 +3,39 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "FaceGestures.h"
 
+// One entry per gesture bit, in bit order: which measure drives it and which way.
+struct ChannelSpec
+{
+    FaceMeasure Measure;
+    float Sign;     // +1 fires above baseline, -1 below
+};
+
+static const ChannelSpec kChannels[POINTER_GESTURE_COUNT] = {
+    { FACE_BROW, +1.0f },       // eyebrows
+    { FACE_YAW, -1.0f },        // head-left
+    { FACE_YAW, +1.0f },        // head-right
+    { FACE_PITCH, +1.0f },      // head-up
+    { FACE_PITCH, -1.0f },      // head-down
+    { FACE_ROLL, -1.0f },       // tilt-left
+    { FACE_ROLL, +1.0f },       // tilt-right
+    { FACE_MOUTH, +1.0f },      // mouth-open
+    { FACE_SMILE, +1.0f },      // smile
+    { FACE_EYE_LEFT, -1.0f },   // wink-left
+    { FACE_EYE_RIGHT, -1.0f },  // wink-right
+};
+
+// Task 2 enables the eight new channels; until then only the first three are evaluated.
+static const int kActiveChannels = 3;
+
 GestureClassifier::GestureClassifier(const GestureThresholds & Thresholds) :
     m_T(Thresholds),
     m_HaveBaseline(false),
-    m_BrowBaseline(0.0f),
-    m_YawBaseline(0.0f),
     m_LastTime(0.0),
-    m_LastFaceTime(-1e9)
+    m_LastFaceTime(-1e9),
+    m_StickX(0),
+    m_StickY(0)
 {
+    for (int i = 0; i < FACE_MEASURE_COUNT; i++) m_Baseline[i] = 0.0f;
 }
 
 void GestureClassifier::Channel::Step(bool Raw, int Debounce)
@@ -28,8 +53,8 @@ void GestureClassifier::Channel::Step(bool Raw, int Debounce)
     }
 }
 
-// Exponential moving average with time constant BaselineSeconds. Frozen while the
-// gesture that uses this baseline is held, so a long hold never becomes the new rest.
+// Exponential moving average with time constant BaselineSeconds. Frozen while a gesture
+// that uses this baseline is held, so a long hold never becomes the new rest.
 void GestureClassifier::Track(float & Baseline, float Value, double Dt, bool Frozen)
 {
     if (Frozen || Dt <= 0.0)
@@ -41,7 +66,31 @@ void GestureClassifier::Track(float & Baseline, float Value, double Dt, bool Fro
     Baseline = (float)(Baseline + (Value - Baseline) * Alpha);
 }
 
-uint32_t GestureClassifier::Update(const GestureSample & S)
+float GestureClassifier::Threshold(FaceMeasure Measure) const
+{
+    switch (Measure)
+    {
+    case FACE_BROW: return m_T.Brow;
+    case FACE_YAW: return m_T.Yaw;
+    case FACE_PITCH: return m_T.Pitch;
+    case FACE_ROLL: return m_T.Roll;
+    case FACE_MOUTH: return m_T.Mouth;
+    case FACE_SMILE: return m_T.Smile;
+    default: return m_T.Eye;   // both eyes
+    }
+}
+
+uint32_t GestureClassifier::Bits() const
+{
+    uint32_t Out = 0;
+    for (int g = 0; g < POINTER_GESTURE_COUNT; g++)
+    {
+        if (m_Channel[g].Active) Out |= 1u << g;
+    }
+    return Out;
+}
+
+uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUse*/)
 {
     const double Dt = m_HaveBaseline ? S.Time - m_LastTime : 0.0;
     m_LastTime = S.Time;
@@ -50,40 +99,40 @@ uint32_t GestureClassifier::Update(const GestureSample & S)
     {
         if (S.Time - m_LastFaceTime > m_T.NoFaceSeconds)
         {
-            m_Brows = Channel();
-            m_Left = Channel();
-            m_Right = Channel();
+            for (int g = 0; g < POINTER_GESTURE_COUNT; g++) m_Channel[g] = Channel();
+            m_StickX = 0;
+            m_StickY = 0;
         }
-        return (m_Brows.Active ? POINTER_GESTURE_EYEBROWS : 0)
-             | (m_Left.Active ? POINTER_GESTURE_HEAD_LEFT : 0)
-             | (m_Right.Active ? POINTER_GESTURE_HEAD_RIGHT : 0);
+        return Bits();
     }
     m_LastFaceTime = S.Time;
 
     if (!m_HaveBaseline)
     {
         m_HaveBaseline = true;
-        m_BrowBaseline = S.BrowHeight;
-        m_YawBaseline = S.Yaw;
+        for (int i = 0; i < FACE_MEASURE_COUNT; i++) m_Baseline[i] = S.M[i];
     }
 
-    const float BrowSet = m_T.Brow;
-    const float BrowRelease = m_T.Brow * m_T.ReleaseFraction;
-    const float BrowDelta = S.BrowHeight - m_BrowBaseline;
-    m_Brows.Step(BrowDelta > (m_Brows.Active ? BrowRelease : BrowSet), m_T.DebounceFrames);
-
-    const float YawSet = m_T.Yaw;
-    const float YawRelease = m_T.Yaw * m_T.ReleaseFraction;
-    const float YawDelta = S.Yaw - m_YawBaseline;
-    m_Right.Step(YawDelta > (m_Right.Active ? YawRelease : YawSet), m_T.DebounceFrames);
-    m_Left.Step(-YawDelta > (m_Left.Active ? YawRelease : YawSet), m_T.DebounceFrames);
+    for (int g = 0; g < kActiveChannels; g++)
+    {
+        const ChannelSpec & Spec = kChannels[g];
+        const float Set = Threshold(Spec.Measure);
+        const float Release = Set * m_T.ReleaseFraction;
+        const float Delta = (S.M[Spec.Measure] - m_Baseline[Spec.Measure]) * Spec.Sign;
+        m_Channel[g].Step(Delta > (m_Channel[g].Active ? Release : Set), m_T.DebounceFrames);
+    }
 
     // Baselines move only at rest. Also hold them while a channel is counting toward a
     // set, so the rise that is about to fire does not get partly absorbed.
-    Track(m_BrowBaseline, S.BrowHeight, Dt, m_Brows.Active || m_Brows.Count > 0);
-    Track(m_YawBaseline, S.Yaw, Dt, m_Left.Active || m_Right.Active || m_Left.Count > 0 || m_Right.Count > 0);
+    for (int i = 0; i < FACE_MEASURE_COUNT; i++)
+    {
+        bool Frozen = false;
+        for (int g = 0; g < kActiveChannels; g++)
+        {
+            if (kChannels[g].Measure == i && (m_Channel[g].Active || m_Channel[g].Count > 0)) Frozen = true;
+        }
+        Track(m_Baseline[i], S.M[i], Dt, Frozen);
+    }
 
-    return (m_Brows.Active ? POINTER_GESTURE_EYEBROWS : 0)
-         | (m_Left.Active ? POINTER_GESTURE_HEAD_LEFT : 0)
-         | (m_Right.Active ? POINTER_GESTURE_HEAD_RIGHT : 0);
+    return Bits();
 }

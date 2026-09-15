@@ -11,12 +11,26 @@
 // frontend sets it before the plugins load; it is absent under any other frontend.
 #define PJ64_POINTER_ENV "PJ64_POINTER_FD"
 
+// Held face gestures, one bit each, in the order of the label table, the overlay strip and
+// the YAML names below. Left and right are the player's own.
 enum PointerGesture : uint32_t
 {
-    POINTER_GESTURE_EYEBROWS = 1u << 0,
-    POINTER_GESTURE_HEAD_LEFT = 1u << 1,
+    POINTER_GESTURE_EYEBROWS   = 1u << 0,
+    POINTER_GESTURE_HEAD_LEFT  = 1u << 1,
     POINTER_GESTURE_HEAD_RIGHT = 1u << 2,
+    POINTER_GESTURE_HEAD_UP    = 1u << 3,
+    POINTER_GESTURE_HEAD_DOWN  = 1u << 4,
+    POINTER_GESTURE_TILT_LEFT  = 1u << 5,
+    POINTER_GESTURE_TILT_RIGHT = 1u << 6,
+    POINTER_GESTURE_MOUTH_OPEN = 1u << 7,
+    POINTER_GESTURE_SMILE      = 1u << 8,
+    POINTER_GESTURE_WINK_LEFT  = 1u << 9,
+    POINTER_GESTURE_WINK_RIGHT = 1u << 10,
 };
+
+// The four gestures a head stick consumes: a layout cannot bind them beside {stick: head}.
+#define POINTER_GESTURE_HEAD_DIRECTIONS \
+    (POINTER_GESTURE_HEAD_LEFT | POINTER_GESTURE_HEAD_RIGHT | POINTER_GESTURE_HEAD_UP | POINTER_GESTURE_HEAD_DOWN)
 
 enum FaceStatus : uint32_t
 {
@@ -30,7 +44,7 @@ enum FaceStatus : uint32_t
 
 #define POINTER_ZONE_COUNT 14   // 13 panel slots + the game image; see PointerLayout.h
 #define POINTER_LABEL_SIZE 3    // up to two characters plus NUL
-#define POINTER_GESTURE_COUNT 3
+#define POINTER_GESTURE_COUNT 11
 
 // What the frontend samples on its main thread. X,Y in window pixels from the top left;
 // Inside is "cursor over this window and the window has mouse focus".
@@ -50,9 +64,12 @@ struct PointerState
     // Face tracker -> plugin and overlay.
     std::atomic<uint32_t> Gestures;      // PointerGesture bits
     std::atomic<uint32_t> Face;          // FaceStatus
+    std::atomic<int32_t> HeadX;          // head stick, -80..80, written by the tracker every frame
+    std::atomic<int32_t> HeadY;
     // Plugin at load -> overlay and frontend. Written before the ROM opens.
     std::atomic<uint32_t> OverlayWanted;
     std::atomic<uint32_t> FaceWanted;    // 1 when the layout binds a face gesture
+    std::atomic<uint32_t> HeadStickWanted; // 1 when Stick is {stick: head} or {stick: head-digital}
     char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     // Plugin each GetKeys -> overlay.
@@ -88,18 +105,41 @@ inline void PointerSnapshot(const PointerState * State, PointerSample * Out)
     }
 }
 
+// YAML name of gesture bit 1 << Index; "" out of range.
+inline const char * PointerGestureName(int Index)
+{
+    static const char * const kNames[POINTER_GESTURE_COUNT] = {
+        "eyebrows", "head-left", "head-right", "head-up", "head-down",
+        "tilt-left", "tilt-right", "mouth-open", "smile", "wink-left", "wink-right",
+    };
+    return (Index >= 0 && Index < POINTER_GESTURE_COUNT) ? kNames[Index] : "";
+}
+
+// Two-glyph overlay tag of gesture bit 1 << Index; "" out of range.
+inline const char * PointerGestureTag(int Index)
+{
+    static const char * const kTags[POINTER_GESTURE_COUNT] = {
+        "Br", "H<", "H>", "H^", "Hv", "T<", "T>", "Mo", "Sm", "W<", "W>",
+    };
+    return (Index >= 0 && Index < POINTER_GESTURE_COUNT) ? kTags[Index] : "";
+}
+
 inline uint32_t PointerGestureFromName(const char * Name)
 {
-    if (strcmp(Name, "eyebrows") == 0) return POINTER_GESTURE_EYEBROWS;
-    if (strcmp(Name, "head-left") == 0) return POINTER_GESTURE_HEAD_LEFT;
-    if (strcmp(Name, "head-right") == 0) return POINTER_GESTURE_HEAD_RIGHT;
+    for (int i = 0; i < POINTER_GESTURE_COUNT; i++)
+    {
+        if (strcmp(Name, PointerGestureName(i)) == 0) return 1u << i;
+    }
     return 0;
 }
 
-// Index 0..2 of a single gesture bit, for the GestureLabels table.
+// Index 0..10 of a single gesture bit, for the GestureLabels table. Callers pass one valid
+// bit; anything else maps to 0 so a table write can never go out of range.
 inline int PointerGestureIndex(uint32_t Bit)
 {
-    if (Bit == POINTER_GESTURE_EYEBROWS) return 0;
-    if (Bit == POINTER_GESTURE_HEAD_LEFT) return 1;
-    return 2;
+    for (int i = 0; i < POINTER_GESTURE_COUNT; i++)
+    {
+        if (Bit == (1u << i)) return i;
+    }
+    return 0;
 }

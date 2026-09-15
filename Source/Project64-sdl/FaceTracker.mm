@@ -83,7 +83,10 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
                                                                               orientation:kCGImagePropertyOrientationUp
                                                                                   options:@{}];
     NSError * Error = nil;
-    GestureSample S = { false, 0.0f, 0.0f, MonotonicSeconds() };
+    GestureSample S;
+    S.FaceFound = false;
+    for (int i = 0; i < FACE_MEASURE_COUNT; i++) S.M[i] = 0.0f;
+    S.Time = MonotonicSeconds();
     if ([Handler performRequests:@[ m_Request ] error:&Error])
     {
         VNFaceObservation * Best = nil;
@@ -97,11 +100,11 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
             const float BrowY = 0.5f * (RegionMeanY(L.leftEyebrow) + RegionMeanY(L.rightEyebrow));
             const float EyeY = 0.5f * (RegionMeanY(L.leftEye) + RegionMeanY(L.rightEye));
             S.FaceFound = true;
-            S.BrowHeight = BrowY - EyeY;
+            S.M[FACE_BROW] = BrowY - EyeY;
             // Vision reports yaw for the face as seen by the camera. A front camera is not
             // mirrored, so the player's left turn arrives as a positive yaw; negate so the
             // classifier's "negative is head-left" holds. Confirm on first run (spec Part 6).
-            S.Yaw = Best.yaw != nil ? -Best.yaw.floatValue : 0.0f;
+            S.M[FACE_YAW] = Best.yaw != nil ? -Best.yaw.floatValue : 0.0f;
         }
     }
 
@@ -113,8 +116,8 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
     {
         m_LastDebug = S.Time;
         fprintf(stderr, "face: found=%d brow=%.4f (base %.4f) yaw=%.3f (base %.3f) bits=%u\n",
-            S.FaceFound ? 1 : 0, S.BrowHeight, m_Classifier->BrowBaseline(),
-            S.Yaw, m_Classifier->YawBaseline(), Bits);
+            S.FaceFound ? 1 : 0, S.M[FACE_BROW], m_Classifier->BrowBaseline(),
+            S.M[FACE_YAW], m_Classifier->YawBaseline(), Bits);
     }
 }
 

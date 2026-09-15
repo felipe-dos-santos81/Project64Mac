@@ -6,18 +6,39 @@
 #include <Common/PointerState.h>
 #include <stdint.h>
 
+// The measures the tracker derives each frame. Landmark measures are in Vision's
+// face-box-normalised units; the three angles are radians.
+enum FaceMeasure
+{
+    FACE_BROW,       // eyebrow mean y minus eye mean y
+    FACE_YAW,        // negative is the player's left
+    FACE_PITCH,      // positive is nose up
+    FACE_ROLL,       // negative is left ear down
+    FACE_MOUTH,      // inner-lip vertical extent
+    FACE_SMILE,      // outer-lip horizontal extent
+    FACE_EYE_LEFT,   // eye height over eye width
+    FACE_EYE_RIGHT,
+    FACE_MEASURE_COUNT
+};
+
 struct GestureSample
 {
     bool FaceFound;
-    float BrowHeight;   // eyebrow mean y minus eye mean y, face-box-normalised units
-    float Yaw;          // radians; negative is head-left
+    float M[FACE_MEASURE_COUNT];
     double Time;        // seconds, monotonic
 };
 
 struct GestureThresholds
 {
     float Brow = 0.035f;            // rise above baseline that sets eyebrows
-    float Yaw = 0.25f;              // radians from baseline that set a head bit
+    float Yaw = 0.25f;              // radians from baseline that set a head-left/right bit
+    float Pitch = 0.20f;            // radians from baseline that set head-up/down
+    float Roll = 0.25f;             // radians from baseline that set tilt-left/right
+    float Mouth = 0.06f;            // inner-lip gap above baseline that sets mouth-open
+    float Smile = 0.05f;            // lip width above baseline that sets smile
+    float Eye = 0.12f;              // aperture drop below baseline that sets a wink
+    float StickYaw = 0.26f;         // radians of yaw for full head-stick tilt
+    float StickPitch = 0.17f;       // radians of pitch for full head-stick tilt
     float ReleaseFraction = 0.6f;   // release below this fraction of the set threshold
     double BaselineSeconds = 5.0;   // EMA time constant for the rest baseline
     int DebounceFrames = 2;         // consecutive frames to set, and to clear
@@ -29,11 +50,18 @@ class GestureClassifier
 public:
     explicit GestureClassifier(const GestureThresholds & Thresholds);
 
-    // Returns the current PointerGesture bits.
-    uint32_t Update(const GestureSample & Sample);
+    // Returns the current PointerGesture bits and updates the head stick. HeadStickInUse
+    // (the layout binds {stick: head} or head-digital) makes the yaw and pitch baselines
+    // hold while the stick is outside its dead zone.
+    uint32_t Update(const GestureSample & Sample, bool HeadStickInUse = false);
 
-    float BrowBaseline() const { return m_BrowBaseline; }
-    float YawBaseline() const { return m_YawBaseline; }
+    // Head stick after the last Update, -80..80; left negative, nose-up positive.
+    int8_t StickX() const { return m_StickX; }
+    int8_t StickY() const { return m_StickY; }
+
+    float Baseline(FaceMeasure Measure) const { return m_Baseline[Measure]; }
+    float BrowBaseline() const { return m_Baseline[FACE_BROW]; }
+    float YawBaseline() const { return m_Baseline[FACE_YAW]; }
 
 private:
     // One held bit with debounce and hysteresis.
@@ -47,12 +75,14 @@ private:
     };
 
     void Track(float & Baseline, float Value, double Dt, bool Frozen);
+    float Threshold(FaceMeasure Measure) const;
+    uint32_t Bits() const;
 
     GestureThresholds m_T;
     bool m_HaveBaseline;
-    float m_BrowBaseline;
-    float m_YawBaseline;
+    float m_Baseline[FACE_MEASURE_COUNT];
     double m_LastTime;
     double m_LastFaceTime;
-    Channel m_Brows, m_Left, m_Right;
+    Channel m_Channel[POINTER_GESTURE_COUNT];
+    int8_t m_StickX, m_StickY;
 };

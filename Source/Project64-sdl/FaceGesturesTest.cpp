@@ -4,6 +4,7 @@
 #include "FaceGestures.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static int Failures = 0;
 
@@ -12,14 +13,40 @@ static int Failures = 0;
 
 static const double kFrame = 1.0 / 30.0;
 
-// Feed N frames of one sample, returning the last result.
+// A sample with every measure at zero.
+static GestureSample Sample(bool Face, double T)
+{
+    GestureSample S;
+    S.FaceFound = Face;
+    for (int i = 0; i < FACE_MEASURE_COUNT; i++) S.M[i] = 0.0f;
+    S.Time = T;
+    return S;
+}
+
+// Feed N frames of one brow/yaw pair, every other measure at zero, returning the last result.
 static uint32_t Feed(GestureClassifier & C, double & T, int Frames, bool Face, float Brow, float Yaw)
 {
     uint32_t Last = 0;
     for (int i = 0; i < Frames; i++)
     {
         T += kFrame;
-        Last = C.Update(GestureSample{ Face, Brow, Yaw, T });
+        GestureSample S = Sample(Face, T);
+        S.M[FACE_BROW] = Brow;
+        S.M[FACE_YAW] = Yaw;
+        Last = C.Update(S);
+    }
+    return Last;
+}
+
+// Feed N frames of one full sample (its Time is overwritten per frame), returning the last result.
+static uint32_t FeedSample(GestureClassifier & C, double & T, int Frames, GestureSample S, bool HeadStick = false)
+{
+    uint32_t Last = 0;
+    for (int i = 0; i < Frames; i++)
+    {
+        T += kFrame;
+        S.Time = T;
+        Last = C.Update(S, HeadStick);
     }
     return Last;
 }
@@ -28,7 +55,28 @@ int main()
 {
     GestureThresholds Th;
     CHECK(Th.Brow == 0.035f && Th.Yaw == 0.25f && Th.ReleaseFraction == 0.6f);
+    CHECK(Th.Pitch == 0.20f && Th.Roll == 0.25f && Th.Mouth == 0.06f && Th.Smile == 0.05f && Th.Eye == 0.12f);
+    CHECK(Th.StickYaw == 0.26f && Th.StickPitch == 0.17f);
     CHECK(Th.BaselineSeconds == 5.0 && Th.DebounceFrames == 2 && Th.NoFaceSeconds == 0.5);
+    CHECK(POINTER_GESTURE_COUNT == 11);
+    CHECK(PointerGestureFromName("wink-right") == POINTER_GESTURE_WINK_RIGHT);
+    CHECK(PointerGestureFromName("mouth-open") == (1u << 7));
+    CHECK(PointerGestureFromName("wink") == 0);
+    CHECK(PointerGestureIndex(POINTER_GESTURE_TILT_LEFT) == 5);
+    CHECK(strcmp(PointerGestureName(3), "head-up") == 0);
+    CHECK(strcmp(PointerGestureName(11), "") == 0);
+    CHECK(strcmp(PointerGestureTag(0), "Br") == 0 && strcmp(PointerGestureTag(10), "W>") == 0);
+    CHECK((POINTER_GESTURE_HEAD_DIRECTIONS & POINTER_GESTURE_HEAD_UP) != 0);
+    CHECK((POINTER_GESTURE_HEAD_DIRECTIONS & POINTER_GESTURE_TILT_LEFT) == 0);
+    {
+        // Baseline(FaceMeasure) is the general accessor; the two named ones still work.
+        GestureClassifier C(Th);
+        double T = 0;
+        Feed(C, T, 60, true, 0.10f, 0.0f);
+        CHECK(C.Baseline(FACE_BROW) == C.BrowBaseline());
+        CHECK(C.Baseline(FACE_YAW) == C.YawBaseline());
+        CHECK(C.StickX() == 0 && C.StickY() == 0);
+    }
 
     {
         // Debounce: one raised frame is nothing; the second sets the bit.
