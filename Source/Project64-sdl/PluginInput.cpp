@@ -5,9 +5,13 @@
 // GetKeys runs on the emulation thread. It never pumps events; it reads
 // SDL's keyboard state array (updated by the frontend's main-thread event
 // loop) and polls the first gamepad, both of which SDL3 documents as safe
-// from any thread.
+// from any thread. The mouse is sampled by the frontend on its main thread
+// (SDL3 documents the mouse state functions as main-thread only) and read
+// here through the shared PointerState.
 #include <Project64-plugin-spec/Input.h>
 #include <Common/GridKeys.h>
+#include <Common/PointerLayout.h>
+#include <Common/PointerState.h>
 #include "InputConfig.h"
 #include <SDL3/SDL.h>
 #include <limits.h>
@@ -27,6 +31,11 @@ static const int N64_AXIS_MAX = 80;
 static SDL_Gamepad * g_Gamepad = nullptr;
 static GridKeys * g_GridKeys = nullptr;
 static bool g_GridKeysChecked = false;
+static PointerState * g_Pointer = nullptr;
+static bool g_PointerChecked = false;
+// Latch: the zone under the cursor when the button went down stays pressed until release.
+static bool g_PointerPrevButton = false;
+static int g_PointerLatched = POINTER_ZONE_NONE;
 
 // The orchestrator maps a GridKeys and passes its descriptor in PJ64_GRID_KEYS_ENV.
 // Reading it here means every tile sees the one keyboard owned by the control strip.
@@ -52,6 +61,29 @@ static void OpenGridKeys(void)
     g_GridKeys = (GridKeys *)Mapped;
 }
 
+// The frontend maps a PointerState and passes its descriptor in PJ64_POINTER_ENV. It is
+// mapped read-write: the plugin writes labels and the latched zone back for the overlay.
+static void OpenPointerState(void)
+{
+    if (g_PointerChecked)
+    {
+        return;
+    }
+    g_PointerChecked = true;
+    const char * FdEnv = getenv(PJ64_POINTER_ENV);
+    if (FdEnv == nullptr)
+    {
+        return;
+    }
+    void * Mapped = mmap(nullptr, sizeof(PointerState), PROT_READ | PROT_WRITE, MAP_SHARED, atoi(FdEnv), 0);
+    if (Mapped == MAP_FAILED)
+    {
+        fprintf(stderr, "input: could not map %s=%s; pointer bindings are inactive\n", PJ64_POINTER_ENV, FdEnv);
+        return;
+    }
+    g_Pointer = (PointerState *)Mapped;
+}
+
 // Verification only. With PJ64_GRID_SELFTEST set, report once both that the snapshot
 // carried the strip's pattern (recv) and what the controller produced from it (a, start),
 // so Scripts/grid_selftest.sh proves delivery and mapping together.
@@ -66,6 +98,21 @@ static void SelftestReport(const bool * Raw, const BUTTONS * Out)
     const int Recv = (Raw[SDL_SCANCODE_X] && Raw[SDL_SCANCODE_RETURN]) ? 1 : 0;
     fprintf(stderr, "grid-selftest pid=%d recv=%d a=%d start=%d\n",
         (int)getpid(), Recv, Out->A_BUTTON ? 1 : 0, Out->START_BUTTON ? 1 : 0);
+}
+
+// Verification only. With PJ64_POINTER_SELFTEST set, report once, on the first frame that
+// sees the button down, which zone latched and what the controller produced from it, so
+// Scripts/pointer_selftest.sh proves delivery, geometry and mapping together.
+static void PointerSelftestReport(bool Button, int Latched, const BUTTONS * Out)
+{
+    static bool Reported = false;
+    if (Reported || !Button || getenv("PJ64_POINTER_SELFTEST") == nullptr)
+    {
+        return;
+    }
+    Reported = true;
+    fprintf(stderr, "pointer-selftest zone=%d a=%d start=%d\n",
+        Latched, Out->A_BUTTON ? 1 : 0, Out->START_BUTTON ? 1 : 0);
 }
 
 static void OpenFirstGamepad(void)
@@ -201,6 +248,53 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
 
     SelftestReport(Raw, Keys);
 
+    OpenPointerState();
+    if (g_Pointer != nullptr)
+    {
+        PointerSample S;
+        PointerSnapshot(g_Pointer, &S);
+        const PointerEval E = PointerLayoutEvaluate(S.X, S.Y, S.W, S.H, S.Inside);
+        if (S.Button && !g_PointerPrevButton)
+        {
+            g_PointerLatched = E.Zone; // press edge: latch whatever is under the cursor now
+        }
+        if (!S.Button)
+        {
+            g_PointerLatched = POINTER_ZONE_NONE;
+        }
+        g_PointerPrevButton = S.Button;
+        g_Pointer->LatchedZone.store(g_PointerLatched, std::memory_order_relaxed);
+        const uint32_t Gestures = g_Pointer->Gestures.load(std::memory_order_relaxed);
+
+        for (int i = 0; i < (int)N64Control::Count; i++)
+        {
+            for (const Binding & B : Config.Bindings((N64Control)i))
+            {
+                if (B.kind == Binding::Kind::Zone)
+                {
+                    if (g_PointerLatched == B.code)
+                    {
+                        SetControl(Keys, (N64Control)i);
+                    }
+                }
+                else if (B.kind == Binding::Kind::Face)
+                {
+                    if ((Gestures & (uint32_t)B.code) != 0)
+                    {
+                        SetControl(Keys, (N64Control)i);
+                    }
+                }
+                else if (B.kind == Binding::Kind::Pointer)
+                {
+                    Keys->X_AXIS = E.StickX;
+                    Keys->Y_AXIS = E.StickY;
+                    StickFromKeys = true; // the pointer owns the stick; the gamepad must not overwrite it
+                }
+            }
+        }
+        PointerSelftestReport(S.Button, g_PointerLatched, Keys);
+    }
+
     OpenFirstGamepad();
     if (g_Gamepad != nullptr)
     {
@@ -281,17 +375,35 @@ EXPORT void CALL WM_KeyUp(uint32_t /*wParam*/, uint32_t /*lParam*/)
 {
 }
 
+// Copies the resolved layout into the shared struct so the overlay can label cells. Runs
+// once at dylib load, before any ROM, so plain stores are enough.
+static void PublishPointerLabels(void)
+{
+    OpenPointerState();
+    if (g_Pointer == nullptr)
+    {
+        return;
+    }
+    const InputConfig & Config = InputConfig::Get();
+    Config.PointerLabels(g_Pointer->Labels, g_Pointer->GestureLabels);
+    g_Pointer->LatchedZone.store(POINTER_ZONE_NONE);
+    g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
+}
+
 EXPORT void CALL PluginLoaded(void)
 {
     const char * Env = getenv("PJ64_INPUT_YAML");
     if (Env != nullptr && Env[0] != '\0')
     {
         InputConfig::Get().Load(Env);
-        return;
     }
-    char Path[PATH_MAX];
-    if (DefaultConfigPath(Path, sizeof(Path)) && access(Path, R_OK) == 0)
+    else
     {
-        InputConfig::Get().Load(Path);
+        char Path[PATH_MAX];
+        if (DefaultConfigPath(Path, sizeof(Path)) && access(Path, R_OK) == 0)
+        {
+            InputConfig::Get().Load(Path);
+        }
     }
+    PublishPointerLabels();
 }
