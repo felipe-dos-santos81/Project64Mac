@@ -23,6 +23,7 @@ make test                 # smoke test: version string and plugin exports
 make input-config-test    # parser tests for the YAML input mapping
 make pointer-layout-test  # geometry tests for the mouse control grid
 make face-gesture-test    # classifier tests for the face gestures
+make game-config-test     # lookup tests for the per-game YAML
 ```
 
 `make` with no target (same as `make help`) lists every target with its build stage.
@@ -59,8 +60,9 @@ and checking each read the strip's key state.
 
 ## Input mapping
 
-Bindings are read once at startup from `Bin/macOS/Config/input.yaml`
-(`PJ64_INPUT_YAML=/path` overrides it); delete the file for the built-in mapping. Each
+Bindings are read once at startup from `Bin/macOS/Config/input.yaml`; a YAML named after
+the ROM takes its place (see "Playing with a mouse"), and `PJ64_INPUT_YAML=/path` overrides
+both. Delete the file for the built-in mapping. Each
 control takes exactly one input — `{key: X}`, `{button: a}`, `{axis: rightx, sign: -}`,
 and for `Stick` also `{stick: left}` or `{keys: {up: Up, …}}` — so naming a control replaces
 its built-in binding. The shipped file maps the **keyboard**; its commented block is the
@@ -73,8 +75,8 @@ shipped layouts put three of them on face gestures instead. Pick a layout under
 `Config/mouse/` and run with it:
 
 ```sh
-make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # mouse only — Z, B and R need face=1
-make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml face=1   # plus face gestures
+make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # camera starts: the layout binds gestures
+make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml face=0   # mouse only; Z, B and R are unavailable
 ```
 
 The window is a 4x4 grid drawn faintly over the game. The inner block is the stick: the
@@ -83,8 +85,9 @@ Mario layout). The twelve outer cells are buttons: hover and click, hold to hold
 under the cursor when you press stays pressed until you release, so "click A, then tilt"
 is a running jump. `PJ64_OVERLAY=0` hides the drawing.
 
-With `face=1` (or `--face`) the webcam adds three held buttons: raising both eyebrows,
-turning your head left, and turning it right. macOS asks for camera permission once,
+When the layout binds a face gesture the webcam starts by itself (`face=1` or `--face`
+forces it, `face=0` or `PJ64_FACE=0` keeps it off) and adds three held buttons: raising
+both eyebrows, turning your head left, and turning it right. macOS asks for camera permission once,
 attributed to the terminal or IDE you launched from; if it was denied before, allow it in
 System Settings > Privacy & Security > Camera. Frames stay in memory and are never saved,
 shown, or logged. `PJ64_FACE_DEBUG=1` prints the two measures once a second, and
@@ -98,6 +101,11 @@ Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `l
 `sm64.yaml`, `goldeneye.yaml`, `mk64.yaml`. Everything without the camera keeps working
 when the camera is denied or absent, though the buttons mapped only to face gestures are
 unavailable.
+
+Name a layout after the ROM and it loads without `input=`: `Roms/sm64.yaml` beside
+`Roms/sm64.z64`, or `Config/mouse/sm64.yaml` under the binary. The first that exists
+wins, the frontend prints `input layout: <path>` when it picks one, and an explicit
+`input=` beats both. Grid tiles ignore per-game files.
 
 `make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, the same way
 `make grid-selftest` proves the grid's key broadcast.

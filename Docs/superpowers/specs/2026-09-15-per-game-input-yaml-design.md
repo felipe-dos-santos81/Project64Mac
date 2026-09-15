@@ -1,7 +1,7 @@
 # Per-game input YAML — design
 
 Date: 2026-09-15
-Status: approved (design), implementation not started
+Status: implemented
 
 ## Goal
 

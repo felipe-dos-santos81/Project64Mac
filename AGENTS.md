@@ -22,8 +22,9 @@ make test                                # smoke test
 make input-config-test                   # parser tests for the YAML input mapping
 make pointer-layout-test                 # geometry tests for the pointer grid
 make face-gesture-test                   # classifier tests for the face gestures
+make game-config-test                    # lookup tests for the per-game YAML
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
-make run rom=Roms/game.z64 input=Config/mouse/sm64.yaml face=1
+make run rom=Roms/game.z64 input=Config/mouse/sm64.yaml  # camera starts by itself; face=0 stops it
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
@@ -35,8 +36,7 @@ make help                                # every target with its stage number
 plugin dylibs must export `GetDllInfo` (checked with `nm`). Passing output is one version
 line plus four `ok:` lines. `make input-config-test` runs the YAML input-mapping parser
 tests and needs no window. There is no generic unit-test framework, so no other
-single-test command exists. `make pointer-layout-test` and `make face-gesture-test` are
-pure unit tests. `make pointer-selftest` needs a window server and takes ~30 s.
+single-test command exists. `make pointer-layout-test`, `make face-gesture-test` and `make game-config-test` are pure unit tests. `make pointer-selftest` needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
 `audio`, `input`, `frontend`, `config`. Run `make core` after touching the core rather
@@ -89,8 +89,11 @@ is opt-in: with no `--grid` and those variables unset, behavior is unchanged.
 
 **Input bindings are data.** `Source/Project64-sdl/InputConfig.{h,cpp}` owns the N64 control
 set, the built-in default table (each control's keyboard *and* gamepad source) and the YAML
-reader; `PluginLoaded` loads `Config/input.yaml` once and `GetKeys` only evaluates the
-resolved table. yaml-cpp is a declared Homebrew dependency, linked into the input dylib.
+reader; `PluginLoaded` loads `PJ64_INPUT_YAML` if set, else `Config/input.yaml`, once, and
+`GetKeys` only evaluates the resolved table. The frontend sets that variable itself when a
+YAML named after the ROM exists (`Source/Project64-sdl/GameConfig.cpp`: beside the ROM,
+then `Config/mouse/`), unless it was already set or the process is a grid tile.
+yaml-cpp is a declared Homebrew dependency, linked into the input dylib.
 
 **Mouse and face input go through one shared struct.** `Source/Common/PointerState.h` is
 a seqlock over `shm_open`, created by the frontend and passed to the input plugin by
@@ -100,7 +103,7 @@ it; `Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a priv
 and writes three gesture bits through `FaceGestures.{h,cpp}`; the plugin evaluates zones,
 gestures and the pointer stick in `GetKeys` with the pure geometry in
 `Source/Common/PointerLayout.h`, and writes labels and the latched zone back for
-`Overlay.cpp`, which draws in `CSdlRenderWindow::SwapWindow` before the flush. Layouts are
+`Overlay.cpp`, plus `FaceWanted`, which the frontend's main loop polls to start the camera when `PJ64_FACE` is unset (`0` never, anything else at once), which draws in `CSdlRenderWindow::SwapWindow` before the flush. Layouts are
 the `{zone:}`, `{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
 
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
@@ -152,6 +155,10 @@ Only the `Aarch64` backend directory survives.
 - **`Config/input.yaml` must stay keyboard-active.** A mouse block there would replace the
   keyboard bindings under the one-binding rule and break the grid's keyboard broadcast and
   `make grid-selftest`. Mouse layouts live in `Config/mouse/`.
+- **A YAML beside a ROM silently changes that game's bindings.** `<rom>.yaml` next to
+  `<rom>.z64`, or `Config/mouse/<rom>.yaml`, is loaded instead of `input.yaml`, and the
+  camera starts if it binds a gesture. The stderr line `input layout: <path>` is the tell;
+  `PJ64_INPUT_YAML` and `PJ64_FACE=0` override it.
 
 ## Design docs
 
