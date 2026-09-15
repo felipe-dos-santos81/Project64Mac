@@ -239,6 +239,94 @@ int main()
         CHECK(FeedSample(C, T, 1, S) == POINTER_GESTURE_MOUTH_OPEN);
     }
 
+    {
+        // Head stick: yaw is X, pitch is Y, each divided by its full-tilt angle. Dead zone
+        // at 20 % of full tilt, clamped to the unit disc, scaled to +-80.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0), true);
+        CHECK(C.StickX() == 0 && C.StickY() == 0);
+        GestureSample S = Rest(0);
+        S.M[FACE_YAW] = -0.13f;                                   // half of 0.26, to the left
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == -40 && C.StickY() == 0);
+        S.M[FACE_YAW] = -0.04f;                                   // 0.15 of full: inside the dead zone
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 0 && C.StickY() == 0);
+        S.M[FACE_YAW] = 0.0f;
+        S.M[FACE_PITCH] = 0.17f;                                  // full tilt up
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 0 && C.StickY() == 80);
+        S.M[FACE_PITCH] = -0.085f;
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickY() == -40);
+        S.M[FACE_YAW] = 0.52f;                                    // twice full: clamped
+        S.M[FACE_PITCH] = 0.0f;
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 80 && C.StickY() == 0);
+        S.M[FACE_YAW] = 0.26f;                                    // a full diagonal is normalised
+        S.M[FACE_PITCH] = 0.17f;
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 57 && C.StickY() == 57);
+        // An expression still fires while the stick is tilted. Head-right also rides along
+        // here: Yaw (0.25) sits below StickYaw (0.26), so the full-tilt yaw above already
+        // latched it before the mouth opened. That is expected, not suppressed: a head-stick
+        // layout cannot bind head-left/right/up/down in the first place (the YAML reader
+        // rejects that combination), so the classifier does not need to hide the bit.
+        S.M[FACE_MOUTH] = 0.09f;
+        CHECK(FeedSample(C, T, 2, S, true) == (POINTER_GESTURE_MOUTH_OPEN | POINTER_GESTURE_HEAD_RIGHT));
+    }
+    {
+        // With the stick in use, the yaw and pitch baselines hold while it is tilted, even
+        // below the head-turn threshold, so a long steer never becomes the new rest.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0), true);
+        GestureSample S = Rest(0);
+        S.M[FACE_YAW] = 0.13f;                                    // below Yaw 0.25: no channel counts
+        S.M[FACE_PITCH] = 0.08f;
+        FeedSample(C, T, 300, S, true);                           // 10 s
+        CHECK(C.Baseline(FACE_YAW) < 0.005f && C.Baseline(FACE_PITCH) < 0.005f);
+        CHECK(C.StickX() == 40);
+    }
+    {
+        // Without a head stick in the layout, the same turn moves the yaw baseline as it
+        // always did (10 s at tau 5 s: 86 % of the way).
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0), false);
+        GestureSample S = Rest(0);
+        S.M[FACE_YAW] = 0.13f;
+        FeedSample(C, T, 300, S, false);
+        CHECK(C.Baseline(FACE_YAW) > 0.10f);
+    }
+    {
+        // No face for longer than the timeout centres the stick; a brief dropout keeps it.
+        GestureClassifier C(Th);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0), true);
+        GestureSample S = Rest(0);
+        S.M[FACE_YAW] = 0.26f;
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 80);
+        FeedSample(C, T, 5, Sample(false, 0), true);
+        CHECK(C.StickX() == 80);
+        FeedSample(C, T, 15, Sample(false, 0), true);
+        CHECK(C.StickX() == 0);
+    }
+    {
+        // Custom full-tilt angles are honoured.
+        GestureThresholds Wide;
+        Wide.StickYaw = 0.52f;
+        GestureClassifier C(Wide);
+        double T = 0;
+        FeedSample(C, T, 60, Rest(0), true);
+        GestureSample S = Rest(0);
+        S.M[FACE_YAW] = 0.26f;
+        FeedSample(C, T, 1, S, true);
+        CHECK(C.StickX() == 40);
+    }
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: face gestures\n");
     return 0;

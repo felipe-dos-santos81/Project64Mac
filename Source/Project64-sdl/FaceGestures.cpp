@@ -2,6 +2,7 @@
 // GestureClassifier: rest baseline, hysteresis, debounce, no-face timeout.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "FaceGestures.h"
+#include <math.h>
 
 // One entry per gesture bit, in bit order: which measure drives it and which way.
 struct ChannelSpec
@@ -87,7 +88,7 @@ uint32_t GestureClassifier::Bits() const
     return Out;
 }
 
-uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUse*/)
+uint32_t GestureClassifier::Update(const GestureSample & S, bool HeadStickInUse)
 {
     const double Dt = m_HaveBaseline ? S.Time - m_LastTime : 0.0;
     m_LastTime = S.Time;
@@ -136,6 +137,28 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
         m_Channel[g].Step(Raw[g], m_T.DebounceFrames);
     }
 
+    // Head stick from the yaw and pitch baselines: dead zone at 20 % of full tilt, clamped
+    // to the unit disc, +-80. Computed whether or not the layout uses it; only the freeze
+    // below depends on that.
+    {
+        float X = (S.M[FACE_YAW] - m_Baseline[FACE_YAW]) / m_T.StickYaw;
+        float Y = (S.M[FACE_PITCH] - m_Baseline[FACE_PITCH]) / m_T.StickPitch;
+        const float Len = sqrtf(X * X + Y * Y);
+        if (Len < 0.2f)
+        {
+            X = 0.0f;
+            Y = 0.0f;
+        }
+        else if (Len > 1.0f)
+        {
+            X /= Len;
+            Y /= Len;
+        }
+        m_StickX = (int8_t)lrintf(X * 80.0f);
+        m_StickY = (int8_t)lrintf(Y * 80.0f);
+    }
+    const bool StickTilted = HeadStickInUse && (m_StickX != 0 || m_StickY != 0);
+
     // Baselines move only at rest. Also hold them while a channel is counting toward a
     // set, so the rise that is about to fire does not get partly absorbed. An eye's own
     // closed condition freezes its baseline too, even when blink suppression zeroed the
@@ -149,6 +172,7 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
         }
         if (i == FACE_EYE_LEFT && LeftClosed) Frozen = true;
         if (i == FACE_EYE_RIGHT && RightClosed) Frozen = true;
+        if (StickTilted && (i == FACE_YAW || i == FACE_PITCH)) Frozen = true;
         Track(m_Baseline[i], S.M[i], Dt, Frozen);
     }
 
