@@ -18,8 +18,9 @@ Prerequisites: Xcode command line tools plus Homebrew SDL3 and yaml-cpp
 (`brew install sdl3 pkg-config yaml-cpp`).
 
 ```sh
-make            # core, four plugins, frontend, and the ROM database beside the binary
-make test       # smoke test: version string and plugin exports
+make                    # core, four plugins, frontend, and the ROM database beside the binary
+make test               # smoke test: version string and plugin exports
+make input-config-test  # parser tests for the YAML input mapping
 ```
 
 `make help` lists every target; [Docs/BUILDING.md](Docs/BUILDING.md) explains the

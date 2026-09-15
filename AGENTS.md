@@ -27,9 +27,10 @@ make clean                               # removes build/macos, Bin/macOS, gener
 make help                                # every target with its stage number
 ```
 
-`make test` is the whole automated suite: the frontend must run `--version`, and each
-of the four plugin dylibs must export `GetDllInfo` (checked with `nm`). Passing output
-is one version line plus four `ok:` lines. There is no unit-test framework, so no
+`make test` is the smoke suite: the frontend must run `--version`, and each of the four
+plugin dylibs must export `GetDllInfo` (checked with `nm`). Passing output is one version
+line plus four `ok:` lines. `make input-config-test` runs the YAML input-mapping parser
+tests and needs no window. There is no generic unit-test framework, so no other
 single-test command exists.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
