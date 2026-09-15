@@ -66,11 +66,12 @@ full gamepad alternative. A file with a mistake is ignored whole, with one line 
 
 ## Playing with a mouse
 
-A one-button mouse can drive every N64 control. Pick a layout under `Config/mouse/` and
-run with it:
+A one-button mouse drives the stick and up to thirteen of the fourteen N64 buttons; the
+shipped layouts put three of them on face gestures instead. Pick a layout under
+`Config/mouse/` and run with it:
 
 ```sh
-make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # mouse only
+make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # mouse only — Z, B and R need face=1
 make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml face=1   # plus face gestures
 ```
 
@@ -93,7 +94,8 @@ Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `l
 `left3`, `right2`, `right3`, `bottom1`-`bottom4`, `centre`) and
 `{face: eyebrows|head-left|head-right}`, plus `{stick: pointer}` for `Stick`. Shipped:
 `sm64.yaml`, `goldeneye.yaml`, `mk64.yaml`. Everything without the camera keeps working
-when the camera is denied or absent.
+when the camera is denied or absent, though the buttons mapped only to face gestures are
+unavailable.
 
 ## What works
 

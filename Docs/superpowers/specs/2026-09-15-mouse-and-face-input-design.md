@@ -7,9 +7,10 @@ Status: approved (design), implementation not started
 
 Let a player who can use only a standard mouse with one working button play N64 games
 in this port, with Apple's Vision framework turning three facial gestures into extra
-buttons. Every one of the fifteen N64 controls must be reachable from the mouse alone; the
-face gestures make the most-used ones faster and simultaneous. The feature is opt-in and
-changes nothing for keyboard, gamepad, or grid users.
+buttons. The pointer grid's thirteen zones plus the stick reach fourteen of the fifteen
+N64 controls from the mouse alone; the face gestures cover the rest and make the
+most-used ones faster and simultaneous. The feature is opt-in and changes nothing for
+keyboard, gamepad, or grid users.
 
 ## Context
 
