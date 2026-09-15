@@ -20,6 +20,10 @@ pulled back in by accident.
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
 make input-config-test                   # parser tests for the YAML input mapping
+make pointer-layout-test                 # geometry tests for the pointer grid
+make face-gesture-test                   # classifier tests for the face gestures
+make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
+make run rom=Roms/game.z64 input=Config/mouse/sm64.yaml face=1
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
@@ -31,7 +35,8 @@ make help                                # every target with its stage number
 plugin dylibs must export `GetDllInfo` (checked with `nm`). Passing output is one version
 line plus four `ok:` lines. `make input-config-test` runs the YAML input-mapping parser
 tests and needs no window. There is no generic unit-test framework, so no other
-single-test command exists.
+single-test command exists. `make pointer-layout-test` and `make face-gesture-test` are
+pure unit tests. `make pointer-selftest` needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
 `audio`, `input`, `frontend`, `config`. Run `make core` after touching the core rather
@@ -87,6 +92,17 @@ set, the built-in default table (each control's keyboard *and* gamepad source) a
 reader; `PluginLoaded` loads `Config/input.yaml` once and `GetKeys` only evaluates the
 resolved table. yaml-cpp is a declared Homebrew dependency, linked into the input dylib.
 
+**Mouse and face input go through one shared struct.** `Source/Common/PointerState.h` is
+a seqlock over `shm_open`, created by the frontend and passed to the input plugin by
+descriptor in `PJ64_POINTER_FD`, the same way the grid passes keys. The frontend's main
+loop samples the mouse (SDL3's mouse state functions are main-thread only) and publishes
+it; `Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a private queue
+and writes three gesture bits through `FaceGestures.{h,cpp}`; the plugin evaluates zones,
+gestures and the pointer stick in `GetKeys` with the pure geometry in
+`Source/Common/PointerLayout.h`, and writes labels and the latched zone back for
+`Overlay.cpp`, which draws in `CSdlRenderWindow::SwapWindow` before the flush. Layouts are
+the `{zone:}`, `{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
+
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are
 main-thread-only on macOS and marshal there, which deadlocks on the first swap because
@@ -128,6 +144,14 @@ Only the `Aarch64` backend directory survives.
   third-party source means adding it to the Makefile's list; only softfloat, zlib and
   asmjit use wildcards, and softfloat's list is hand-picked for a reason the Makefile
   comment explains.
+- **SDL3 mouse state is main-thread only.** `SDL_GetMouseState` and friends must stay in
+  `main.cpp`'s loop; the plugin reads the published `PointerState` instead.
+- **The camera prompt is attributed to the launcher.** The binary is not an app bundle, so
+  macOS asks for camera access on behalf of the terminal or IDE. A past denial there makes
+  the tracker report `denied` without a new prompt; the fix is in System Settings.
+- **`Config/input.yaml` must stay keyboard-active.** A mouse block there would replace the
+  keyboard bindings under the one-binding rule and break the grid's keyboard broadcast and
+  `make grid-selftest`. Mouse layouts live in `Config/mouse/`.
 
 ## Design docs
 

@@ -64,11 +64,44 @@ and for `Stick` also `{stick: left}` or `{keys: {up: Up, …}}` — so naming a 
 its built-in binding. The shipped file maps the **keyboard**; its commented block is the
 full gamepad alternative. A file with a mistake is ignored whole, with one line on stderr.
 
+## Playing with a mouse
+
+A one-button mouse can drive every N64 control. Pick a layout under `Config/mouse/` and
+run with it:
+
+```sh
+make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # mouse only
+make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml face=1   # plus face gestures
+```
+
+The window is a 4x4 grid drawn faintly over the game. The inner block is the stick: the
+cursor's distance from the centre is the tilt, and a click there is one button (A in the
+Mario layout). The twelve outer cells are buttons: hover and click, hold to hold. The zone
+under the cursor when you press stays pressed until you release, so "click A, then tilt"
+is a running jump. `PJ64_OVERLAY=0` hides the drawing.
+
+With `face=1` (or `--face`) the webcam adds three held buttons: raising both eyebrows,
+turning your head left, and turning it right. macOS asks for camera permission once,
+attributed to the terminal or IDE you launched from; if it was denied before, allow it in
+System Settings > Privacy & Security > Camera. Frames stay in memory and are never saved,
+shown, or logged. `PJ64_FACE_DEBUG=1` prints the two measures once a second, and
+`PJ64_FACE_BROW` / `PJ64_FACE_YAW` override the thresholds (defaults 0.035 and 0.25). A
+dot in the bottom-left corner shows the tracker: hollow while looking for a face, filled
+while tracking, crossed when the camera is unavailable.
+
+Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `left2`,
+`left3`, `right2`, `right3`, `bottom1`-`bottom4`, `centre`) and
+`{face: eyebrows|head-left|head-right}`, plus `{stick: pointer}` for `Stick`. Shipped:
+`sm64.yaml`, `goldeneye.yaml`, `mk64.yaml`. Everything without the camera keeps working
+when the camera is denied or absent.
+
 ## What works
 
 Super Mario 64 renders, plays audio and runs at full speed, with keyboard input through
-SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`. The
-window is fixed at 640x480 and the mouse cursor is never captured.
+SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`, and a
+one-button mouse with optional face gestures works with a layout from `Config/mouse/` (see
+"Playing with a mouse"). The window is fixed at 640x480 and the mouse cursor is never
+captured.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is
