@@ -36,6 +36,11 @@ static bool g_PointerChecked = false;
 // Latch: the zone under the cursor when the button went down stays pressed until release.
 static bool g_PointerPrevButton = false;
 static int g_PointerLatched = POINTER_ZONE_NONE;
+// Flick gate: a cursor that jumps more than g_PointerFlick px between polls keeps the
+// previous poll's tilt, so reaching for the panel never reads as a tilt on the way.
+// PJ64_POINTER_FLICK overrides the threshold; 0 disables the gate.
+static PointerGate g_PointerGate = { false, 0.0f, 0.0f, 0, 0 };
+static float g_PointerFlick = POINTER_FLICK_PX;
 
 // The orchestrator maps a GridKeys and passes its descriptor in PJ64_GRID_KEYS_ENV.
 // Reading it here means every tile sees the one keyboard owned by the control strip.
@@ -82,6 +87,11 @@ static void OpenPointerState(void)
         return;
     }
     g_Pointer = (PointerState *)Mapped;
+    const char * Flick = getenv("PJ64_POINTER_FLICK");
+    if (Flick != nullptr)
+    {
+        g_PointerFlick = (float)atof(Flick);
+    }
 }
 
 // Verification only. With PJ64_GRID_SELFTEST set, report once both that the snapshot
@@ -253,7 +263,8 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
     {
         PointerSample S;
         PointerSnapshot(g_Pointer, &S);
-        const PointerEval E = PointerLayoutEvaluate(S.X, S.Y, S.W, S.H, S.Inside);
+        PointerEval E = PointerLayoutEvaluate(S.X, S.Y, S.W, S.H, S.Inside);
+        PointerGateStick(&g_PointerGate, &E, S.X, S.Y, g_PointerFlick);
         if (S.Button && !g_PointerPrevButton)
         {
             g_PointerLatched = E.Zone; // press edge: latch whatever is under the cursor now
@@ -264,6 +275,7 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         }
         g_PointerPrevButton = S.Button;
         g_Pointer->LatchedZone.store(g_PointerLatched, std::memory_order_relaxed);
+        g_Pointer->Quadrant.store(PointerQuadrant(E.StickX, E.StickY), std::memory_order_relaxed);
         const uint32_t Gestures = g_Pointer->Gestures.load(std::memory_order_relaxed);
 
         for (int i = 0; i < (int)N64Control::Count; i++)
