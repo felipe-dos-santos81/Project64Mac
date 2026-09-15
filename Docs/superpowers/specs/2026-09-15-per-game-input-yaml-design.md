@@ -47,10 +47,11 @@ Before `AppInit`, the frontend checks, in order:
 1. `<rom dir>/<base>.yaml`
 2. `<executable dir>/Config/mouse/<base>.yaml`
 
-The first path that is readable is exported as `PJ64_INPUT_YAML` with overwrite off
-(`setenv(..., 0)`), so a variable already in the environment, including the Makefile's
-`input=`, always wins. One line goes to stderr, `input layout: <path>`, whenever the
-frontend chooses a file, so a changed binding set is never silent.
+The lookup runs only when `PJ64_INPUT_YAML` is unset or empty (the plugin treats both as
+absent), and the first readable path is exported as `PJ64_INPUT_YAML`. A non-empty
+variable already in the environment, including the Makefile's `input=`, therefore always
+wins. One line goes to stderr, `input layout: <path>`, whenever the frontend chooses a
+file, so a changed binding set is never silent.
 
 **Precedence** for the plugin's file, highest first: `PJ64_INPUT_YAML` set by the user,
 sibling YAML, `Config/mouse/<base>.yaml`, `<bin>/Config/input.yaml`, built-in table. The
