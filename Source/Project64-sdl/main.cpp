@@ -5,6 +5,7 @@
 #include "SdlNotification.h"
 #include "SdlRenderWindow.h"
 #include "GridHost.h"
+#include "FaceTracker.h"
 #include <Project64-core/AppInit.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
@@ -172,31 +173,40 @@ int main(int argc, char ** argv)
         return GridHostRun(argc, argv);
     }
     bool TileMode = false;
+    bool FaceFlag = getenv("PJ64_FACE") != nullptr && getenv("PJ64_FACE")[0] != '\0' && strcmp(getenv("PJ64_FACE"), "0") != 0;
     SDL_Rect TileRect = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
     const char * RomPath = nullptr;
-    if (argc >= 2 && strcmp(argv[1], "--tile") == 0)
+    // Strip --face wherever it appears; everything else keeps its position.
+    int Argc = 0;
+    char * Argv[16];
+    for (int i = 0; i < argc && Argc < 16; i++)
     {
-        if (argc < 5 || strcmp(argv[3], "--tile-rect") != 0)
+        if (strcmp(argv[i], "--face") == 0) { FaceFlag = true; continue; }
+        Argv[Argc++] = argv[i];
+    }
+    if (Argc >= 2 && strcmp(Argv[1], "--tile") == 0)
+    {
+        if (Argc < 5 || strcmp(Argv[3], "--tile-rect") != 0)
         {
-            fprintf(stderr, "usage: %s --tile <rom> --tile-rect X,Y,W,H\n", argv[0]);
+            fprintf(stderr, "usage: %s --tile <rom> --tile-rect X,Y,W,H\n", Argv[0]);
             return 2;
         }
-        RomPath = argv[2];
-        if (sscanf(argv[4], "%d,%d,%d,%d", &TileRect.x, &TileRect.y, &TileRect.w, &TileRect.h) != 4
+        RomPath = Argv[2];
+        if (sscanf(Argv[4], "%d,%d,%d,%d", &TileRect.x, &TileRect.y, &TileRect.w, &TileRect.h) != 4
             || TileRect.w <= 0 || TileRect.h <= 0)
         {
-            fprintf(stderr, "bad --tile-rect: %s\n", argv[4]);
+            fprintf(stderr, "bad --tile-rect: %s\n", Argv[4]);
             return 2;
         }
         TileMode = true;
     }
-    else if (argc >= 2)
+    else if (Argc >= 2)
     {
-        RomPath = argv[1];
+        RomPath = Argv[1];
     }
     if (RomPath == nullptr)
     {
-        fprintf(stderr, "usage: %s <rom file>\n", argv[0]);
+        fprintf(stderr, "usage: %s <rom file> [--face]\n", argv[0]);
         return 2;
     }
 
@@ -251,6 +261,10 @@ int main(int argc, char ** argv)
     SDL_GL_MakeCurrent(window, nullptr);
 
     PointerState * pointer = CreatePointerState();
+    if (FaceFlag && pointer != nullptr && !TileMode)
+    {
+        FaceTrackerStart(pointer);
+    }
     PointerSample inject;
     const bool injecting = ParsePointerInject(&inject);
 
@@ -300,6 +314,7 @@ int main(int argc, char ** argv)
         SDL_Delay(10);
     }
 
+    FaceTrackerStop();
     CN64System::CloseSystem(); // stops the CPU thread and deletes g_BaseSystem
     AppCleanup();
     return ShutdownSdl(window, context, 0);

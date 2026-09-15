@@ -291,6 +291,8 @@ VIDEO_SRC = $(addprefix Project64-video/, 3dmath.cpp Combine.cpp Config.cpp CRC.
 AUDIO_SRC = $(addprefix Project64-audio/, AudioMain.cpp AudioSettings.cpp trace.cpp Driver/SoundBase.cpp Driver/SdlAudio.cpp)
 INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp)
+# Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
+FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
@@ -304,9 +306,10 @@ VIDEO_OBJS    = $(call objs,$(VIDEO_SRC))
 AUDIO_OBJS    = $(call objs,$(AUDIO_SRC))
 INPUT_OBJS    = $(call objs,$(INPUT_SRC))
 FRONTEND_OBJS = $(call objs,$(FRONTEND_SRC))
+FRONTEND_MM_OBJS = $(call objs,$(FRONTEND_MM_SRC))
 ALL_OBJS      = $(COMMON_OBJS) $(SETTINGS_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) $(ASMJIT_OBJS) \
   $(SOFTFLOAT_OBJS) $(CORE_OBJS) $(RSP_OBJS) $(VIDEO_OBJS) $(AUDIO_OBJS) $(INPUT_OBJS) \
-  $(FRONTEND_OBJS)
+  $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS)
 
 # The four plugin dylibs, named once: the build rules and the smoke test both use this.
 PLUGIN_DYLIBS = $(PLUGINS)/GFX/Project64-video.dylib $(PLUGINS)/Audio/Project64-audio.dylib \
@@ -335,9 +338,9 @@ $(SOFTFLOAT_OBJS): CFLAGS += -Wno-implicit-function-declaration
 $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
-$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(SDL_CFLAGS)
+$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(SDL_CFLAGS)
 $(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
-$(FRONTEND_OBJS): WARN = -Wall
+$(FRONTEND_OBJS) $(FRONTEND_MM_OBJS): WARN = -Wall
 
 .PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest input-config-test pointer-layout-test face-gesture-test test clean
 
@@ -416,9 +419,9 @@ $(PLUGINS)/Input/Project64-input-sdl.dylib: $(INPUT_OBJS)
 # ── Stage 7 · Frontend ───────────────────────────────────────────────────────
 
 frontend: $(BIN)/Project64 ## [STEP 7] Build the SDL3 frontend executable
-$(BIN)/Project64: $(FRONTEND_OBJS) $(LIBDIR)/libProject64-core.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libzlib.a $(LIBDIR)/libsoftfloat.a $(LIBDIR)/libCommon.a
+$(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-core.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libzlib.a $(LIBDIR)/libsoftfloat.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) -framework OpenGL -lpthread
+	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) -framework OpenGL -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
 
 # ── Stage 7b · Data files ─────────────────────────────────────────────────────
 
@@ -491,6 +494,10 @@ clean: ## Remove build/macos, Bin/macOS and generated Version.h files
 $(BUILD)/%.o: $(SRC)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/%.o: $(SRC)/%.mm
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -fobjc-arc -c $< -o $@
 
 $(BUILD)/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
