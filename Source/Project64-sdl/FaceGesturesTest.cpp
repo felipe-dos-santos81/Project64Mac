@@ -221,8 +221,10 @@ int main()
         CHECK(FeedSample(C, T, 2, S) == POINTER_GESTURE_WINK_LEFT);
         S.M[FACE_EYE_RIGHT] = 0.20f;                              // -0.10: past release
         CHECK(FeedSample(C, T, 2, S) == 0);
-        // The eye baselines were frozen through all of that.
-        CHECK(C.Baseline(FACE_EYE_LEFT) > 0.29f && C.Baseline(FACE_EYE_RIGHT) > 0.29f);
+        // Each eye baseline froze on its own closed condition throughout, even while blink
+        // suppression zeroed its wink channel: an unfrozen run drifts to about 0.294 here,
+        // so 0.298 discriminates.
+        CHECK(C.Baseline(FACE_EYE_LEFT) > 0.298f && C.Baseline(FACE_EYE_RIGHT) > 0.298f);
     }
     {
         // A custom mouth threshold is honoured.

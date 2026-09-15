@@ -137,7 +137,9 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
     }
 
     // Baselines move only at rest. Also hold them while a channel is counting toward a
-    // set, so the rise that is about to fire does not get partly absorbed.
+    // set, so the rise that is about to fire does not get partly absorbed. An eye's own
+    // closed condition freezes its baseline too, even when blink suppression zeroed the
+    // wink channel below, so a held blink cannot drag either eye baseline toward itself.
     for (int i = 0; i < FACE_MEASURE_COUNT; i++)
     {
         bool Frozen = false;
@@ -145,6 +147,8 @@ uint32_t GestureClassifier::Update(const GestureSample & S, bool /*HeadStickInUs
         {
             if (kChannels[g].Measure == i && (m_Channel[g].Active || m_Channel[g].Count > 0)) Frozen = true;
         }
+        if (i == FACE_EYE_LEFT && LeftClosed) Frozen = true;
+        if (i == FACE_EYE_RIGHT && RightClosed) Frozen = true;
         Track(m_Baseline[i], S.M[i], Dt, Frozen);
     }
 
