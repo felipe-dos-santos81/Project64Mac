@@ -348,7 +348,7 @@ help: ## Print this help message
 	@printf "\033[33mUsage:\033[0m\n  make [target] [arg=\"val\"...]\n\n\033[33mTargets:\033[0m\n"
 	@grep -hE '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; \
-		{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+		{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
@@ -426,7 +426,7 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(LIBDIR)/libProject64-core.a $(LIBDIR)/libas
 # to defaults, which is why the RSP reports "uCode crc not found in INI" and never runs the
 # graphics task. Copy the shipped data next to the binary. Project64.cfg is a user file and
 # is never overwritten.
-config: ## [STEP 7b] Install ROM database, enhancements and language files next to the binary
+config: ## [STEP 7b] Install ROM database, enhancements, input mapping and language files next to the binary
 	@mkdir -p $(BIN)/Config $(BIN)/Lang
 	@cp -f Config/Project64.rdb Config/Project64.rdx Config/Audio.rdb Config/Video.rdb $(BIN)/Config/
 	@# -n, not -f: cheats and enhancement settings are user data once installed.

@@ -23,8 +23,7 @@ make test               # smoke test: version string and plugin exports
 make input-config-test  # parser tests for the YAML input mapping
 ```
 
-`make help` lists every target; [Docs/BUILDING.md](Docs/BUILDING.md) explains the
-build stages.
+`make help` lists every target with its build stage.
 
 ## Game files
 

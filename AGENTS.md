@@ -113,7 +113,7 @@ Only the `Aarch64` backend directory survives.
   swapped in. The built-in keyboard+gamepad pairing returns when the file is deleted.
 - **`Config/` and `Lang/` are tracked runtime data**, not build inputs. Never delete
   from them.
-- **Line endings are mixed.** 132 tracked files are CRLF (including
+- **Line endings are mixed.** Many tracked files are CRLF (including
   `Source/Common/Trace.{h,cpp}` and `Source/Project64-video/Renderer/glitchmain.h`).
   Run `file <path>` before editing and preserve what is there. BSD `sed` will not help;
   a Python read/replace/write that detects `\r\n` will. A CRLF `.gitignore` also gives
