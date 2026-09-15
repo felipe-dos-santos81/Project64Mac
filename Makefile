@@ -347,8 +347,9 @@ help: ## Print this help message
 	@printf '\033[01;32m${SERVICE} — Apple Silicon build with SDL3\033[00;37m\n\n'
 	@printf "\033[33mUsage:\033[0m\n  make [target] [arg=\"val\"...]\n\n\033[33mTargets:\033[0m\n"
 	@grep -hE '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; \
-		{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "} \
+		{name[NR] = $$1; desc[NR] = $$2; if (length($$1) > w) w = length($$1)} \
+		END {for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m %s\n", w, name[i], desc[i]}'
 
 deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
