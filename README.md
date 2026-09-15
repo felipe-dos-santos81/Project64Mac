@@ -62,11 +62,11 @@ and checking each read the strip's key state.
 
 Bindings are read once at startup from `Bin/macOS/Config/input.yaml`; a YAML named after
 the ROM takes its place (see "Playing with a mouse"), and `PJ64_INPUT_YAML=/path` overrides
-both. Delete the file for the built-in mapping. Each
-control takes exactly one input — `{key: X}`, `{button: a}`, `{axis: rightx, sign: -}`,
+both. Each control takes exactly one input — `{key: X}`, `{button: a}`, `{axis: rightx, sign: -}`,
 and for `Stick` also `{stick: left}` or `{keys: {up: Up, …}}` — so naming a control replaces
 its built-in binding. The shipped file maps the **keyboard**; its commented block is the
-full gamepad alternative. A file with a mistake is ignored whole, with one line on stderr.
+full gamepad alternative. Delete the file, or leave a mistake in it, for the built-in
+mapping — a bad file is ignored whole, with one line on stderr.
 
 ## Playing with a mouse
 
@@ -87,13 +87,15 @@ is a running jump. `PJ64_OVERLAY=0` hides the drawing.
 
 When the layout binds a face gesture the webcam starts by itself (`face=1` or `--face`
 forces it, `face=0` or `PJ64_FACE=0` keeps it off) and adds three held buttons: raising
-both eyebrows, turning your head left, and turning it right. macOS asks for camera permission once,
-attributed to the terminal or IDE you launched from; if it was denied before, allow it in
-System Settings > Privacy & Security > Camera. Frames stay in memory and are never saved,
-shown, or logged. `PJ64_FACE_DEBUG=1` prints the two measures once a second, and
-`PJ64_FACE_BROW` / `PJ64_FACE_YAW` override the thresholds (defaults 0.035 and 0.25). A
-dot in the bottom-left corner shows the tracker: hollow while looking for a face, filled
-while tracking, crossed when the camera is unavailable.
+both eyebrows, turning your head left, and turning it right. macOS asks for camera
+permission once, attributed to the terminal or IDE you launched from; a past denial is
+fixed in System Settings > Privacy & Security > Camera. Frames stay in memory and are
+never saved, shown, or logged.
+
+`PJ64_FACE_DEBUG=1` prints the two measures once a second, and `PJ64_FACE_BROW` /
+`PJ64_FACE_YAW` override the thresholds (defaults 0.035 and 0.25). A dot in the
+bottom-left corner shows the tracker: hollow while looking for a face, filled while
+tracking, crossed when the camera is unavailable.
 
 Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `left2`,
 `left3`, `right2`, `right3`, `bottom1`-`bottom4`, `centre`) and
