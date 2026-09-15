@@ -25,13 +25,13 @@ enum class N64Control
 
 struct Binding
 {
-    enum class Kind { Key, Button, Axis, Stick, Keys, Zone, Face, Pointer };
+    enum class Kind { Key, Button, Axis, Stick, Keys, Zone, Face, Pointer, HeadStick };
 
     Kind kind;
     int code;        // Key: SDL_Scancode; Button: SDL_GamepadButton;
                      // Axis: SDL_GamepadAxis; Stick: X axis (Y is code + 1);
                      // Zone: zone index (PointerLayout.h); Face: one PointerGesture bit;
-                     // Pointer: unused
+                     // Pointer: unused; HeadStick: 0 for {stick: head}, 1 for {stick: head-digital}
     bool positive;   // Axis: true fires on +, false on -
     SDL_Scancode UpKey, DownKey, LeftKey, RightKey;   // Keys only
 };
@@ -58,6 +58,10 @@ public:
     // True when any binding is a face gesture, which is what starts the camera when
     // PJ64_FACE is unset.
     bool UsesFace() const;
+
+    // True when Stick is {stick: head} or {stick: head-digital}: the tracker's yaw and
+    // pitch baselines then hold while the stick is tilted (PointerState::HeadStickWanted).
+    bool UsesHeadStick() const;
 
     // Overlay labels: for each zone and each gesture, the label of the control bound to
     // it, or "" when nothing is.

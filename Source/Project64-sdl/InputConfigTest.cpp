@@ -147,6 +147,52 @@ int main()
     CHECK(C.Bindings(N64Control::L)[0].code == 12);
     CHECK(C.UsesPointer());                           // slots alone turn the overlay on
 
+    const char * FaceOnly =
+        "bindings:\n"
+        "  Stick: {stick: head}\n"
+        "  A: {face: mouth-open}\n"
+        "  B: {face: smile}\n"
+        "  CLeft: {face: wink-left}\n"
+        "  CRight: {face: wink-right}\n"
+        "  R: {face: tilt-left}\n"
+        "  Start: {face: tilt-right}\n"
+        "  Z: {face: head-up}\n";
+    CHECK(!C.Load(WriteTemp(FaceOnly)));              // head-up beside a head stick is rejected...
+    const char * FaceOnlyOk =
+        "bindings:\n"
+        "  Stick: {stick: head}\n"
+        "  A: {face: mouth-open}\n"
+        "  B: {face: smile}\n"
+        "  CLeft: {face: wink-left}\n"
+        "  CRight: {face: wink-right}\n"
+        "  R: {face: tilt-left}\n"
+        "  Start: {face: tilt-right}\n";
+    CHECK(C.Load(WriteTemp(FaceOnlyOk)));             // ...and the same file without it loads
+    CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
+    CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::HeadStick);
+    CHECK(C.Bindings(N64Control::Stick)[0].code == 0);
+    CHECK(C.Bindings(N64Control::A)[0].code == POINTER_GESTURE_MOUTH_OPEN);
+    CHECK(C.Bindings(N64Control::CLeft)[0].code == POINTER_GESTURE_WINK_LEFT);
+    CHECK(C.Bindings(N64Control::Start)[0].code == POINTER_GESTURE_TILT_RIGHT);
+    C.PointerLabels(Labels, GestureLabels);
+    CHECK(strcmp(GestureLabels[7], "A") == 0);        // mouth-open is bit 7
+    CHECK(strcmp(GestureLabels[9], "C<") == 0);       // wink-left is bit 9
+    CHECK(strcmp(GestureLabels[1], "") == 0);         // head-left unbound
+
+    CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: head-digital}\n  Z: {face: eyebrows}\n")));
+    CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::HeadStick);
+    CHECK(C.Bindings(N64Control::Stick)[0].code == 1);
+    CHECK(C.UsesHeadStick());
+
+    // A pointer stick beside head-left is fine: only a head stick consumes the head turns.
+    CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: pointer}\n  B: {face: head-left}\n")));
+    CHECK(!C.UsesHeadStick());
+    // The rule holds in either order and for either head-stick form.
+    CHECK(!C.Load(WriteTemp("bindings:\n  B: {face: head-down}\n  Stick: {stick: head}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: head-digital}\n  B: {face: head-right}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: head}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: head-analog}\n")));
+
     CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
     const size_t ABefore = C.Bindings(N64Control::A).size();
 
@@ -173,6 +219,9 @@ int main()
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: middle}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {face: wink}\n")));
+    CHECK(C.Load(WriteTemp("bindings:\n  A: {face: wink-left}\n  B: {face: head-down}\n  Z: {face: tilt-right}\n")));
+    CHECK(C.Bindings(N64Control::B)[0].code == POINTER_GESTURE_HEAD_DOWN);
+    CHECK(C.Load(WriteTemp(Valid)));                  // back to the known good state
     CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {zone: game}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {face: eyebrows}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: pointer}\n")));
@@ -195,6 +244,16 @@ int main()
     CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
     CHECK(C.UsesPointer());
     CHECK(C.UsesFace());                              // this layout binds R, Z and B
+
+    CHECK(C.Load("Config/face/super_mario_64_usa.yaml"));   // every shipped face layout must parse
+    CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
+    CHECK(C.Bindings(N64Control::A)[0].code == POINTER_GESTURE_MOUTH_OPEN);
+    CHECK(C.Bindings(N64Control::L).size() == 2);     // unbound: keeps keyboard and gamepad
+    CHECK(C.Load("Config/face/mario_kart_64_u.yaml"));
+    CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
+    CHECK(C.Bindings(N64Control::R)[0].code == POINTER_GESTURE_EYEBROWS);
+    CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));
+    CHECK(!C.UsesHeadStick());                        // the mouse layouts have no head stick
 
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");

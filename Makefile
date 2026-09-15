@@ -432,7 +432,7 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-co
 # to defaults, which is why the RSP reports "uCode crc not found in INI" and never runs the
 # graphics task. Copy the shipped data next to the binary. Project64.cfg is a user file and
 # is never overwritten.
-config: ## [STEP 7b] Install ROM database, enhancements, input mappings and language files beside the binary (refreshes Config/mouse)
+config: ## [STEP 7b] Install ROM database, enhancements, input mappings and language files beside the binary (refreshes Config/mouse and Config/face)
 	@mkdir -p $(BIN)/Config $(BIN)/Lang
 	@cp -f Config/Project64.rdb Config/Project64.rdx Config/Audio.rdb Config/Video.rdb $(BIN)/Config/
 	@# -n, not -f: cheats and enhancement settings are user data once installed.
@@ -446,6 +446,10 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mappings and lang
 	@mkdir -p $(BIN)/Config/mouse
 	@rm -f $(BIN)/Config/mouse/*.yaml
 	@cp -f Config/mouse/*.yaml $(BIN)/Config/mouse/
+	@# Same rule for the face layouts. They are outside the per-ROM lookup on purpose.
+	@mkdir -p $(BIN)/Config/face
+	@rm -f $(BIN)/Config/face/*.yaml
+	@cp -f Config/face/*.yaml $(BIN)/Config/face/
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 

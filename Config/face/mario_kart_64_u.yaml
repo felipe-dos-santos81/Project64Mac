@@ -1,0 +1,12 @@
+# Face-only layout for Mario Kart 64. Select with
+#   make run rom=... input=Config/face/mario_kart_64_u.yaml
+# The analog head stick steers; hold the mouth open to accelerate. See README
+# "Playing with your face". Controls not listed keep their keyboard keys.
+
+bindings:
+  Stick:     {stick: head}
+  A:         {face: mouth-open}    # accelerate (held)
+  R:         {face: eyebrows}      # hop, and drift while held
+  Z:         {face: smile}         # use item
+  B:         {face: tilt-left}     # brake
+  Start:     {face: tilt-right}

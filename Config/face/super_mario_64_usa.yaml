@@ -1,0 +1,14 @@
+# Face-only layout for Super Mario 64. Select with
+#   make run rom=... input=Config/face/super_mario_64_usa.yaml
+# Head pose is the stick; every button here is a held facial gesture. See README
+# "Playing with your face". Controls not listed keep their keyboard keys.
+
+bindings:
+  Stick:     {stick: head}
+  A:         {face: mouth-open}    # hold longer for a higher jump
+  B:         {face: smile}         # punch, and dive while running
+  Z:         {face: eyebrows}      # crouch; brows + mouth while tilted = long jump
+  CLeft:     {face: wink-left}     # camera
+  CRight:    {face: wink-right}
+  R:         {face: tilt-left}
+  Start:     {face: tilt-right}

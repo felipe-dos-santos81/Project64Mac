@@ -43,7 +43,7 @@ bool InputConfig::UsesPointer() const
     {
         for (const Binding & B : m_Bindings[i])
         {
-            if (B.kind == Binding::Kind::Zone || B.kind == Binding::Kind::Face || B.kind == Binding::Kind::Pointer)
+            if (B.kind == Binding::Kind::Zone || B.kind == Binding::Kind::Face || B.kind == Binding::Kind::Pointer || B.kind == Binding::Kind::HeadStick)
             {
                 return true;
             }
@@ -58,10 +58,22 @@ bool InputConfig::UsesFace() const
     {
         for (const Binding & B : m_Bindings[i])
         {
-            if (B.kind == Binding::Kind::Face)
+            if (B.kind == Binding::Kind::Face || B.kind == Binding::Kind::HeadStick)
             {
                 return true;
             }
+        }
+    }
+    return false;
+}
+
+bool InputConfig::UsesHeadStick() const
+{
+    for (const Binding & B : m_Bindings[(int)N64Control::Stick])
+    {
+        if (B.kind == Binding::Kind::HeadStick)
+        {
+            return true;
         }
     }
     return false;
@@ -126,6 +138,11 @@ static Binding MakeFace(uint32_t Gesture)
 static Binding MakePointer()
 {
     return Binding{ Binding::Kind::Pointer, 0, true, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN };
+}
+
+static Binding MakeHeadStick(bool Digital)
+{
+    return Binding{ Binding::Kind::HeadStick, Digital ? 1 : 0, true, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN };
 }
 
 void InputConfig::DefaultBindings(std::vector<Binding> * Out)
@@ -249,7 +266,7 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     const bool ForStick = (Control == N64Control::Stick);
     if ((Form == "key" || Form == "button" || Form == "axis" || Form == "zone" || Form == "face") && ForStick)
     {
-        ConfigError(Path, Value[Form], Form + " cannot drive Stick; use {keys:}, {stick: left/right} or {stick: pointer}");
+        ConfigError(Path, Value[Form], Form + " cannot drive Stick; use {keys:}, {stick: left/right}, {stick: pointer} or {stick: head/head-digital}");
         return false;
     }
 
@@ -308,7 +325,9 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
         if (Name == "left") { Out = MakeStick(SDL_GAMEPAD_AXIS_LEFTX); return true; }
         if (Name == "right") { Out = MakeStick(SDL_GAMEPAD_AXIS_RIGHTX); return true; }
         if (Name == "pointer") { Out = MakePointer(); return true; }
-        ConfigError(Path, Value[Form], "stick must be left, right or pointer");
+        if (Name == "head") { Out = MakeHeadStick(false); return true; }
+        if (Name == "head-digital") { Out = MakeHeadStick(true); return true; }
+        ConfigError(Path, Value[Form], "stick must be left, right, pointer, head or head-digital");
         return false;
     }
     // Form detection guarantees the remaining form is "keys".
@@ -352,6 +371,12 @@ bool InputConfig::Load(const char * Path, bool Quiet)
     DefaultBindings(Next);
     bool Seen[(int)N64Control::Count] = { false };
 
+    // The head-direction rule (spec Part 1): remembered during the loop, checked after it,
+    // so it holds whichever order the file names Stick and the gesture in.
+    bool StickIsHead = false;
+    YAML::Node HeadGestureNode;
+    std::string HeadGestureName;
+
     try
     {
         const YAML::Node Bindings = Root["bindings"];
@@ -369,7 +394,18 @@ bool InputConfig::Load(const char * Path, bool Quiet)
                 if (!ParseBinding(Path, Entry.second, (N64Control)Index, B)) return false;
                 Next[Index].clear();
                 Next[Index].push_back(B);
+                if (B.kind == Binding::Kind::HeadStick) StickIsHead = true;
+                if (B.kind == Binding::Kind::Face && ((uint32_t)B.code & POINTER_GESTURE_HEAD_DIRECTIONS) != 0 && HeadGestureName.empty())
+                {
+                    HeadGestureNode = Entry.second["face"];
+                    HeadGestureName = PointerGestureName(PointerGestureIndex((uint32_t)B.code));
+                }
             }
+        }
+        if (StickIsHead && !HeadGestureName.empty())
+        {
+            ConfigError(Path, HeadGestureNode, HeadGestureName + " cannot be bound while Stick is head");
+            return false;
         }
     }
     catch (const YAML::Exception &)
