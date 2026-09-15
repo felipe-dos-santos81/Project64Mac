@@ -145,7 +145,18 @@ void OverlayDraw(const PointerState * State, int Width, int Height)
     glUseProgram(0);
     glViewport(0, 0, Width, Height);
     glDisable(GL_DEPTH_TEST);
-    glDisable(GL_TEXTURE_2D);
+    // The video plugin leaves GL_TEXTURE_2D enabled on texture units 0-2 (see
+    // OGLcombiner.cpp's init_combiner/gfxStippleMode) and never disables them; glDisable
+    // is per-unit, so disable every unit here or the overlay gets multitextured through a
+    // stale game texture and can vanish. The glPushAttrib(GL_ALL_ATTRIB_BITS) above
+    // restores both the per-unit enables and the active-unit selector, so this cannot leak.
+    for (int Unit = 3; Unit >= 0; Unit--)
+    {
+        glActiveTexture(GL_TEXTURE0 + Unit);
+        glDisable(GL_TEXTURE_2D);
+    }                                   // leaves unit 0 active, matching prior behavior
+    glDisable(GL_FOG);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDisable(GL_LIGHTING);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_ALPHA_TEST);

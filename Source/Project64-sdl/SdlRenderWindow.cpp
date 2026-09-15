@@ -206,18 +206,14 @@ void CSdlRenderWindow::SwapWindow()
 {
     DumpFrame(); // before the flush, while the back buffer still holds this frame
 
-    // After the dump so PJ64_FRAME_DUMP measurements are of the game alone.
+    // After the dump so PJ64_FRAME_DUMP measurements are of the game alone. The video
+    // plugin leaves texture units, fog, and the color mask in states that can hide a
+    // naive fixed-function overlay draw; OverlayDraw resets all of them (see its own
+    // comment) so one call here is enough.
     if (m_Pointer != nullptr && !m_OverlayHidden && m_Pointer->OverlayWanted.load(std::memory_order_relaxed) != 0)
     {
         GLint Viewport[4] = {0, 0, 0, 0};
         glGetIntegerv(GL_VIEWPORT, Viewport);
-        // Drawn twice: on this GL 2.1 compatibility context (Apple Silicon, CGL-backed), the
-        // first fixed-function draw issued right after the video plugin's shader-based
-        // rendering does not reach the framebuffer - confirmed by reading the back buffer
-        // back (PJ64_FRAME_DUMP) with the draw temporarily moved before the dump. A second,
-        // otherwise-redundant call (each call is self-contained via glPushAttrib/glPopAttrib,
-        // so this is safe) reliably makes it visible without disturbing the game's own frame.
-        OverlayDraw(m_Pointer, (int)Viewport[2], (int)Viewport[3]);
         OverlayDraw(m_Pointer, (int)Viewport[2], (int)Viewport[3]);
     }
 
