@@ -27,6 +27,37 @@ static const char * WriteTemp(const char * Text)
     return Path;
 }
 
+// Runs one Load with stderr redirected to a scratch file, then reports whether anything
+// was written. A quiet Load's return value is false either way, so this is the only way
+// to prove the Quiet guards actually suppress output rather than merely returning false.
+// Redirects the fd underneath stderr with dup2, not freopen: freopen would reassociate
+// the stderr FILE object with a regular file and leave it fully buffered even after the
+// fd is restored, reordering every fprintf(stderr, ...) after the first call.
+static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
+{
+    char ScratchPath[64];
+    snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-stderr-XXXXXX");
+    int Fd = mkstemp(ScratchPath);
+    if (Fd < 0) { perror("mkstemp"); exit(2); }
+
+    fflush(stderr);
+    int SavedStderr = dup(fileno(stderr));
+    dup2(Fd, fileno(stderr));
+    close(Fd);
+
+    C.Load(Path, Quiet);
+
+    fflush(stderr);
+    dup2(SavedStderr, fileno(stderr));
+    close(SavedStderr);
+
+    FILE * Scratch = fopen(ScratchPath, "r");
+    const bool Empty = (Scratch == NULL) || (fgetc(Scratch) == EOF);
+    if (Scratch) fclose(Scratch);
+    remove(ScratchPath);
+    return Empty;
+}
+
 int main()
 {
     InputConfig & C = InputConfig::Get();
@@ -132,7 +163,13 @@ int main()
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml"));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml", true));   // quiet: same verdict, no print
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: top4}\n")));     // the grid names are gone
+    CHECK(LoadWasSilent(C, "/tmp/pj64-does-not-exist.yaml", true));   // ...and truly silent
+
+    const char * BadZone = WriteTemp("bindings:\n  A: {zone: top4}\n");   // the grid names are gone
+    CHECK(!C.Load(BadZone));
+    CHECK(!LoadWasSilent(C, BadZone, false));   // ConfigError prints when not quiet...
+    CHECK(LoadWasSilent(C, BadZone, true));     // ...and the same path stays silent when quiet
+
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: middle}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {face: wink}\n")));

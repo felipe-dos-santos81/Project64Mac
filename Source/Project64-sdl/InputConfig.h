@@ -2,8 +2,10 @@
 // N64 control bindings, loaded from Config/input.yaml.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 //
-// The input plugin is the only consumer. The file is read once, in PluginLoaded;
-// GetKeys only reads the resolved table.
+// Two consumers compile this file, each keeping its own InputConfig singleton: the input
+// plugin, which reads the file once, in PluginLoaded, and serves GetKeys from the resolved
+// table; and the frontend, which loads the same file quietly (see Load) to size its window
+// before the plugin exists.
 #ifndef INPUT_CONFIG_H
 #define INPUT_CONFIG_H
 
