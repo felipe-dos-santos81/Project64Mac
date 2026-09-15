@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./Docs/img/sceen.png" alt="logo" width="1024" />
+  <img src="./Docs/img/screen.png" alt="logo" width="1024" />
 </p>
 
 # Project64 for Apple Silicon
