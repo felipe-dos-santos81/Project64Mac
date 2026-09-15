@@ -438,8 +438,10 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mapping and langu
 	@cp -Rn Config/Cheats Config/Enhancements $(BIN)/Config/ 2>/dev/null || true
 	@# -n: the mapping is user data once installed.
 	@cp -n Config/input.yaml $(BIN)/Config/ 2>/dev/null || true
-	@# -Rn: mouse layouts are user data once installed.
-	@cp -Rn Config/mouse $(BIN)/Config/ 2>/dev/null || true
+	@# -f: the shipped mouse layouts are examples and follow the tracked files. A player's
+	@# own layout goes beside the ROM as <rom>.yaml, which the lookup checks first.
+	@mkdir -p $(BIN)/Config/mouse
+	@cp -f Config/mouse/*.yaml $(BIN)/Config/mouse/
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 

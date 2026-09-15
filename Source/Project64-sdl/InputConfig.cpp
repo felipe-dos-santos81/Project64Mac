@@ -183,8 +183,18 @@ static int ControlFromName(const std::string & Name)
     return -1;
 }
 
+// Set for the duration of a quiet Load: errors are still errors, but nothing is printed.
+static bool g_Quiet = false;
+
+struct QuietScope
+{
+    explicit QuietScope(bool Quiet) { g_Quiet = Quiet; }
+    ~QuietScope() { g_Quiet = false; }
+};
+
 static void ConfigError(const char * Path, const YAML::Node & Node, const std::string & Message)
 {
+    if (g_Quiet) return;
     const YAML::Mark Mark = Node.Mark();
     if (Mark.is_null())
     {
@@ -324,8 +334,9 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     }
 }
 
-bool InputConfig::Load(const char * Path)
+bool InputConfig::Load(const char * Path, bool Quiet)
 {
+    QuietScope Scope(Quiet);
     YAML::Node Root;
     try
     {
@@ -333,7 +344,7 @@ bool InputConfig::Load(const char * Path)
     }
     catch (const YAML::Exception & e)
     {
-        fprintf(stderr, "input: %s: %s; using built-in defaults\n", Path, e.what());
+        if (!g_Quiet) fprintf(stderr, "input: %s: %s; using built-in defaults\n", Path, e.what());
         return false;
     }
 

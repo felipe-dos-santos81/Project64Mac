@@ -40,8 +40,9 @@ public:
     static InputConfig & Get();
 
     // Apply a file over the built-in defaults. On any error returns false, logs one
-    // line, and leaves the instance exactly as it was.
-    bool Load(const char * Path);
+    // line unless Quiet, and leaves the instance exactly as it was. The frontend loads
+    // the same file quietly to size its window; the plugin's load reports the error.
+    bool Load(const char * Path, bool Quiet = false);
 
     const std::vector<Binding> & Bindings(N64Control Control) const;
 

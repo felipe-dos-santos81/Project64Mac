@@ -67,8 +67,8 @@ int main()
     const char * Pointer =
         "bindings:\n"
         "  Stick: {stick: pointer}\n"
-        "  A: {zone: centre}\n"
-        "  Start: {zone: top4}\n"
+        "  A: {zone: game}\n"
+        "  Start: {zone: mid1}\n"
         "  Z: {face: eyebrows}\n"
         "  B: {face: head-left}\n";
     CHECK(C.Load(WriteTemp(Pointer)));
@@ -76,16 +76,16 @@ int main()
     CHECK(C.UsesFace());                              // Z and B are gestures
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Zone);
-    CHECK(C.Bindings(N64Control::A)[0].code == POINTER_ZONE_CENTRE);
-    CHECK(C.Bindings(N64Control::Start)[0].code == 3);
+    CHECK(C.Bindings(N64Control::A)[0].code == POINTER_ZONE_GAME);
+    CHECK(C.Bindings(N64Control::Start)[0].code == 8);
     CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Face);
     CHECK(C.Bindings(N64Control::Z)[0].code == POINTER_GESTURE_EYEBROWS);
     CHECK(C.Bindings(N64Control::B)[0].code == POINTER_GESTURE_HEAD_LEFT);
     char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     C.PointerLabels(Labels, GestureLabels);
-    CHECK(strcmp(Labels[POINTER_ZONE_CENTRE], "A") == 0);
-    CHECK(strcmp(Labels[3], "St") == 0);
+    CHECK(strcmp(Labels[POINTER_ZONE_GAME], "A") == 0);
+    CHECK(strcmp(Labels[8], "St") == 0);
     CHECK(strcmp(Labels[0], "") == 0);
     CHECK(strcmp(GestureLabels[0], "Z") == 0);
     CHECK(strcmp(GestureLabels[1], "B") == 0);
@@ -100,10 +100,21 @@ int main()
     const char * ZonesOnly =
         "bindings:\n"
         "  Stick: {stick: pointer}\n"
-        "  A: {zone: centre}\n";
+        "  A: {zone: game}\n";
     CHECK(C.Load(WriteTemp(ZonesOnly)));
     CHECK(C.UsesPointer());
     CHECK(!C.UsesFace());                             // pointer without gestures: no camera
+
+    const char * Slots =
+        "bindings:\n"
+        "  DPadUp: {zone: pad-up}\n"
+        "  CRight: {zone: c-right}\n"
+        "  L: {zone: mid5}\n";
+    CHECK(C.Load(WriteTemp(Slots)));
+    CHECK(C.Bindings(N64Control::DPadUp)[0].code == 0);
+    CHECK(C.Bindings(N64Control::CRight)[0].code == 7);
+    CHECK(C.Bindings(N64Control::L)[0].code == 12);
+    CHECK(C.UsesPointer());                           // slots alone turn the overlay on
 
     CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
     const size_t ABefore = C.Bindings(N64Control::A).size();
@@ -120,12 +131,15 @@ int main()
     CHECK(!C.Load(WriteTemp("bindings: [1, 2]\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml"));
+    CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml", true));   // quiet: same verdict, no print
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: top4}\n")));     // the grid names are gone
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: middle}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {face: wink}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {zone: centre}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {zone: game}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {face: eyebrows}\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: pointer}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre, face: eyebrows}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: game, face: eyebrows}\n")));
 
     CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);

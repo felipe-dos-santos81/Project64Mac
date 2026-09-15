@@ -1,20 +1,22 @@
 # Mouse-and-face layout for GoldenEye 007 / Perfect Dark (control style 1.1).
 # Select with make run rom=... input=Config/mouse/goldeneye_007_u.yaml face=1
-# The stick aims and moves; strafe follows your head; fire is the click.
+# The stick aims and moves; strafe follows your head; fire is a click in the game image.
+# Slots: pad-* (left cross), c-* (right cross), mid1-mid5; c-left, c-right and mid5 are
+# free here because strafe is on the head turns.
 
 bindings:
   Stick:     {stick: pointer}
-  Z:         {zone: centre}       # fire
+  Z:         {zone: game}         # fire
   R:         {face: eyebrows}     # aim mode, held
   CLeft:     {face: head-left}    # strafe left
   CRight:    {face: head-right}   # strafe right
-  A:         {zone: left2}
-  B:         {zone: right2}
-  Start:     {zone: top4}
-  L:         {zone: top1}
-  CUp:       {zone: top2}
-  CDown:     {zone: bottom2}
-  DPadUp:    {zone: top3}
-  DPadDown:  {zone: bottom3}
-  DPadLeft:  {zone: left3}
-  DPadRight: {zone: right3}
+  A:         {zone: mid1}
+  B:         {zone: mid2}
+  Start:     {zone: mid3}
+  L:         {zone: mid4}
+  CUp:       {zone: c-up}
+  CDown:     {zone: c-down}
+  DPadUp:    {zone: pad-up}
+  DPadDown:  {zone: pad-down}
+  DPadLeft:  {zone: pad-left}
+  DPadRight: {zone: pad-right}
