@@ -91,8 +91,9 @@ the 160 rows below.
 - **The panel** is a D-pad cross on the left, a C cross on the right, and five slots
   between them. Hover and click; hold to hold.
 - **Flicking down to a button never reads as a backward tilt.** A cursor that jumps more
-  than 24 px between polls keeps the stick where it was until it lands.
-  `PJ64_POINTER_FLICK=<px>` tunes that; `0` disables it.
+  than 24 px between polls keeps the stick where it was until it lands. The same gate
+  holds fast aiming inside the game image, too — a quick swing (as in GoldenEye) lags a
+  beat until the cursor slows. `PJ64_POINTER_FLICK=<px>` tunes that; `0` disables it.
 
 `PJ64_OVERLAY=0` hides the quadrant lines; the panel always draws.
 

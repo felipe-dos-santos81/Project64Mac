@@ -241,6 +241,12 @@ int main(int argc, char ** argv)
     // A YAML named after the ROM, beside it or under Config/mouse/, is that game's layout.
     // A non-empty PJ64_INPUT_YAML already in the environment wins, and tiles skip the
     // lookup: a mouse layout would replace the keyboard bindings the grid strip broadcasts.
+    // That only skips the lookup, though - GridHost execs tiles with the parent
+    // environment, so an explicit PJ64_INPUT_YAML still reaches every tile. The branch
+    // below loads it quietly to see whether it binds the pointer, and clears it only then,
+    // so a tile cannot inherit a mouse layout it would evaluate against its own small
+    // window and go inert on; a keyboard YAML passed deliberately across a grid is left
+    // alone and keeps working.
     const char * ExplicitLayout = getenv("PJ64_INPUT_YAML");
     if (!TileMode && (ExplicitLayout == nullptr || ExplicitLayout[0] == '\0'))
     {
@@ -249,6 +255,14 @@ int main(int argc, char ** argv)
         {
             setenv("PJ64_INPUT_YAML", Layout, 1);
             fprintf(stderr, "input layout: %s\n", Layout);
+        }
+    }
+    else if (TileMode && ExplicitLayout != nullptr && ExplicitLayout[0] != '\0')
+    {
+        InputConfig & Config = InputConfig::Get();
+        if (Config.Load(ExplicitLayout, /*Quiet=*/true) && Config.UsesPointer())
+        {
+            unsetenv("PJ64_INPUT_YAML");
         }
     }
 
@@ -267,6 +281,14 @@ int main(int argc, char ** argv)
     else
     {
         unsetenv("PJ64_VIEWPORT_OFFSET");
+    }
+    if (!TileMode)
+    {
+        // PJ64_TILE_SIZE is set only in the TileMode branch below, right before the video
+        // plugin loads. Clear it here too, so a value inherited from the caller cannot make
+        // a non-tile run's video plugin render at a stale tile size while this window is
+        // WINDOW_WIDTH x WINDOW_HEIGHT (or that plus the panel, above).
+        unsetenv("PJ64_TILE_SIZE");
     }
 
     SDL_SetHint(SDL_HINT_MOUSE_AUTO_CAPTURE, "0");

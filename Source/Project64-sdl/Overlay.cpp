@@ -5,6 +5,8 @@
 #include "Overlay.h"
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
+#include <Common/Trace.h>
+#include <Project64-core/TraceModulesProject64.h>
 #include <OpenGL/gl.h>
 #include <math.h>
 #include <string.h>
@@ -195,6 +197,24 @@ static void DrawGuide(const PointerState * State, int W, int H, int GameH, int L
 void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHidden)
 {
     if (State == nullptr || Viewport == nullptr) return;
+
+    // This geometry is only trustworthy when the viewport's origin is the one the frontend
+    // arranged: (0, 0) for a keyboard layout with no panel, or (0, POINTER_PANEL_HEIGHT) for
+    // a mouse layout's panel (main.cpp's PJ64_VIEWPORT_OFFSET). Any other origin means the
+    // renderer was sized by some other route (Source/Project64-video/Main.cpp's
+    // GetScreenResWidth/PJ64_TILE_SIZE) that the frontend never consulted, so the panel this
+    // draws may not land where the input plugin evaluates clicks. Warn once per process -
+    // this runs on the emulation thread inside the draw path, every frame.
+    static bool ReportedBadOrigin = false;
+    if (!ReportedBadOrigin
+        && (Viewport[0] != 0 || (Viewport[1] != 0 && Viewport[1] != POINTER_PANEL_HEIGHT)))
+    {
+        WriteTrace(TraceUserInterface, TraceWarning,
+            "Overlay viewport origin (%d,%d) does not match the frontend's layout; the panel "
+            "may be drawn where it cannot be clicked", Viewport[0], Viewport[1]);
+        ReportedBadOrigin = true;
+    }
+
     // The renderer's viewport is the game image; the window is its union with the rows
     // below it, which the frontend reserved for the panel (Design: Docs/superpowers/specs/
     // 2026-09-15-mouse-panel-design.md). With no offset there is no panel to draw.

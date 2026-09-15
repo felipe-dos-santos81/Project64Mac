@@ -190,7 +190,11 @@ int main()
     CHECK(C.UsesPointer());
     CHECK(C.UsesFace());                              // this layout binds Z, B and R to gestures
     CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
+    CHECK(C.UsesPointer());
+    CHECK(C.UsesFace());                              // this layout binds R, CLeft and CRight
     CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
+    CHECK(C.UsesPointer());
+    CHECK(C.UsesFace());                              // this layout binds R, Z and B
 
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");
