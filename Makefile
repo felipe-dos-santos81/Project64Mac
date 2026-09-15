@@ -432,16 +432,19 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-co
 # to defaults, which is why the RSP reports "uCode crc not found in INI" and never runs the
 # graphics task. Copy the shipped data next to the binary. Project64.cfg is a user file and
 # is never overwritten.
-config: ## [STEP 7b] Install ROM database, enhancements, input mapping and language files next to the binary
+config: ## [STEP 7b] Install ROM database, enhancements, input mappings and language files beside the binary (refreshes Config/mouse)
 	@mkdir -p $(BIN)/Config $(BIN)/Lang
 	@cp -f Config/Project64.rdb Config/Project64.rdx Config/Audio.rdb Config/Video.rdb $(BIN)/Config/
 	@# -n, not -f: cheats and enhancement settings are user data once installed.
 	@cp -Rn Config/Cheats Config/Enhancements $(BIN)/Config/ 2>/dev/null || true
 	@# -n: the mapping is user data once installed.
 	@cp -n Config/input.yaml $(BIN)/Config/ 2>/dev/null || true
-	@# -f: the shipped mouse layouts are examples and follow the tracked files. A player's
-	@# own layout goes beside the ROM as <rom>.yaml, which the lookup checks first.
+	@# Replace, don't merge: the shipped mouse layouts are examples that follow the tracked
+	@# files. Copying alone would leave an example renamed upstream behind under its old
+	@# name, where the per-ROM lookup still finds it and the reader then rejects its stale
+	@# zone names. A player's own layout goes beside the ROM as <rom>.yaml, checked first.
 	@mkdir -p $(BIN)/Config/mouse
+	@rm -f $(BIN)/Config/mouse/*.yaml
 	@cp -f Config/mouse/*.yaml $(BIN)/Config/mouse/
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"

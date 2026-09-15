@@ -20,7 +20,7 @@ pulled back in by accident.
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
 make input-config-test                   # parser tests for the YAML input mapping
-make pointer-layout-test                 # geometry tests for the pointer grid
+make pointer-layout-test                 # geometry tests for the mouse panel and stick
 make face-gesture-test                   # classifier tests for the face gestures
 make game-config-test                    # lookup tests for the per-game YAML
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
@@ -104,22 +104,26 @@ yaml-cpp is a declared Homebrew dependency, linked into the input dylib.
 
 **Mouse and face input go through one shared struct.** `Source/Common/PointerState.h` is
 a seqlock over `shm_open`, created by the frontend and passed to the input plugin by
-descriptor in `PJ64_POINTER_FD`, the same way the grid passes keys. The frontend parses
-the layout itself before the window exists (`InputConfig.cpp` is compiled into the
-frontend and the input dylib, each with its own singleton): a layout that uses the pointer
-makes the window 640x640 and sets `PJ64_VIEWPORT_OFFSET=160`, which the video plugin's
-`ChangeSize` stores in the renderer's dormant status-bar offset `g_viewport_offset`, so the
-game renders in the top 640x480 and the panel owns the rows below. The frontend's main
-loop samples the mouse (SDL3's mouse state functions are main-thread only) and publishes
-it; `Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a private queue
-and writes three gesture bits through `FaceGestures.{h,cpp}`; the plugin evaluates slots,
-the flick gate, gestures and the pointer stick in `GetKeys` with the pure geometry in
-`Source/Common/PointerLayout.h`, and writes labels, the latched zone and the lit quadrant
-back for `Overlay.cpp`, which reads the GL viewport to find the game rectangle and paints
-the panel below it in `CSdlRenderWindow::SwapWindow` before the flush, and `FaceWanted`,
-which the frontend's main loop polls to start the camera when `PJ64_FACE` is unset (`0`
-never, anything else at once). Layouts are the `{zone:}`, `{face:}` and `{stick: pointer}`
-YAML forms in `Config/mouse/`.
+descriptor in `PJ64_POINTER_FD`, the same way the grid passes keys.
+
+*Sizing happens first.* The frontend parses the layout itself, before the window exists —
+`InputConfig.cpp` is compiled into both the frontend and the input dylib, each with its
+own singleton. A layout that uses the pointer makes the window 640x640 and sets
+`PJ64_VIEWPORT_OFFSET=160`, which the video plugin's `ChangeSize` stores in the renderer's
+dormant status-bar offset `g_viewport_offset`, so the game renders in the top 640x480 and
+the panel owns the rows below.
+
+*Then each frame.* The frontend's main loop samples the mouse (SDL3's mouse state
+functions are main-thread only) and publishes it, and polls `FaceWanted` to start the
+camera when `PJ64_FACE` is unset (`0` never, anything else at once).
+`Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a private queue and
+writes three gesture bits through `FaceGestures.{h,cpp}`. The plugin's `GetKeys` evaluates
+slots, the flick gate, gestures and the pointer stick using the pure geometry in
+`Source/Common/PointerLayout.h`, then writes the labels, the latched zone and the lit
+quadrant back for `Overlay.cpp`, which reads the GL viewport to find the game rectangle
+and paints the panel below it in `CSdlRenderWindow::SwapWindow` before the flush.
+
+Layouts are the `{zone:}`, `{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
 
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are
@@ -184,9 +188,10 @@ Only the `Aarch64` backend directory survives.
   window with no panel, since the overlay draws the panel wherever the viewport is not.
   `PJ64_TRACE=info` with `PJ64_FRAME_DUMP` reports the viewport origin, so the lift can be
   checked rather than assumed.
-- **Installed mouse layouts are refreshed by `make config`.** The files under
-  `Bin/macOS/Config/mouse/` are copies of the tracked examples and are overwritten on every
-  build; a player's own layout goes beside the ROM as `<rom>.yaml`. `Config/input.yaml` is
+- **Installed mouse layouts are replaced by `make config`.** `Bin/macOS/Config/mouse/` is
+  wiped and re-copied from the tracked examples every build, so renaming an example cannot
+  leave the old name behind for the per-ROM lookup to find and the reader to reject. Put a
+  player's own layout beside the ROM as `<rom>.yaml`, never there. `Config/input.yaml` is
   still copied once.
 
 ## Design docs
