@@ -1,7 +1,7 @@
 // Project64 - A Nintendo 64 emulator
 // Webcam face gestures: AVFoundation capture -> Vision face landmarks -> GestureClassifier.
 // Frames are handled in the capture callback and released with it; nothing is stored,
-// previewed or written. Only PJ64_FACE_DEBUG prints the two measures, once a second.
+// previewed or written. Only PJ64_FACE_DEBUG prints the eight measures, once a second.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #import "FaceTracker.h"
 #import "FaceGestures.h"
@@ -20,13 +20,26 @@ static double MonotonicSeconds(void)
     return (double)mach_absolute_time() * (double)Info.numer / (double)Info.denom / 1e9;
 }
 
+// One override per threshold, in the units the field uses (radians for the angles,
+// face-box-normalised units for the landmark measures). Zero or negative is ignored.
+static void OverrideFromEnv(float * Field, const char * Name)
+{
+    const char * Text = getenv(Name);
+    if (Text != nullptr && atof(Text) > 0.0) *Field = (float)atof(Text);
+}
+
 static GestureThresholds ThresholdsFromEnv(void)
 {
     GestureThresholds T;
-    const char * Brow = getenv("PJ64_FACE_BROW");
-    if (Brow != nullptr && atof(Brow) > 0.0) T.Brow = (float)atof(Brow);
-    const char * Yaw = getenv("PJ64_FACE_YAW");
-    if (Yaw != nullptr && atof(Yaw) > 0.0) T.Yaw = (float)atof(Yaw);
+    OverrideFromEnv(&T.Brow, "PJ64_FACE_BROW");
+    OverrideFromEnv(&T.Yaw, "PJ64_FACE_YAW");
+    OverrideFromEnv(&T.Pitch, "PJ64_FACE_PITCH");
+    OverrideFromEnv(&T.Roll, "PJ64_FACE_ROLL");
+    OverrideFromEnv(&T.Mouth, "PJ64_FACE_MOUTH");
+    OverrideFromEnv(&T.Smile, "PJ64_FACE_SMILE");
+    OverrideFromEnv(&T.Eye, "PJ64_FACE_EYE");
+    OverrideFromEnv(&T.StickYaw, "PJ64_FACE_STICK_YAW");
+    OverrideFromEnv(&T.StickPitch, "PJ64_FACE_STICK_PITCH");
     return T;
 }
 
@@ -40,6 +53,42 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
     return (float)(Sum / (double)Region.pointCount);
 }
 
+// Bounding extent of a landmark region in face-box-normalised units. Returns false when
+// Vision returned no points, in which case the caller keeps the previous frame's value.
+static bool RegionExtent(VNFaceLandmarkRegion2D * Region, float * Width, float * Height)
+{
+    if (Region == nil || Region.pointCount == 0) return false;
+    const CGPoint * Points = Region.normalizedPoints;
+    double MinX = Points[0].x, MaxX = Points[0].x, MinY = Points[0].y, MaxY = Points[0].y;
+    for (NSUInteger i = 1; i < Region.pointCount; i++)
+    {
+        if (Points[i].x < MinX) MinX = Points[i].x;
+        if (Points[i].x > MaxX) MaxX = Points[i].x;
+        if (Points[i].y < MinY) MinY = Points[i].y;
+        if (Points[i].y > MaxY) MaxY = Points[i].y;
+    }
+    *Width = (float)(MaxX - MinX);
+    *Height = (float)(MaxY - MinY);
+    return true;
+}
+
+// Eye aperture: height over width, so it stays comparable as the head turns.
+static bool EyeAperture(VNFaceLandmarkRegion2D * Eye, float * Out)
+{
+    float W = 0.0f, H = 0.0f;
+    if (!RegionExtent(Eye, &W, &H) || W <= 0.0f) return false;
+    *Out = H / W;
+    return true;
+}
+
+// Vision reports the angles for the face as seen by the camera. Yaw is negated so the
+// player's left turn is negative (confirmed by manual run). Pitch and roll follow the same
+// path: the classifier wants nose-up positive and left-ear-down negative, and these two
+// constants are the one place to flip them once the first manual run of the face layouts
+// says which way Vision's values go (spec Part 2). Never fix a sign in a YAML file.
+static const float kPitchSign = 1.0f;
+static const float kRollSign = 1.0f;
+
 @interface PJ64FaceDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
 {
     PointerState * m_State;
@@ -47,6 +96,7 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
     VNDetectFaceLandmarksRequest * m_Request;
     bool m_Debug;
     double m_LastDebug;
+    float m_LastM[FACE_MEASURE_COUNT];
 }
 - (instancetype)initWithState:(PointerState *)State;
 @end
@@ -63,6 +113,7 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
         m_Request = [[VNDetectFaceLandmarksRequest alloc] init];
         m_Debug = getenv("PJ64_FACE_DEBUG") != nullptr;
         m_LastDebug = 0.0;
+        for (int i = 0; i < FACE_MEASURE_COUNT; i++) m_LastM[i] = 0.0f;
     }
     return self;
 }
@@ -85,7 +136,7 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
     NSError * Error = nil;
     GestureSample S;
     S.FaceFound = false;
-    for (int i = 0; i < FACE_MEASURE_COUNT; i++) S.M[i] = 0.0f;
+    for (int i = 0; i < FACE_MEASURE_COUNT; i++) S.M[i] = m_LastM[i];
     S.Time = MonotonicSeconds();
     if ([Handler performRequests:@[ m_Request ] error:&Error])
     {
@@ -97,27 +148,41 @@ static float RegionMeanY(VNFaceLandmarkRegion2D * Region)
         if (Best != nil && Best.landmarks != nil)
         {
             VNFaceLandmarks2D * L = Best.landmarks;
-            const float BrowY = 0.5f * (RegionMeanY(L.leftEyebrow) + RegionMeanY(L.rightEyebrow));
-            const float EyeY = 0.5f * (RegionMeanY(L.leftEye) + RegionMeanY(L.rightEye));
             S.FaceFound = true;
-            S.M[FACE_BROW] = BrowY - EyeY;
-            // Vision reports yaw for the face as seen by the camera. A front camera is not
-            // mirrored, so the player's left turn arrives as a positive yaw; negate so the
-            // classifier's "negative is head-left" holds. Confirm on first run (spec Part 6).
+            S.M[FACE_BROW] = 0.5f * (RegionMeanY(L.leftEyebrow) + RegionMeanY(L.rightEyebrow))
+                           - 0.5f * (RegionMeanY(L.leftEye) + RegionMeanY(L.rightEye));
             S.M[FACE_YAW] = Best.yaw != nil ? -Best.yaw.floatValue : 0.0f;
+            S.M[FACE_PITCH] = Best.pitch != nil ? kPitchSign * Best.pitch.floatValue : 0.0f;
+            S.M[FACE_ROLL] = Best.roll != nil ? kRollSign * Best.roll.floatValue : 0.0f;
+            // A region with no points keeps the previous frame's value (spec Part 2).
+            float W = 0.0f, H = 0.0f, A = 0.0f;
+            if (RegionExtent(L.innerLips, &W, &H)) S.M[FACE_MOUTH] = H;
+            if (RegionExtent(L.outerLips, &W, &H)) S.M[FACE_SMILE] = W;
+            if (EyeAperture(L.leftEye, &A)) S.M[FACE_EYE_LEFT] = A;
+            if (EyeAperture(L.rightEye, &A)) S.M[FACE_EYE_RIGHT] = A;
+            for (int i = 0; i < FACE_MEASURE_COUNT; i++) m_LastM[i] = S.M[i];
         }
     }
 
-    const uint32_t Bits = m_Classifier->Update(S);
+    const bool HeadStick = m_State->HeadStickWanted.load(std::memory_order_acquire) != 0;
+    const uint32_t Bits = m_Classifier->Update(S, HeadStick);
     m_State->Gestures.store(Bits, std::memory_order_relaxed);
+    m_State->HeadX.store(m_Classifier->StickX(), std::memory_order_relaxed);
+    m_State->HeadY.store(m_Classifier->StickY(), std::memory_order_relaxed);
     m_State->Face.store(S.FaceFound ? FACE_TRACKING : FACE_NO_FACE, std::memory_order_relaxed);
 
     if (m_Debug && S.Time - m_LastDebug >= 1.0)
     {
         m_LastDebug = S.Time;
-        fprintf(stderr, "face: found=%d brow=%.4f (base %.4f) yaw=%.3f (base %.3f) bits=%u\n",
-            S.FaceFound ? 1 : 0, S.M[FACE_BROW], m_Classifier->BrowBaseline(),
-            S.M[FACE_YAW], m_Classifier->YawBaseline(), Bits);
+        static const char * const kNames[FACE_MEASURE_COUNT] = {
+            "brow", "yaw", "pitch", "roll", "mouth", "smile", "eyeL", "eyeR"
+        };
+        fprintf(stderr, "face: found=%d", S.FaceFound ? 1 : 0);
+        for (int i = 0; i < FACE_MEASURE_COUNT; i++)
+        {
+            fprintf(stderr, " %s=%.3f/%.3f", kNames[i], S.M[i], m_Classifier->Baseline((FaceMeasure)i));
+        }
+        fprintf(stderr, " bits=%u stick=%d,%d\n", Bits, (int)m_Classifier->StickX(), (int)m_Classifier->StickY());
     }
 }
 
