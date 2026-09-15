@@ -18,14 +18,14 @@ Prerequisites: Xcode command line tools plus Homebrew SDL3 and yaml-cpp
 (`brew install sdl3 pkg-config yaml-cpp`).
 
 ```sh
-make                      # core, four plugins, frontend, and the ROM database beside the binary
+make all                  # core, four plugins, frontend, and the ROM database beside the binary
 make test                 # smoke test: version string and plugin exports
 make input-config-test    # parser tests for the YAML input mapping
 make pointer-layout-test  # geometry tests for the mouse control grid
 make face-gesture-test    # classifier tests for the face gestures
 ```
 
-`make help` lists every target with its build stage.
+`make` with no target (same as `make help`) lists every target with its build stage.
 
 ## Game files
 

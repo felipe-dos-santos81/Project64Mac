@@ -346,13 +346,14 @@ $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS): WARN = -Wall
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
-help: ## Print this help message
+help: ## Print this help message (default)
 	@printf '\033[01;32m${SERVICE} — Apple Silicon build with SDL3\033[00;37m\n\n'
 	@printf "\033[33mUsage:\033[0m\n  make [target] [arg=\"val\"...]\n\n\033[33mTargets:\033[0m\n"
 	@grep -hE '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "} \
 		{name[NR] = $$1; desc[NR] = $$2; if (length($$1) > w) w = length($$1)} \
 		END {for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m %s\n", w, name[i], desc[i]}'
+.DEFAULT_GOAL := help
 
 deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
@@ -442,8 +443,7 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mapping and langu
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend config ## Build everything (default)
-.DEFAULT_GOAL := all
+all: deps common core rsp video audio input frontend config ## Build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
