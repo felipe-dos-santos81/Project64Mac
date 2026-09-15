@@ -447,9 +447,9 @@ all: deps common core rsp video audio input frontend config ## Build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
-run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/sm64.yaml] [face=1])
-	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64 [input=<yaml>] [face=1]"; exit 1; }
-	$(if $(input),PJ64_INPUT_YAML="$(input)") $(if $(face),PJ64_FACE=1) ./$(BIN)/Project64 "$(rom)"
+run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/sm64.yaml] [face=1|face=0])
+	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64 [input=<yaml>] [face=1|face=0]"; exit 1; }
+	$(if $(input),PJ64_INPUT_YAML="$(input)") $(if $(face),PJ64_FACE=$(face)) ./$(BIN)/Project64 "$(rom)"
 
 grid: all ## [STEP 8] Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
 	@test -n "$(roms)" || { echo 'usage: make grid roms="a.z64 b.z64"'; exit 1; }

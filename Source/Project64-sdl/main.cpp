@@ -6,6 +6,7 @@
 #include "SdlRenderWindow.h"
 #include "GridHost.h"
 #include "FaceTracker.h"
+#include "GameConfig.h"
 #include <Project64-core/AppInit.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
@@ -16,6 +17,7 @@
 #include <OpenGL/OpenGL.h>
 #include <Common/PointerState.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/mman.h>
 #include <mach-o/dyld.h>
 #include <sys/types.h>
@@ -151,6 +153,17 @@ static void PublishMouse(PointerState * State, SDL_Window * Window, const Pointe
     PointerPublish(State, S);
 }
 
+// PJ64_FACE: unset or empty means "start the camera once the plugin reports that the
+// layout binds a gesture"; 0 means never; anything else, or --face, means start at once.
+enum class FaceMode { Auto, On, Off };
+
+static FaceMode FaceModeFromEnv(void)
+{
+    const char * Env = getenv("PJ64_FACE");
+    if (Env == nullptr || Env[0] == '\0') return FaceMode::Auto;
+    return strcmp(Env, "0") == 0 ? FaceMode::Off : FaceMode::On;
+}
+
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).
 static void ConfigurePlugins(void)
 {
@@ -173,7 +186,7 @@ int main(int argc, char ** argv)
         return GridHostRun(argc, argv);
     }
     bool TileMode = false;
-    bool FaceFlag = getenv("PJ64_FACE") != nullptr && getenv("PJ64_FACE")[0] != '\0' && strcmp(getenv("PJ64_FACE"), "0") != 0;
+    FaceMode Face = FaceModeFromEnv();
     SDL_Rect TileRect = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
     const char * RomPath = nullptr;
     // Strip --face wherever it appears; everything else keeps its position.
@@ -181,7 +194,7 @@ int main(int argc, char ** argv)
     char * Argv[16];
     for (int i = 0; i < argc && Argc < 16; i++)
     {
-        if (strcmp(argv[i], "--face") == 0) { FaceFlag = true; continue; }
+        if (strcmp(argv[i], "--face") == 0) { Face = FaceMode::On; continue; }
         Argv[Argc++] = argv[i];
     }
     if (Argc >= 2 && strcmp(Argv[1], "--tile") == 0)
@@ -208,6 +221,20 @@ int main(int argc, char ** argv)
     {
         fprintf(stderr, "usage: %s <rom file> [--face]\n", argv[0]);
         return 2;
+    }
+
+    // A YAML named after the ROM, beside it or under Config/mouse/, is that game's layout.
+    // A non-empty PJ64_INPUT_YAML already in the environment wins, and tiles skip the
+    // lookup: a mouse layout would replace the keyboard bindings the grid strip broadcasts.
+    const char * ExplicitLayout = getenv("PJ64_INPUT_YAML");
+    if (!TileMode && (ExplicitLayout == nullptr || ExplicitLayout[0] == '\0'))
+    {
+        char Layout[PATH_MAX];
+        if (GameConfigPath(RomPath, ExecutableDirectory().c_str(), Layout, sizeof(Layout)))
+        {
+            setenv("PJ64_INPUT_YAML", Layout, 1);
+            fprintf(stderr, "input layout: %s\n", Layout);
+        }
     }
 
     SDL_SetHint(SDL_HINT_MOUSE_AUTO_CAPTURE, "0");
@@ -261,9 +288,11 @@ int main(int argc, char ** argv)
     SDL_GL_MakeCurrent(window, nullptr);
 
     PointerState * pointer = CreatePointerState();
-    if (FaceFlag && pointer != nullptr && !TileMode)
+    bool FaceStarted = false;
+    if (Face == FaceMode::On && pointer != nullptr && !TileMode)
     {
         FaceTrackerStart(pointer);
+        FaceStarted = true;
     }
     PointerSample inject;
     const bool injecting = ParsePointerInject(&inject);
@@ -306,6 +335,14 @@ int main(int argc, char ** argv)
         if (pointer != nullptr)
         {
             PublishMouse(pointer, window, injecting ? &inject : nullptr);
+            // The plugin stores FaceWanted at dylib load, on whichever thread loads it.
+            // FaceTrackerStop at the bottom is safe whether or not this ever fires.
+            if (!FaceStarted && Face == FaceMode::Auto && !TileMode
+                && pointer->FaceWanted.load(std::memory_order_acquire) != 0)
+            {
+                FaceTrackerStart(pointer);
+                FaceStarted = true;
+            }
         }
         if (g_BaseSystem == nullptr)
         {
