@@ -1,5 +1,5 @@
 # Mouse-and-face layout for Super Mario 64. Select with
-#   make run rom=... input=Config/mouse/sm64.yaml face=1
+#   make run rom=... input=Config/mouse/super_mario_64_usa.yaml face=1
 # or PJ64_INPUT_YAML. See README "Playing with a mouse".
 #
 # Zones are the 4x4 grid drawn over the game: top1-top4, left2, left3, right2, right3,

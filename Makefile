@@ -447,7 +447,7 @@ all: deps common core rsp video audio input frontend config ## Build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
-run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/sm64.yaml] [face=1|face=0])
+run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/super_mario_64_usa.yaml] [face=1|face=0])
 	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64 [input=<yaml>] [face=1|face=0]"; exit 1; }
 	$(if $(input),PJ64_INPUT_YAML="$(input)") $(if $(face),PJ64_FACE=$(face)) ./$(BIN)/Project64 "$(rom)"
 

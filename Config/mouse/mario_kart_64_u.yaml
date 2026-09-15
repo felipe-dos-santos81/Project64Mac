@@ -1,5 +1,5 @@
 # Mouse-and-face layout for Mario Kart 64.
-# Select with make run rom=... input=Config/mouse/mk64.yaml face=1
+# Select with make run rom=... input=Config/mouse/mario_kart_64_u.yaml face=1
 # Hold the click in the centre to accelerate while steering with the cursor.
 
 bindings:

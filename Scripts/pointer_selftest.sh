@@ -1,6 +1,6 @@
 #!/bin/sh
 # Prove the pointer path end to end: the frontend publishes an injected pointer sample, the
-# plugin latches the zone under it with Config/mouse/sm64.yaml loaded, and the N64 bits
+# plugin latches the zone under it with Config/mouse/super_mario_64_usa.yaml loaded, and the N64 bits
 # come out right. Three runs: a click in the centre must set A; a click in top4 must set
 # Start; and with no PJ64_INPUT_YAML at all, a copy of the layout named after the ROM and
 # sitting beside it must be found by the frontend's own lookup (centre must set A again).
@@ -11,7 +11,7 @@ set -eu
 ROM="${1:?usage: pointer_selftest.sh <rom>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/Bin/macOS/Project64"
-YAML="$ROOT/Config/mouse/sm64.yaml"
+YAML="$ROOT/Config/mouse/super_mario_64_usa.yaml"
 TIMEOUT=20
 
 [ -x "$BIN" ] || { echo "frontend not built: $BIN" >&2; exit 1; }

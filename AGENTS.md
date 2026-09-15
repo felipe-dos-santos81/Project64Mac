@@ -24,7 +24,7 @@ make pointer-layout-test                 # geometry tests for the pointer grid
 make face-gesture-test                   # classifier tests for the face gestures
 make game-config-test                    # lookup tests for the per-game YAML
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
-make run rom=Roms/game.z64 input=Config/mouse/sm64.yaml  # camera starts by itself; face=0 stops it
+make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles

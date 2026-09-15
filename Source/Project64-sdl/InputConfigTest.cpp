@@ -135,11 +135,11 @@ int main()
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
 
-    CHECK(C.Load("Config/mouse/sm64.yaml"));          // every shipped mouse layout must parse
+    CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));   // every shipped mouse layout must parse
     CHECK(C.UsesPointer());
-    CHECK(C.UsesFace());                              // sm64.yaml binds Z, B and R to gestures
-    CHECK(C.Load("Config/mouse/goldeneye.yaml"));
-    CHECK(C.Load("Config/mouse/mk64.yaml"));
+    CHECK(C.UsesFace());                              // this layout binds Z, B and R to gestures
+    CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
+    CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
 
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");

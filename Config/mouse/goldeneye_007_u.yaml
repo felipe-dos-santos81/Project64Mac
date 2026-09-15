@@ -1,5 +1,5 @@
 # Mouse-and-face layout for GoldenEye 007 / Perfect Dark (control style 1.1).
-# Select with make run rom=... input=Config/mouse/goldeneye.yaml face=1
+# Select with make run rom=... input=Config/mouse/goldeneye_007_u.yaml face=1
 # The stick aims and moves; strafe follows your head; fire is the click.
 
 bindings:

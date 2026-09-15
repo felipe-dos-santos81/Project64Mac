@@ -75,8 +75,8 @@ shipped layouts put three of them on face gestures instead. Pick a layout under
 `Config/mouse/` and run with it:
 
 ```sh
-make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml          # camera starts: the layout binds gestures
-make run rom=Roms/sm64.z64 input=Config/mouse/sm64.yaml face=0   # mouse only; Z, B and R are unavailable
+make run rom=Roms/sm64.z64 input=Config/mouse/super_mario_64_usa.yaml          # camera starts
+make run rom=Roms/sm64.z64 input=Config/mouse/super_mario_64_usa.yaml face=0   # mouse only
 ```
 
 The window is a 4x4 grid drawn faintly over the game. The inner block is the stick: the
@@ -100,14 +100,15 @@ tracking, crossed when the camera is unavailable.
 Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `left2`,
 `left3`, `right2`, `right3`, `bottom1`-`bottom4`, `centre`) and
 `{face: eyebrows|head-left|head-right}`, plus `{stick: pointer}` for `Stick`. Shipped:
-`sm64.yaml`, `goldeneye.yaml`, `mk64.yaml`. Everything without the camera keeps working
-when the camera is denied or absent, though the buttons mapped only to face gestures are
-unavailable.
+`super_mario_64_usa.yaml`, `goldeneye_007_u.yaml`, `mario_kart_64_u.yaml`. Everything
+without the camera keeps working when the camera is denied or absent, though the buttons
+mapped only to face gestures are unavailable.
 
 Name a layout after the ROM and it loads without `input=`: `Roms/sm64.yaml` beside
-`Roms/sm64.z64`, or `Config/mouse/sm64.yaml` under the binary. The first that exists
-wins, the frontend prints `input layout: <path>` when it picks one, and an explicit
-`input=` beats both. Grid tiles ignore per-game files.
+`Roms/sm64.z64`, or `Config/mouse/sm64.yaml` under the binary — the shipped layouts are
+named after their ROM's own base name (`super_mario_64_usa.yaml` and so on). The first
+that exists wins, the frontend prints `input layout: <path>` when it picks one, and an
+explicit `input=` beats both. Grid tiles ignore per-game files.
 
 `make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, the same way
 `make grid-selftest` proves the grid's key broadcast.
