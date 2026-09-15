@@ -19,6 +19,7 @@ pulled back in by accident.
 ```sh
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
+make input-config-test                   # parser tests for the YAML input mapping
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
