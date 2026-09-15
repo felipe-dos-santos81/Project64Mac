@@ -339,7 +339,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(BUILD)/Project64-sdl/InputConfigT
 $(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest input-config-test test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest input-config-test pointer-layout-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -460,6 +460,10 @@ grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid
 input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
 	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)
 	@$(BUILD)/input-config-test
+
+pointer-layout-test: $(BUILD)/Project64-sdl/PointerLayoutTest.o ## Run the PointerLayout geometry tests
+	$(CXX) $(LDFLAGS) -o $(BUILD)/pointer-layout-test $^
+	@$(BUILD)/pointer-layout-test
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
