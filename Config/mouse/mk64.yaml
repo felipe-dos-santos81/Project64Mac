@@ -1,0 +1,20 @@
+# Mouse-and-face layout for Mario Kart 64.
+# Select with make run rom=... input=Config/mouse/mk64.yaml face=1
+# Hold the click in the centre to accelerate while steering with the cursor.
+
+bindings:
+  Stick:     {stick: pointer}
+  A:         {zone: centre}       # accelerate, held
+  R:         {face: eyebrows}     # hop and drift, held
+  Z:         {face: head-left}    # use item
+  B:         {face: head-right}   # brake / reverse
+  Start:     {zone: top4}
+  L:         {zone: top1}
+  CUp:       {zone: top2}
+  CDown:     {zone: bottom2}
+  CLeft:     {zone: left2}
+  CRight:    {zone: right2}
+  DPadUp:    {zone: top3}
+  DPadDown:  {zone: bottom3}
+  DPadLeft:  {zone: left3}
+  DPadRight: {zone: right3}

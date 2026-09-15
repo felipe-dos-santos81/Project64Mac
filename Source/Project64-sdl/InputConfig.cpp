@@ -7,6 +7,7 @@
 
 #include <dlfcn.h>
 #include <stdio.h>
+#include <string.h>
 #include <string>
 
 InputConfig::InputConfig()
@@ -23,6 +24,53 @@ InputConfig & InputConfig::Get()
 const std::vector<Binding> & InputConfig::Bindings(N64Control Control) const
 {
     return m_Bindings[(int)Control];
+}
+
+const char * InputConfig::ControlLabel(N64Control Control)
+{
+    static const char * const kLabels[(int)N64Control::Count] = {
+        "A", "B", "Z", "St", "L", "R",
+        "C^", "Cv", "C<", "C>",
+        "D^", "Dv", "D<", "D>",
+        "",
+    };
+    return kLabels[(int)Control];
+}
+
+bool InputConfig::UsesPointer() const
+{
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone || B.kind == Binding::Kind::Face || B.kind == Binding::Kind::Pointer)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
+                                char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE]) const
+{
+    memset(Labels, 0, POINTER_ZONE_COUNT * POINTER_LABEL_SIZE);
+    memset(GestureLabels, 0, POINTER_GESTURE_COUNT * POINTER_LABEL_SIZE);
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone)
+            {
+                snprintf(Labels[B.code], POINTER_LABEL_SIZE, "%s", ControlLabel((N64Control)i));
+            }
+            else if (B.kind == Binding::Kind::Face)
+            {
+                snprintf(GestureLabels[PointerGestureIndex((uint32_t)B.code)], POINTER_LABEL_SIZE, "%s", ControlLabel((N64Control)i));
+            }
+        }
+    }
 }
 
 static Binding MakeKey(SDL_Scancode Sc)
@@ -48,6 +96,21 @@ static Binding MakeStick(SDL_GamepadAxis XAxis)
 static Binding MakeStickKeys(SDL_Scancode Up, SDL_Scancode Down, SDL_Scancode Left, SDL_Scancode Right)
 {
     return Binding{ Binding::Kind::Keys, 0, true, Up, Down, Left, Right };
+}
+
+static Binding MakeZone(int Zone)
+{
+    return Binding{ Binding::Kind::Zone, Zone, true, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN };
+}
+
+static Binding MakeFace(uint32_t Gesture)
+{
+    return Binding{ Binding::Kind::Face, (int)Gesture, true, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN };
+}
+
+static Binding MakePointer()
+{
+    return Binding{ Binding::Kind::Pointer, 0, true, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN };
 }
 
 void InputConfig::DefaultBindings(std::vector<Binding> * Out)
@@ -121,12 +184,13 @@ static void ConfigError(const char * Path, const YAML::Node & Node, const std::s
 
 static bool IsFormKey(const std::string & Key)
 {
-    return Key == "key" || Key == "button" || Key == "axis" || Key == "stick" || Key == "keys";
+    return Key == "key" || Key == "button" || Key == "axis" || Key == "stick" || Key == "keys"
+        || Key == "zone" || Key == "face";
 }
 
 static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control Control, Binding & Out)
 {
-    static const std::string FormError = "value must be one of {key:}, {button:}, {axis:}, {stick:}, {keys:}";
+    static const std::string FormError = "value must be one of {key:}, {button:}, {axis:}, {stick:}, {keys:}, {zone:}, {face:}";
     if (!Value.IsMap())
     {
         ConfigError(Path, Value, FormError);
@@ -158,9 +222,9 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     }
 
     const bool ForStick = (Control == N64Control::Stick);
-    if ((Form == "key" || Form == "button" || Form == "axis") && ForStick)
+    if ((Form == "key" || Form == "button" || Form == "axis" || Form == "zone" || Form == "face") && ForStick)
     {
-        ConfigError(Path, Value[Form], Form + " cannot drive Stick; use {keys:} or {stick:}");
+        ConfigError(Path, Value[Form], Form + " cannot drive Stick; use {keys:}, {stick: left/right} or {stick: pointer}");
         return false;
     }
 
@@ -196,13 +260,30 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
         Out = MakeAxis(A, Positive);
         return true;
     }
+    if (Form == "zone")
+    {
+        const std::string Name = Value[Form].as<std::string>();
+        const int Zone = PointerZoneFromName(Name.c_str());
+        if (Zone == POINTER_ZONE_NONE) { ConfigError(Path, Value[Form], "unknown zone \"" + Name + "\""); return false; }
+        Out = MakeZone(Zone);
+        return true;
+    }
+    if (Form == "face")
+    {
+        const std::string Name = Value[Form].as<std::string>();
+        const uint32_t Gesture = PointerGestureFromName(Name.c_str());
+        if (Gesture == 0) { ConfigError(Path, Value[Form], "unknown face gesture \"" + Name + "\""); return false; }
+        Out = MakeFace(Gesture);
+        return true;
+    }
     if (Form == "stick")
     {
         if (!ForStick) { ConfigError(Path, Value[Form], "stick is only valid on Stick"); return false; }
         const std::string Name = Value[Form].as<std::string>();
         if (Name == "left") { Out = MakeStick(SDL_GAMEPAD_AXIS_LEFTX); return true; }
         if (Name == "right") { Out = MakeStick(SDL_GAMEPAD_AXIS_RIGHTX); return true; }
-        ConfigError(Path, Value[Form], "stick must be left or right");
+        if (Name == "pointer") { Out = MakePointer(); return true; }
+        ConfigError(Path, Value[Form], "stick must be left, right or pointer");
         return false;
     }
     // Form detection guarantees the remaining form is "keys".

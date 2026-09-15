@@ -1,0 +1,24 @@
+# Mouse-and-face layout for Super Mario 64. Select with
+#   make run rom=... input=Config/mouse/sm64.yaml face=1
+# or PJ64_INPUT_YAML. See README "Playing with a mouse".
+#
+# Zones are the 4x4 grid drawn over the game: top1-top4, left2, left3, right2, right3,
+# bottom1-bottom4, and centre (the stick area; a click there is the centre zone).
+# Face gestures: eyebrows, head-left, head-right. Each needs the camera (face=1).
+
+bindings:
+  Stick:     {stick: pointer}
+  A:         {zone: centre}
+  Z:         {face: eyebrows}     # held: crouch; brows + click while tilted = long jump
+  B:         {face: head-left}    # punch, and dive while running
+  R:         {face: head-right}
+  Start:     {zone: top4}
+  L:         {zone: top1}
+  CUp:       {zone: top2}
+  CDown:     {zone: bottom2}
+  CLeft:     {zone: left2}
+  CRight:    {zone: right2}
+  DPadUp:    {zone: top3}
+  DPadDown:  {zone: bottom3}
+  DPadLeft:  {zone: left3}
+  DPadRight: {zone: right3}

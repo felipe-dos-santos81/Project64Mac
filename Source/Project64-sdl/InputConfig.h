@@ -8,6 +8,8 @@
 #define INPUT_CONFIG_H
 
 #include <SDL3/SDL.h>
+#include <Common/PointerLayout.h>
+#include <Common/PointerState.h>
 #include <cstddef>
 #include <vector>
 
@@ -21,11 +23,13 @@ enum class N64Control
 
 struct Binding
 {
-    enum class Kind { Key, Button, Axis, Stick, Keys };
+    enum class Kind { Key, Button, Axis, Stick, Keys, Zone, Face, Pointer };
 
     Kind kind;
     int code;        // Key: SDL_Scancode; Button: SDL_GamepadButton;
-                     // Axis: SDL_GamepadAxis; Stick: X axis (Y is code + 1)
+                     // Axis: SDL_GamepadAxis; Stick: X axis (Y is code + 1);
+                     // Zone: zone index (PointerLayout.h); Face: one PointerGesture bit;
+                     // Pointer: unused
     bool positive;   // Axis: true fires on +, false on -
     SDL_Scancode UpKey, DownKey, LeftKey, RightKey;   // Keys only
 };
@@ -40,6 +44,18 @@ public:
     bool Load(const char * Path);
 
     const std::vector<Binding> & Bindings(N64Control Control) const;
+
+    // Two-character overlay label for a control ("St", "C^", ...); "" for Stick.
+    static const char * ControlLabel(N64Control Control);
+
+    // True when any binding is a zone, a face gesture or the pointer stick, which is
+    // what turns the overlay on.
+    bool UsesPointer() const;
+
+    // Overlay labels: for each zone and each gesture, the label of the control bound to
+    // it, or "" when nothing is.
+    void PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
+                       char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE]) const;
 
 private:
     InputConfig();

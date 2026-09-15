@@ -3,6 +3,9 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "InputConfig.h"
 
+#include <Common/PointerLayout.h>
+#include <Common/PointerState.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,6 +64,37 @@ int main()
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Keys);
     CHECK(C.Bindings(N64Control::Stick)[0].UpKey == SDL_SCANCODE_UP);
 
+    const char * Pointer =
+        "bindings:\n"
+        "  Stick: {stick: pointer}\n"
+        "  A: {zone: centre}\n"
+        "  Start: {zone: top4}\n"
+        "  Z: {face: eyebrows}\n"
+        "  B: {face: head-left}\n";
+    CHECK(C.Load(WriteTemp(Pointer)));
+    CHECK(C.UsesPointer());
+    CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
+    CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Zone);
+    CHECK(C.Bindings(N64Control::A)[0].code == POINTER_ZONE_CENTRE);
+    CHECK(C.Bindings(N64Control::Start)[0].code == 3);
+    CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Face);
+    CHECK(C.Bindings(N64Control::Z)[0].code == POINTER_GESTURE_EYEBROWS);
+    CHECK(C.Bindings(N64Control::B)[0].code == POINTER_GESTURE_HEAD_LEFT);
+    char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
+    char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
+    C.PointerLabels(Labels, GestureLabels);
+    CHECK(strcmp(Labels[POINTER_ZONE_CENTRE], "A") == 0);
+    CHECK(strcmp(Labels[3], "St") == 0);
+    CHECK(strcmp(Labels[0], "") == 0);
+    CHECK(strcmp(GestureLabels[0], "Z") == 0);
+    CHECK(strcmp(GestureLabels[1], "B") == 0);
+    CHECK(strcmp(GestureLabels[2], "") == 0);
+    CHECK(strcmp(InputConfig::ControlLabel(N64Control::CUp), "C^") == 0);
+    CHECK(strcmp(InputConfig::ControlLabel(N64Control::DPadRight), "D>") == 0);
+
+    CHECK(C.Load(WriteTemp(Valid)));
+    CHECK(!C.UsesPointer());                          // keyboard-only file: no overlay
+
     CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
     const size_t ABefore = C.Bindings(N64Control::A).size();
 
@@ -76,6 +110,12 @@ int main()
     CHECK(!C.Load(WriteTemp("bindings: [1, 2]\n")));
     CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml"));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: middle}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {face: wink}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {zone: centre}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {face: eyebrows}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: pointer}\n")));
+    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre, face: eyebrows}\n")));
 
     CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
@@ -84,6 +124,11 @@ int main()
     CHECK(C.Bindings(N64Control::A).size() == 1);
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
+
+    CHECK(C.Load("Config/mouse/sm64.yaml"));          // every shipped mouse layout must parse
+    CHECK(C.UsesPointer());
+    CHECK(C.Load("Config/mouse/goldeneye.yaml"));
+    CHECK(C.Load("Config/mouse/mk64.yaml"));
 
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");
