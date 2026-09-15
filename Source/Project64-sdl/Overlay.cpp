@@ -1,5 +1,6 @@
 // Project64 - A Nintendo 64 emulator
-// Fixed-function GL overlay for the pointer layout. See Overlay.h.
+// Fixed-function GL overlay for the mouse layout: the panel of slots below the game and
+// the direction guide over it. See Overlay.h.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "Overlay.h"
 #include <Common/PointerLayout.h>
@@ -8,9 +9,11 @@
 #include <math.h>
 #include <string.h>
 
-static const float kDim = 0.35f;     // resting line and label alpha
-static const float kBright = 1.0f;   // held zone and active gesture alpha
-static const int kScale = 3;         // font pixel size; a glyph is 15x21 window pixels
+static const float kDim = 0.35f;       // resting line and label alpha
+static const float kBright = 1.0f;     // held slot, lit arrow and active gesture alpha
+static const float kWedge = 0.08f;     // fill of the lit quadrant
+static const float kPanelGrey = 0.12f; // the panel's opaque ground
+static const int kScale = 3;           // font pixel size; a glyph is 15x21 window pixels
 
 // 5x7 glyphs, one byte per row, bit 4 is the left column. Only what the labels need.
 struct Glyph { char C; unsigned char Rows[7]; };
@@ -94,11 +97,21 @@ static void DrawRect(float X0, float Y0, float X1, float Y1, float Alpha)
     glEnd();
 }
 
-static void DrawFaceStatus(const PointerState * State, int Height)
+static void DrawLine(float X0, float Y0, float X1, float Y1, float Alpha)
+{
+    glColor4f(1.0f, 1.0f, 1.0f, Alpha);
+    glBegin(GL_LINES);
+    glVertex2f(X0, Y0);
+    glVertex2f(X1, Y1);
+    glEnd();
+}
+
+// The tracker mark with the three gesture labels to its right, bright while held.
+static void DrawFaceStatus(const PointerState * State, float Cx, float Cy)
 {
     const uint32_t Face = State->Face.load(std::memory_order_relaxed);
     if (Face == FACE_OFF) return;
-    const float Cx = 14.0f, Cy = (float)Height - 14.0f, R = 6.0f;
+    const float R = 6.0f;
     if (Face == FACE_TRACKING)
     {
         DrawCircle(Cx, Cy, R, kBright, true);
@@ -108,27 +121,87 @@ static void DrawFaceStatus(const PointerState * State, int Height)
         DrawCircle(Cx, Cy, R, kDim, false);
         if (Face == FACE_DENIED || Face == FACE_ERROR)
         {
-            glBegin(GL_LINES);
-            glVertex2f(Cx - R, Cy - R); glVertex2f(Cx + R, Cy + R);
-            glVertex2f(Cx - R, Cy + R); glVertex2f(Cx + R, Cy - R);
-            glEnd();
+            DrawLine(Cx - R, Cy - R, Cx + R, Cy + R, kDim);
+            DrawLine(Cx - R, Cy + R, Cx + R, Cy - R, kDim);
         }
     }
-    // Active gestures show as their bound labels to the right of the mark.
     const uint32_t Bits = State->Gestures.load(std::memory_order_relaxed);
-    float X = Cx + R + 4.0f + 6.0f * kScale;
     const uint32_t kOrder[3] = { POINTER_GESTURE_EYEBROWS, POINTER_GESTURE_HEAD_LEFT, POINTER_GESTURE_HEAD_RIGHT };
     for (int i = 0; i < 3; i++)
     {
-        if ((Bits & kOrder[i]) == 0 || State->GestureLabels[i][0] == '\0') continue;
-        DrawText(State->GestureLabels[i], X, Cy, kBright);
-        X += 14.0f * kScale;
+        if (State->GestureLabels[i][0] == '\0') continue;
+        DrawText(State->GestureLabels[i], Cx + 28.0f + 36.0f * i, Cy, (Bits & kOrder[i]) != 0 ? kBright : kDim);
     }
 }
 
-void OverlayDraw(const PointerState * State, int Width, int Height)
+// The panel: an opaque ground over the rows below the game, every slot with its label, the
+// latched one bright, and the tracker under the middle slots.
+static void DrawPanel(const PointerState * State, int W, int H, int GameH, int Latched)
 {
-    if (State == nullptr || Width <= 0 || Height <= 0) return;
+    glColor4f(kPanelGrey, kPanelGrey, kPanelGrey, 1.0f);
+    glBegin(GL_QUADS);
+    glVertex2f(0.0f, (float)GameH);
+    glVertex2f((float)W, (float)GameH);
+    glVertex2f((float)W, (float)H);
+    glVertex2f(0.0f, (float)H);
+    glEnd();
+    for (int Zone = 0; Zone < POINTER_ZONE_GAME; Zone++)
+    {
+        const float Alpha = Zone == Latched ? kBright : kDim;
+        float X0, Y0, X1, Y1;
+        PointerZoneRect(Zone, W, H, &X0, &Y0, &X1, &Y1);
+        DrawRect(X0, Y0, X1, Y1, Alpha);
+        DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
+    }
+    DrawFaceStatus(State, 178.0f, (float)H - 40.0f);
+}
+
+// The guide over the game: the lit quadrant's wedge, the four 45-degree rays, the ring and
+// dead zone, the game zone's label, and an arrow per edge with the lit one bright.
+static void DrawGuide(const PointerState * State, int W, int H, int GameH, int Latched, int Quadrant)
+{
+    const float R = PointerStickRadius(W, H);
+    const float Cx = (float)W / 2.0f, Cy = (float)GameH / 2.0f;
+    const float Gw = (float)W, Gh = (float)GameH;
+    const float Lx = Cx - Cy, Rx = Cx + Cy; // where the 45-degree rays meet the top and bottom edges
+    if (Quadrant >= 0)
+    {
+        glColor4f(1.0f, 1.0f, 1.0f, kWedge);
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex2f(Cx, Cy);
+        switch (Quadrant)
+        {
+        case 0: glVertex2f(Lx, 0.0f); glVertex2f(Rx, 0.0f); break;
+        case 1: glVertex2f(Rx, 0.0f); glVertex2f(Gw, 0.0f); glVertex2f(Gw, Gh); glVertex2f(Rx, Gh); break;
+        case 2: glVertex2f(Rx, Gh); glVertex2f(Lx, Gh); break;
+        default: glVertex2f(Lx, Gh); glVertex2f(0.0f, Gh); glVertex2f(0.0f, 0.0f); glVertex2f(Lx, 0.0f); break;
+        }
+        glEnd();
+    }
+    DrawLine(Cx, Cy, Lx, 0.0f, kDim);
+    DrawLine(Cx, Cy, Rx, 0.0f, kDim);
+    DrawLine(Cx, Cy, Lx, Gh, kDim);
+    DrawLine(Cx, Cy, Rx, Gh, kDim);
+    const float GameAlpha = Latched == POINTER_ZONE_GAME ? kBright : kDim;
+    DrawCircle(Cx, Cy, R, GameAlpha, false);
+    DrawCircle(Cx, Cy, R * 0.1f, GameAlpha, false);
+    DrawText(State->Labels[POINTER_ZONE_GAME], Cx, Cy - R + 7.0f * kScale, GameAlpha); // just inside the ring's top
+    DrawText("^", Cx, 24.0f, Quadrant == 0 ? kBright : kDim);
+    DrawText(">", Gw - 24.0f, Cy, Quadrant == 1 ? kBright : kDim);
+    DrawText("v", Cx, Gh - 24.0f, Quadrant == 2 ? kBright : kDim);
+    DrawText("<", 24.0f, Cy, Quadrant == 3 ? kBright : kDim);
+}
+
+void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHidden)
+{
+    if (State == nullptr || Viewport == nullptr) return;
+    // The renderer's viewport is the game image; the window is its union with the rows
+    // below it, which the frontend reserved for the panel (Design: Docs/superpowers/specs/
+    // 2026-09-15-mouse-panel-design.md). With no offset there is no panel to draw.
+    const int GameH = Viewport[3];
+    const int W = Viewport[0] + Viewport[2];
+    const int H = Viewport[1] + GameH;
+    if (W <= 0 || GameH <= 0) return;
 
     // Save what glPushAttrib does not cover: the bound program and the matrices.
     GLint Program = 0;
@@ -137,13 +210,13 @@ void OverlayDraw(const PointerState * State, int Width, int Height)
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0.0, (double)Width, (double)Height, 0.0, -1.0, 1.0); // y down, like the cursor
+    glOrtho(0.0, (double)W, (double)H, 0.0, -1.0, 1.0); // y down, like the cursor
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
 
     glUseProgram(0);
-    glViewport(0, 0, Width, Height);
+    glViewport(0, 0, W, H);
     glDisable(GL_DEPTH_TEST);
     // The video plugin leaves GL_TEXTURE_2D enabled on texture units 0-2 (see
     // OGLcombiner.cpp's init_combiner/gfxStippleMode) and never disables them; glDisable
@@ -166,27 +239,15 @@ void OverlayDraw(const PointerState * State, int Width, int Height)
     glLineWidth(1.0f);
 
     const int Latched = State->LatchedZone.load(std::memory_order_relaxed);
-    const float R = PointerStickRadius(Width, Height);
-    const float Cx = (float)Width / 2.0f, Cy = (float)Height / 2.0f;
-
-    for (int Zone = 0; Zone < POINTER_ZONE_COUNT; Zone++)
+    const int Quadrant = State->Quadrant.load(std::memory_order_relaxed);
+    if (H > GameH)
     {
-        const float Alpha = Zone == Latched ? kBright : kDim;
-        float X0, Y0, X1, Y1;
-        PointerZoneRect(Zone, Width, Height, &X0, &Y0, &X1, &Y1);
-        if (Zone != POINTER_ZONE_GAME)
-        {
-            DrawRect(X0, Y0, X1, Y1, Alpha);
-            DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
-        }
-        else
-        {
-            DrawCircle(Cx, Cy, R, Alpha, false);
-            DrawCircle(Cx, Cy, R * 0.1f, Alpha, false);
-            DrawText(State->Labels[Zone], Cx, Cy - R + 7.0f * kScale, Alpha); // just inside the ring's top
-        }
+        DrawPanel(State, W, H, GameH, Latched);
     }
-    DrawFaceStatus(State, Height);
+    if (!GuideHidden)
+    {
+        DrawGuide(State, W, H, GameH, Latched, Quadrant);
+    }
 
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();

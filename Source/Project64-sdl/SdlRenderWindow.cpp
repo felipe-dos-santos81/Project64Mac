@@ -214,11 +214,12 @@ void CSdlRenderWindow::SwapWindow()
     // plugin leaves texture units, fog, and the color mask in states that can hide a
     // naive fixed-function overlay draw; OverlayDraw resets all of them (see its own
     // comment) so one call here is enough.
-    if (m_Pointer != nullptr && !m_OverlayHidden && m_Pointer->OverlayWanted.load(std::memory_order_relaxed) != 0)
+    if (m_Pointer != nullptr && m_Pointer->OverlayWanted.load(std::memory_order_relaxed) != 0)
     {
         GLint Viewport[4] = {0, 0, 0, 0};
         glGetIntegerv(GL_VIEWPORT, Viewport);
-        OverlayDraw(m_Pointer, (int)Viewport[2], (int)Viewport[3]);
+        const int V[4] = { (int)Viewport[0], (int)Viewport[1], (int)Viewport[2], (int)Viewport[3] };
+        OverlayDraw(m_Pointer, V, m_OverlayHidden);
     }
 
     // SDL_GL_SwapWindow marshals the swap to the main thread on macOS and waits for it.

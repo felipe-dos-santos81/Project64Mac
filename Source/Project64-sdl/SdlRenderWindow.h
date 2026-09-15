@@ -32,7 +32,8 @@ private:
     // binds the underlying CGL context itself instead.
     CGLContextObj m_Cgl;
     // The overlay's data, owned by main(); null under a failed shm setup. PJ64_OVERLAY=0
-    // hides the overlay for a player who has memorised the layout.
+    // hides the guide over the game for a player who has memorised it; the panel is the
+    // controls and always draws.
     const PointerState * m_Pointer;
     bool m_OverlayHidden;
     // Frame dumping, driven by PJ64_FRAME_DUMP; see DumpFrame. Both environment
