@@ -111,18 +111,24 @@ static void SelftestReport(const bool * Raw, const BUTTONS * Out)
 }
 
 // Verification only. With PJ64_POINTER_SELFTEST set, report once, on the first frame that
-// sees the button down, which zone latched and what the controller produced from it, so
-// Scripts/pointer_selftest.sh proves delivery, geometry and mapping together.
-static void PointerSelftestReport(bool Button, int Latched, const BUTTONS * Out)
+// sees the button down or any face input (a gesture bit, or a head-stick axis), which zone
+// latched and what the controller produced, so Scripts/pointer_selftest.sh and
+// Scripts/face_selftest.sh prove delivery, geometry and mapping together.
+static void PointerSelftestReport(bool Button, int Latched, uint32_t Gestures, const BUTTONS * Out)
 {
     static bool Reported = false;
-    if (Reported || !Button || getenv("PJ64_POINTER_SELFTEST") == nullptr)
+    if (Reported || getenv("PJ64_POINTER_SELFTEST") == nullptr)
+    {
+        return;
+    }
+    if (!Button && Gestures == 0 && Out->X_AXIS == 0 && Out->Y_AXIS == 0)
     {
         return;
     }
     Reported = true;
-    fprintf(stderr, "pointer-selftest zone=%d a=%d start=%d\n",
-        Latched, Out->A_BUTTON ? 1 : 0, Out->START_BUTTON ? 1 : 0);
+    fprintf(stderr, "pointer-selftest zone=%d a=%d start=%d z=%d x=%d y=%d\n",
+        Latched, Out->A_BUTTON ? 1 : 0, Out->START_BUTTON ? 1 : 0, Out->Z_TRIG ? 1 : 0,
+        (int)Out->X_AXIS, (int)Out->Y_AXIS);
 }
 
 static void OpenFirstGamepad(void)
@@ -302,9 +308,26 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
                     Keys->Y_AXIS = E.StickY;
                     StickFromKeys = true; // the pointer owns the stick; the gamepad must not overwrite it
                 }
+                else if (B.kind == Binding::Kind::HeadStick)
+                {
+                    // The tracker publishes the stick already scaled; head-digital snaps it
+                    // by the quadrant rule the mouse guide uses (vertical wins ties).
+                    int8_t X = (int8_t)g_Pointer->HeadX.load(std::memory_order_relaxed);
+                    int8_t Y = (int8_t)g_Pointer->HeadY.load(std::memory_order_relaxed);
+                    const int Q = PointerQuadrant(X, Y);
+                    if (B.code == 1)
+                    {
+                        X = (int8_t)(Q == 1 ? N64_AXIS_MAX : Q == 3 ? -N64_AXIS_MAX : 0);
+                        Y = (int8_t)(Q == 0 ? N64_AXIS_MAX : Q == 2 ? -N64_AXIS_MAX : 0);
+                    }
+                    Keys->X_AXIS = X;
+                    Keys->Y_AXIS = Y;
+                    StickFromKeys = true; // the head owns the stick; the gamepad must not overwrite it
+                    g_Pointer->Quadrant.store(Q, std::memory_order_relaxed);
+                }
             }
         }
-        PointerSelftestReport(S.Button, g_PointerLatched, Keys);
+        PointerSelftestReport(S.Button, g_PointerLatched, Gestures, Keys);
     }
 
     OpenFirstGamepad();
@@ -400,6 +423,7 @@ static void PublishPointerLabels(void)
     Config.PointerLabels(g_Pointer->Labels, g_Pointer->GestureLabels);
     g_Pointer->LatchedZone.store(POINTER_ZONE_NONE);
     g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
+    g_Pointer->HeadStickWanted.store(Config.UsesHeadStick() ? 1u : 0u, std::memory_order_release);
     // The frontend's main loop polls this to start the camera; it may run on another
     // thread than the one loading the dylib, hence release here and acquire there.
     g_Pointer->FaceWanted.store(Config.UsesFace() ? 1u : 0u, std::memory_order_release);

@@ -51,8 +51,8 @@ one_run() {
 }
 
 FAIL=0
-one_run "320,240,1" "zone=13 a=1 start=0" "$ROM" "$YAML" || FAIL=1
-one_run "192,512,1" "zone=8 a=0 start=1" "$ROM" "$YAML" || FAIL=1  # mid1's centre at 640x640
+one_run "320,240,1" "zone=13 a=1 start=0 z=0 x=0 y=0" "$ROM" "$YAML" || FAIL=1
+one_run "192,512,1" "zone=8 a=0 start=1 z=0 x=0 y=0" "$ROM" "$YAML" || FAIL=1  # mid1's centre at 640x640
 
 # Third run: symlink the ROM into a temp folder under its own name and extension, with the
 # layout beside it as <base>.yaml. Without the lookup the keyboard mapping loads and a
@@ -62,7 +62,7 @@ NAME="$(basename "$ROM")"
 BASE="${NAME%.*}"
 ln -s "$(cd "$(dirname "$ROM")" && pwd)/$NAME" "$TMP/$NAME"
 cp "$YAML" "$TMP/$BASE.yaml"
-one_run "320,240,1" "zone=13 a=1 start=0" "$TMP/$NAME" "" || FAIL=1
+one_run "320,240,1" "zone=13 a=1 start=0 z=0 x=0 y=0" "$TMP/$NAME" "" || FAIL=1
 rm -rf "$TMP"
 
 if [ "$FAIL" -eq 0 ]; then

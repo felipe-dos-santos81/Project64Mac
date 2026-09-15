@@ -343,7 +343,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(BUILD)/Projec
 $(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest input-config-test pointer-layout-test face-gesture-test game-config-test test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -475,6 +475,10 @@ grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid
 pointer-selftest: ## Prove the injected-pointer path maps a game click to A and mid1 to Start (usage: make pointer-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make pointer-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/pointer_selftest.sh "$(rom)"
+
+face-selftest: ## Prove the injected-face path maps mouth-open to A and the head stick to the X axis, with no camera (usage: make face-selftest rom=/path/to/game.z64)
+	@test -n "$(rom)" || { echo "usage: make face-selftest rom=/path/to/game.z64"; exit 1; }
+	Scripts/face_selftest.sh "$(rom)"
 
 input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
 	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)

@@ -135,6 +135,39 @@ static bool ParsePointerInject(PointerSample * Out)
     return true;
 }
 
+// PJ64_FACE_INJECT=<gesture>[,<x>,<y>] publishes that gesture's bit and that head stick
+// instead of running the tracker, so the face path can be proven without a camera
+// (Scripts/face_selftest.sh). With it set the camera is never opened, whatever PJ64_FACE says.
+struct FaceInject { uint32_t Bits; int X, Y; };
+
+static bool ParseFaceInject(FaceInject * Out)
+{
+    const char * Env = getenv("PJ64_FACE_INJECT");
+    if (Env == nullptr)
+    {
+        return false;
+    }
+    char Name[32] = { 0 };
+    Out->X = 0;
+    Out->Y = 0;
+    const int N = sscanf(Env, "%31[^,],%d,%d", Name, &Out->X, &Out->Y);
+    Out->Bits = N >= 1 ? PointerGestureFromName(Name) : 0;
+    if (Out->Bits == 0 || N == 2 || Out->X < -80 || Out->X > 80 || Out->Y < -80 || Out->Y > 80)
+    {
+        fprintf(stderr, "bad PJ64_FACE_INJECT: %s (want gesture[,x,y] with x,y in -80..80)\n", Env);
+        return false;
+    }
+    return true;
+}
+
+static void PublishFaceInject(PointerState * State, const FaceInject & F)
+{
+    State->Gestures.store(F.Bits, std::memory_order_relaxed);
+    State->HeadX.store(F.X, std::memory_order_relaxed);
+    State->HeadY.store(F.Y, std::memory_order_relaxed);
+    State->Face.store(FACE_TRACKING, std::memory_order_relaxed);
+}
+
 // Main thread only: SDL3 documents SDL_GetMouseState as main-thread only.
 static void PublishMouse(PointerState * State, SDL_Window * Window, const PointerSample * Inject)
 {
@@ -342,8 +375,10 @@ int main(int argc, char ** argv)
     SDL_GL_MakeCurrent(window, nullptr);
 
     PointerState * pointer = CreatePointerState();
-    bool FaceStarted = false;
-    if (Face == FaceMode::On && pointer != nullptr && !TileMode)
+    FaceInject faceInject;
+    const bool faceInjecting = ParseFaceInject(&faceInject);
+    bool FaceStarted = faceInjecting; // an injected face stands in for the tracker
+    if (Face == FaceMode::On && pointer != nullptr && !TileMode && !faceInjecting)
     {
         FaceTrackerStart(pointer);
         FaceStarted = true;
@@ -389,6 +424,10 @@ int main(int argc, char ** argv)
         if (pointer != nullptr)
         {
             PublishMouse(pointer, window, injecting ? &inject : nullptr);
+            if (faceInjecting)
+            {
+                PublishFaceInject(pointer, faceInject);
+            }
             // The plugin stores FaceWanted at dylib load, on whichever thread loads it.
             // FaceTrackerStop at the bottom is safe whether or not this ever fires.
             if (!FaceStarted && Face == FaceMode::Auto && !TileMode
