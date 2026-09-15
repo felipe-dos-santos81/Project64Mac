@@ -350,7 +350,7 @@ help: ## Print this help message
 		awk 'BEGIN {FS = ":.*?## "}; \
 		{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 are present
+deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
 	@command -v pkg-config >/dev/null || { echo "pkg-config not found: brew install pkg-config"; exit 1; }
 	@pkg-config --exists sdl3 || { echo "SDL3 not found: brew install sdl3"; exit 1; }

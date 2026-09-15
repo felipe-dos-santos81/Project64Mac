@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Correction during execution:** the spec was revised so gamepad buttons use SDL-native
+> names (`a`/`b`/`x`/`y`, not `south`/`west`) and the axis `sign` is a sibling key of `axis`
+> rather than nested inside it. See
+> `Docs/superpowers/specs/2026-09-14-input-yaml-mapping-design.md`.
+
 **Goal:** Let the SDL3 input plugin read its N64-controller bindings from `Config/input.yaml` instead of hardcoded tables, without changing behavior when the file is absent.
 
 **Architecture:** A new standalone module `InputConfig` (inside the input plugin) owns the N64 control set, the built-in default table (today's keyboard + gamepad pairings), YAML loading and validation. `PluginLoaded` loads the file once, off the emulation thread; `GetKeys` only evaluates the resolved table.

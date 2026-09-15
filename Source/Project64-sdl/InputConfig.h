@@ -8,6 +8,7 @@
 #define INPUT_CONFIG_H
 
 #include <SDL3/SDL.h>
+#include <cstddef>
 #include <vector>
 
 enum class N64Control

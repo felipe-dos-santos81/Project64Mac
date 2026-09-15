@@ -6,6 +6,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <dlfcn.h>
+#include <stdio.h>
 #include <string>
 
 InputConfig::InputConfig()
@@ -23,11 +24,6 @@ const std::vector<Binding> & InputConfig::Bindings(N64Control Control) const
 {
     return m_Bindings[(int)Control];
 }
-
-// N64 stick range is -80..80; the SDL axis range is -32768..32767.
-static const int16_t STICK_DEAD_ZONE = 4000;
-static const int16_t STICK_THRESHOLD = 16000;
-static const int N64_AXIS_MAX = 80;
 
 static Binding MakeKey(SDL_Scancode Sc)
 {
@@ -209,7 +205,8 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
         ConfigError(Path, Value[Form], "stick must be left or right");
         return false;
     }
-    if (Form == "keys")
+    // Form detection guarantees the remaining form is "keys".
+    else
     {
         if (!ForStick) { ConfigError(Path, Value[Form], "keys is only valid on Stick"); return false; }
         const YAML::Node Arg = Value[Form];
@@ -224,13 +221,11 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
         {
             const std::string Name = Arg[kDirections[i]].as<std::string>();
             Sc[i] = SDL_GetScancodeFromName(Name.c_str());
-            if (Sc[i] == SDL_SCANCODE_UNKNOWN) { ConfigError(Path, Arg[kDirections[i]], "unknown key \"" + Name + "\""); return false; }
+            if (Sc[i] == SDL_SCANCODE_UNKNOWN) { ConfigError(Path, Arg[kDirections[i]], "unknown key \"" + Name + "\" for " + kDirections[i]); return false; }
         }
         Out = MakeStickKeys(Sc[0], Sc[1], Sc[2], Sc[3]);
         return true;
     }
-    ConfigError(Path, Value, "unknown form \"" + Form + "\"");
-    return false;
 }
 
 bool InputConfig::Load(const char * Path)

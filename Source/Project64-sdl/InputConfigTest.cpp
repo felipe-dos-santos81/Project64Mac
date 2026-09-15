@@ -80,6 +80,11 @@ int main()
     CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
 
+    CHECK(C.Load("Config/input.yaml"));               // the tracked file must parse
+    CHECK(C.Bindings(N64Control::A).size() == 1);
+    CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
+    CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");
     return 0;
