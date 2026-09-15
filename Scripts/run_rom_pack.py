@@ -103,6 +103,7 @@ def run_rom(binary, rom, work_dir, screenshots, threshold, timeout):
         "PJ64_FRAME_DUMP_AT": str(DUMP_AT),
         "PJ64_FRAME_DUMP_MIN_NONBLACK": str(threshold),
         "PJ64_FRAME_DUMP_MAX": str(DUMP_MAX),
+        "PJ64_FACE": "0",
     })
 
     start = time.monotonic()

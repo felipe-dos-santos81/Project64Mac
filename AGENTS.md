@@ -103,8 +103,10 @@ it; `Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a priv
 and writes three gesture bits through `FaceGestures.{h,cpp}`; the plugin evaluates zones,
 gestures and the pointer stick in `GetKeys` with the pure geometry in
 `Source/Common/PointerLayout.h`, and writes labels and the latched zone back for
-`Overlay.cpp`, plus `FaceWanted`, which the frontend's main loop polls to start the camera when `PJ64_FACE` is unset (`0` never, anything else at once), which draws in `CSdlRenderWindow::SwapWindow` before the flush. Layouts are
-the `{zone:}`, `{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
+`Overlay.cpp`, which draws in `CSdlRenderWindow::SwapWindow` before the flush, and
+`FaceWanted`, which the frontend's main loop polls to start the camera when
+`PJ64_FACE` is unset (`0` never, anything else at once). Layouts are the `{zone:}`,
+`{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
 
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are
