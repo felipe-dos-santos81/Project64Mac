@@ -5,13 +5,15 @@
 #include <string>
 #include <vector>
 
+struct PointerState;
+
 // Owns nothing; the SDL_Window and SDL_GLContext belong to main().
 // GfxThreadInit/SwapWindow/GfxThreadDone are called by the core on the
 // emulation thread, matching the Android bridge's use of these hooks.
 class CSdlRenderWindow : public RenderWindow
 {
 public:
-    CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl);
+    CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, const PointerState * Pointer);
 
     void GfxThreadInit();
     void GfxThreadDone();
@@ -29,6 +31,10 @@ private:
     // SDL_GL_MakeCurrent as main-thread-only, and it marshals, so the emulation thread
     // binds the underlying CGL context itself instead.
     CGLContextObj m_Cgl;
+    // The overlay's data, owned by main(); null under a failed shm setup. PJ64_OVERLAY=0
+    // hides the overlay for a player who has memorised the layout.
+    const PointerState * m_Pointer;
+    bool m_OverlayHidden;
     // Frame dumping, driven by PJ64_FRAME_DUMP; see DumpFrame. Both environment
     // variables are read once at construction - they cannot change mid-run, and
     // DumpFrame is on the per-frame present path.

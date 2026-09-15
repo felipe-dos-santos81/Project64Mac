@@ -1,19 +1,24 @@
 #include "SdlRenderWindow.h"
+#include "Overlay.h"
 #include <OpenGL/gl.h>
+#include <Common/PointerState.h>
 #include <Common/Trace.h>
 #include <Project64-core/TraceModulesProject64.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <vector>
 
 // How often DumpFrame re-checks the back buffer while waiting for a non-black frame.
 // Reading every frame would slow the emulation being waited on.
 static const uint32_t DumpCheckInterval = 30;
 
-CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl) :
+CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, const PointerState * Pointer) :
     m_Window(Window),
     m_Context(Context),
     m_Cgl(Cgl),
+    m_Pointer(Pointer),
+    m_OverlayHidden(false),
     m_DumpAt(300),
     m_FrameCount(0),
     m_FrameDumped(false),
@@ -40,6 +45,11 @@ CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, C
     if (MaxEnv != nullptr)
     {
         m_MaxFrame = (uint32_t)atoi(MaxEnv);
+    }
+    const char * OverlayEnv = getenv("PJ64_OVERLAY");
+    if (OverlayEnv != nullptr && strcmp(OverlayEnv, "0") == 0)
+    {
+        m_OverlayHidden = true;
     }
 }
 
@@ -195,6 +205,21 @@ void CSdlRenderWindow::WriteFrame(const std::vector<uint8_t> & Pixels, int Width
 void CSdlRenderWindow::SwapWindow()
 {
     DumpFrame(); // before the flush, while the back buffer still holds this frame
+
+    // After the dump so PJ64_FRAME_DUMP measurements are of the game alone.
+    if (m_Pointer != nullptr && !m_OverlayHidden && m_Pointer->OverlayWanted.load(std::memory_order_relaxed) != 0)
+    {
+        GLint Viewport[4] = {0, 0, 0, 0};
+        glGetIntegerv(GL_VIEWPORT, Viewport);
+        // Drawn twice: on this GL 2.1 compatibility context (Apple Silicon, CGL-backed), the
+        // first fixed-function draw issued right after the video plugin's shader-based
+        // rendering does not reach the framebuffer - confirmed by reading the back buffer
+        // back (PJ64_FRAME_DUMP) with the draw temporarily moved before the dump. A second,
+        // otherwise-redundant call (each call is self-contained via glPushAttrib/glPopAttrib,
+        // so this is safe) reliably makes it visible without disturbing the game's own frame.
+        OverlayDraw(m_Pointer, (int)Viewport[2], (int)Viewport[3]);
+        OverlayDraw(m_Pointer, (int)Viewport[2], (int)Viewport[3]);
+    }
 
     // SDL_GL_SwapWindow marshals the swap to the main thread on macOS and waits for it.
     // The context is current on this thread, so the main thread blocks trying to flush a

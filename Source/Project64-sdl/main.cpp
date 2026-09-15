@@ -277,7 +277,7 @@ int main(int argc, char ** argv)
     }
     ConfigurePlugins();
 
-    CSdlRenderWindow renderWindow(window, context, cglContext);
+    CSdlRenderWindow renderWindow(window, context, cglContext, pointer);
     g_Plugins->SetRenderWindows(&renderWindow, nullptr);
 
     if (!CN64System::RunFileImage(RomPath))
