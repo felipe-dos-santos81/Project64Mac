@@ -18,9 +18,11 @@ Prerequisites: Xcode command line tools plus Homebrew SDL3 and yaml-cpp
 (`brew install sdl3 pkg-config yaml-cpp`).
 
 ```sh
-make                    # core, four plugins, frontend, and the ROM database beside the binary
-make test               # smoke test: version string and plugin exports
-make input-config-test  # parser tests for the YAML input mapping
+make                      # core, four plugins, frontend, and the ROM database beside the binary
+make test                 # smoke test: version string and plugin exports
+make input-config-test    # parser tests for the YAML input mapping
+make pointer-layout-test  # geometry tests for the mouse control grid
+make face-gesture-test    # classifier tests for the face gestures
 ```
 
 `make help` lists every target with its build stage.
@@ -96,6 +98,9 @@ Layout files use two more binding forms, `{zone: top4}` (cells `top1`-`top4`, `l
 `sm64.yaml`, `goldeneye.yaml`, `mk64.yaml`. Everything without the camera keeps working
 when the camera is denied or absent, though the buttons mapped only to face gestures are
 unavailable.
+
+`make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, the same way
+`make grid-selftest` proves the grid's key broadcast.
 
 ## What works
 

@@ -303,14 +303,14 @@ the launching terminal; `Config/input.yaml` must stay keyboard-active.
 - **Ring-crossing tilt.** Reaching a zone drags the cursor across the ring edge for a few
   frames, read as a brief full tilt. Accepted; a speed gate is the follow-up if it bothers
   play.
-- **Yaw sign and thresholds.** Defaults are guesses until the first manual run; the debug
-  print and the two overrides exist to fix them without a rebuild, and the file changes if
-  the sign is reversed.
+- **Yaw sign and thresholds.** Confirmed by manual run: `head-left` sets bit 2 and
+  `head-right` sets bit 4 as coded, no reversal needed. The debug print and the two
+  overrides remain for tuning the default thresholds to an individual face and camera.
 - **Camera permission attribution.** From a non-bundled binary, macOS prompts for the
   terminal or IDE. If a launcher has been denied in the past, the prompt does not reappear
   and the tracker reports `denied`; the fix is in System Settings, and the README says so.
-- **Vision under `-std=c++14` Objective-C++.** The frameworks are Objective-C; the `.mm`
-  unit is expected to compile with the existing flags plus ARC. Confirm in the first
-  implementation step.
+- **Vision under `-std=c++14` Objective-C++.** Confirmed: `FaceTracker.mm` compiles clean
+  under the existing `c++14` flags plus ARC; the `c++17` fallback noted in the plan was not
+  needed.
 - **No automated camera test.** The classifier is unit-tested; capture and Vision are
   manual only.

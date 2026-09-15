@@ -36,7 +36,7 @@ LDFLAGS    = $(ARCH)
 
 objs = $(addprefix $(BUILD)/, $(addsuffix .o, $(basename $(1))))
 
-# ── Source lists (validated against the tree on 2026-09-14) ───────────────────
+# ── Source lists (validated against the tree on 2026-09-15) ───────────────────
 COMMON_SRC = $(addprefix Common/, CriticalSection.cpp DateTime.cpp DynamicLibrary.cpp File.cpp \
   HighResTimeStamp.cpp IniFile.cpp Log.cpp md5.cpp MemoryManagement.cpp path.cpp Platform.cpp \
   Random.cpp StdString.cpp SyncEvent.cpp Thread.cpp Trace.cpp Util.cpp)
