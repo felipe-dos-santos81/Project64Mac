@@ -21,9 +21,9 @@ public:
 
 private:
     void DumpFrame();
-    bool ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height);
+    bool ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height, int & OriginX, int & OriginY);
     double NonBlackShare(const std::vector<uint8_t> & Pixels, int Width, int Height) const;
-    void WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height);
+    void WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height, int OriginX, int OriginY);
 
     SDL_Window * m_Window;
     SDL_GLContext m_Context;

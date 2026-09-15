@@ -3,9 +3,10 @@
 # plugin latches the zone under it with Config/mouse/super_mario_64_usa.yaml loaded, and the
 # N64 bits come out right. Three runs: a click in the game image must set A; a click in the
 # middle of mid1 (192,512, a point that only exists when the window is 640 tall, so this
-# also proves the taller window and the lifted viewport) must set Start; and with no
-# PJ64_INPUT_YAML at all, a copy of the layout named after the ROM and sitting beside it
-# must be found by the frontend's own lookup (the game click must set A again).
+# also proves the window grew and that the frontend and the plugin agree about where mid1
+# is) must set Start; and with no PJ64_INPUT_YAML at all, a copy of the layout named after
+# the ROM and sitting beside it must be found by the frontend's own lookup (the game click
+# must set A again).
 # Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md and
 # Docs/superpowers/specs/2026-09-15-per-game-input-yaml-design.md
 set -eu
@@ -51,7 +52,7 @@ one_run() {
 
 FAIL=0
 one_run "320,240,1" "zone=13 a=1 start=0" "$ROM" "$YAML" || FAIL=1
-one_run "192,512,1" "zone=8 a=0 start=1" "$ROM" "$YAML" || FAIL=1
+one_run "192,512,1" "zone=8 a=0 start=1" "$ROM" "$YAML" || FAIL=1  # mid1's centre at 640x640
 
 # Third run: symlink the ROM into a temp folder under its own name and extension, with the
 # layout beside it as <base>.yaml. Without the lookup the keyboard mapping loads and a

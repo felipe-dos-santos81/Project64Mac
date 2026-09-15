@@ -101,10 +101,10 @@ void CSdlRenderWindow::DumpFrame()
     if (m_MinNonBlack <= 0.0)
     {
         std::vector<uint8_t> Pixels;
-        int Width = 0, Height = 0;
-        if (ReadBackBuffer(Pixels, Width, Height))
+        int Width = 0, Height = 0, OriginX = 0, OriginY = 0;
+        if (ReadBackBuffer(Pixels, Width, Height, OriginX, OriginY))
         {
-            WriteFrame(Pixels, Width, Height);
+            WriteFrame(Pixels, Width, Height, OriginX, OriginY);
         }
         return;
     }
@@ -116,8 +116,8 @@ void CSdlRenderWindow::DumpFrame()
     }
 
     std::vector<uint8_t> Pixels;
-    int Width = 0, Height = 0;
-    if (!ReadBackBuffer(Pixels, Width, Height))
+    int Width = 0, Height = 0, OriginX = 0, OriginY = 0;
+    if (!ReadBackBuffer(Pixels, Width, Height, OriginX, OriginY))
     {
         return;
     }
@@ -125,7 +125,7 @@ void CSdlRenderWindow::DumpFrame()
     double Share = NonBlackShare(Pixels, Width, Height);
     if (Share >= m_MinNonBlack)
     {
-        WriteFrame(Pixels, Width, Height);
+        WriteFrame(Pixels, Width, Height, OriginX, OriginY);
         return;
     }
     if (Share > m_BestNonBlack)
@@ -138,16 +138,18 @@ void CSdlRenderWindow::DumpFrame()
         WriteTrace(TraceUserInterface, TraceInfo,
             "Frame cap %u reached with %.1f%% non-black (wanted %.1f%%)",
             (unsigned)m_MaxFrame, Share, m_MinNonBlack);
-        WriteFrame(m_BestPixels.empty() ? Pixels : m_BestPixels, Width, Height);
+        WriteFrame(m_BestPixels.empty() ? Pixels : m_BestPixels, Width, Height, OriginX, OriginY);
     }
 }
 
-bool CSdlRenderWindow::ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height)
+bool CSdlRenderWindow::ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width, int & Height, int & OriginX, int & OriginY)
 {
     GLint Viewport[4] = {0, 0, 0, 0};
     glGetIntegerv(GL_VIEWPORT, Viewport);
     Width = (int)Viewport[2];
     Height = (int)Viewport[3];
+    OriginX = (int)Viewport[0];
+    OriginY = (int)Viewport[1];
     if (Width <= 0 || Height <= 0)
     {
         return false;
@@ -184,7 +186,7 @@ double CSdlRenderWindow::NonBlackShare(const std::vector<uint8_t> & Pixels, int 
     return Total == 0 ? 0.0 : 100.0 * (double)NonBlack / (double)Total;
 }
 
-void CSdlRenderWindow::WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height)
+void CSdlRenderWindow::WriteFrame(const std::vector<uint8_t> & Pixels, int Width, int Height, int OriginX, int OriginY)
 {
     const char * Path = m_DumpPath.c_str();
     FILE * File = fopen(Path, "wb");
@@ -201,7 +203,7 @@ void CSdlRenderWindow::WriteFrame(const std::vector<uint8_t> & Pixels, int Width
     }
     fclose(File);
     m_FrameDumped = true;
-    WriteTrace(TraceUserInterface, TraceInfo, "Wrote frame %u (%dx%d) to %s", (unsigned)m_FrameCount, Width, Height, Path);
+    WriteTrace(TraceUserInterface, TraceInfo, "Wrote frame %u (%dx%d) at (%d,%d) to %s", (unsigned)m_FrameCount, Width, Height, OriginX, OriginY, Path);
 }
 
 void CSdlRenderWindow::SwapWindow()
