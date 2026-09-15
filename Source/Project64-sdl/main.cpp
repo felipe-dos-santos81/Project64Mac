@@ -106,6 +106,7 @@ static PointerState * CreatePointerState(void)
     PointerState * State = (PointerState *)Mapped;
     memset(State, 0, sizeof(PointerState));
     State->LatchedZone.store(-1);
+    State->Quadrant.store(-1);
     char FdText[16];
     snprintf(FdText, sizeof(FdText), "%d", Fd);
     setenv(PJ64_POINTER_ENV, FdText, 1);

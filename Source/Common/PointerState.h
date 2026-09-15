@@ -28,7 +28,7 @@ enum FaceStatus : uint32_t
     FACE_ERROR,
 };
 
-#define POINTER_ZONE_COUNT 13   // 12 outer cells + centre; see PointerLayout.h
+#define POINTER_ZONE_COUNT 14   // 13 panel slots + the game image; see PointerLayout.h
 #define POINTER_LABEL_SIZE 3    // up to two characters plus NUL
 #define POINTER_GESTURE_COUNT 3
 
@@ -57,6 +57,7 @@ struct PointerState
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     // Plugin each GetKeys -> overlay.
     std::atomic<int32_t> LatchedZone;    // POINTER_ZONE_NONE when nothing is held
+    std::atomic<int32_t> Quadrant;       // PointerQuadrant of the stick the game got; -1 neutral
 };
 
 inline void PointerPublish(PointerState * State, const PointerSample & Sample)

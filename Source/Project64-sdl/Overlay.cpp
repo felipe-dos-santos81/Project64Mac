@@ -174,7 +174,7 @@ void OverlayDraw(const PointerState * State, int Width, int Height)
         const float Alpha = Zone == Latched ? kBright : kDim;
         float X0, Y0, X1, Y1;
         PointerZoneRect(Zone, Width, Height, &X0, &Y0, &X1, &Y1);
-        if (Zone != POINTER_ZONE_CENTRE)
+        if (Zone != POINTER_ZONE_GAME)
         {
             DrawRect(X0, Y0, X1, Y1, Alpha);
             DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
