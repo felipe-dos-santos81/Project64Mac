@@ -155,7 +155,9 @@ bool CSdlRenderWindow::ReadBackBuffer(std::vector<uint8_t> & Pixels, int & Width
     Pixels.resize((size_t)Width * (size_t)Height * 3);
     glReadBuffer(GL_BACK);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, Width, Height, GL_RGB, GL_UNSIGNED_BYTE, &Pixels[0]);
+    // From the viewport's origin, not the window's: with the mouse panel the game sits
+    // above an offset and the dump must stay the game alone.
+    glReadPixels(Viewport[0], Viewport[1], Width, Height, GL_RGB, GL_UNSIGNED_BYTE, &Pixels[0]);
     return true;
 }
 

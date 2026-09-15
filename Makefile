@@ -290,7 +290,8 @@ VIDEO_SRC = $(addprefix Project64-video/, 3dmath.cpp Combine.cpp Config.cpp CRC.
   TextureEnhancer/tc-1.1+/dxtn.c TextureEnhancer/tc-1.1+/wrapper.c TextureEnhancer/tc-1.1+/texstore.c)
 AUDIO_SRC = $(addprefix Project64-audio/, AudioMain.cpp AudioSettings.cpp trace.cpp Driver/SoundBase.cpp Driver/SdlAudio.cpp)
 INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
-FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp GameConfig.cpp)
+# InputConfig.cpp is shared with the input plugin: the frontend parses the layout to size its window.
+FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
 
@@ -422,7 +423,7 @@ $(PLUGINS)/Input/Project64-input-sdl.dylib: $(INPUT_OBJS)
 frontend: $(BIN)/Project64 ## [STEP 7] Build the SDL3 frontend executable
 $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-core.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libzlib.a $(LIBDIR)/libsoftfloat.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) -framework OpenGL -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
+	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework OpenGL -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
 
 # ── Stage 7b · Data files ─────────────────────────────────────────────────────
 
@@ -464,7 +465,7 @@ grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid
 	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/grid_selftest.sh "$(rom)"
 
-pointer-selftest: ## Prove the injected-pointer path maps centre to A and top4 to Start (usage: make pointer-selftest rom=/path/to/game.z64)
+pointer-selftest: ## Prove the injected-pointer path maps a game click to A and mid1 to Start (usage: make pointer-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make pointer-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/pointer_selftest.sh "$(rom)"
 

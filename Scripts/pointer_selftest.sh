@@ -1,10 +1,12 @@
 #!/bin/sh
 # Prove the pointer path end to end: the frontend publishes an injected pointer sample, the
-# plugin latches the zone under it with Config/mouse/super_mario_64_usa.yaml loaded, and the N64 bits
-# come out right. Three runs: a click in the centre must set A; a click in top4 must set
-# Start; and with no PJ64_INPUT_YAML at all, a copy of the layout named after the ROM and
-# sitting beside it must be found by the frontend's own lookup (centre must set A again).
-# Design: Docs/superpowers/specs/2026-09-15-mouse-and-face-input-design.md and
+# plugin latches the zone under it with Config/mouse/super_mario_64_usa.yaml loaded, and the
+# N64 bits come out right. Three runs: a click in the game image must set A; a click in the
+# middle of mid1 (192,512, a point that only exists when the window is 640 tall, so this
+# also proves the taller window and the lifted viewport) must set Start; and with no
+# PJ64_INPUT_YAML at all, a copy of the layout named after the ROM and sitting beside it
+# must be found by the frontend's own lookup (the game click must set A again).
+# Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md and
 # Docs/superpowers/specs/2026-09-15-per-game-input-yaml-design.md
 set -eu
 
@@ -21,7 +23,7 @@ unset PJ64_INPUT_YAML
 
 # $1 = inject spec, $2 = expected report tail, $3 = ROM path, $4 = PJ64_INPUT_YAML value,
 # or "" to leave it unset. PJ64_FACE=0 keeps the camera prompt out of a test. The window
-# is 640x480.
+# is 640x640 with a mouse layout: game image 640x480, panel below it.
 one_run() {
     LOG="$(mktemp)"
     if [ -n "$4" ]; then
@@ -48,21 +50,21 @@ one_run() {
 }
 
 FAIL=0
-one_run "320,240,1" "zone=12 a=1 start=0" "$ROM" "$YAML" || FAIL=1
-one_run "600,20,1" "zone=3 a=0 start=1" "$ROM" "$YAML" || FAIL=1
+one_run "320,240,1" "zone=13 a=1 start=0" "$ROM" "$YAML" || FAIL=1
+one_run "192,512,1" "zone=8 a=0 start=1" "$ROM" "$YAML" || FAIL=1
 
 # Third run: symlink the ROM into a temp folder under its own name and extension, with the
 # layout beside it as <base>.yaml. Without the lookup the keyboard mapping loads and a
-# centre click cannot set A, so a=1 here proves the sibling file was used.
+# click in the game image cannot set A, so a=1 here proves the sibling file was used.
 TMP="$(mktemp -d)"
 NAME="$(basename "$ROM")"
 BASE="${NAME%.*}"
 ln -s "$(cd "$(dirname "$ROM")" && pwd)/$NAME" "$TMP/$NAME"
 cp "$YAML" "$TMP/$BASE.yaml"
-one_run "320,240,1" "zone=12 a=1 start=0" "$TMP/$NAME" "" || FAIL=1
+one_run "320,240,1" "zone=13 a=1 start=0" "$TMP/$NAME" "" || FAIL=1
 rm -rf "$TMP"
 
 if [ "$FAIL" -eq 0 ]; then
-    echo "ok: pointer path maps centre to A and top4 to Start, and finds a layout named after the ROM"
+    echo "ok: pointer path maps a game click to A and mid1 to Start, and finds a layout named after the ROM"
 fi
 exit "$FAIL"

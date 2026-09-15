@@ -104,6 +104,12 @@ void ChangeSize()
         g_width = ev_fullscreen ? GetFullScreenResWidth(g_settings->FullScreenRes()) : GetScreenResWidth(g_settings->ScreenRes());
         g_height = ev_fullscreen ? GetFullScreenResHeight(g_settings->FullScreenRes()) : GetScreenResHeight(g_settings->ScreenRes());
     }
+    // The macOS frontend lifts the game above its mouse panel by setting this to the
+    // panel height (Source/Common/PointerLayout.h). The renderer adds g_viewport_offset
+    // to every on-screen viewport, scissor and read-back, as it once did for the Windows
+    // status bar; the render-to-texture paths draw offscreen and ignore it.
+    const char * ViewportOffset = getenv("PJ64_VIEWPORT_OFFSET");
+    g_viewport_offset = (ViewportOffset != nullptr && atoi(ViewportOffset) > 0) ? atoi(ViewportOffset) : 0;
 #endif
     g_scr_res_x = g_res_x = g_width;
     g_scr_res_y = g_res_y = g_height;

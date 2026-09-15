@@ -7,6 +7,7 @@
 #include "GridHost.h"
 #include "FaceTracker.h"
 #include "GameConfig.h"
+#include "InputConfig.h"
 #include <Project64-core/AppInit.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
@@ -16,6 +17,7 @@
 #include <SDL3/SDL.h>
 #include <OpenGL/OpenGL.h>
 #include <Common/PointerState.h>
+#include <Common/PointerLayout.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/mman.h>
@@ -165,6 +167,18 @@ static FaceMode FaceModeFromEnv(void)
     return strcmp(Env, "0") == 0 ? FaceMode::Off : FaceMode::On;
 }
 
+// Whether the layout the plugin is about to load binds the pointer. The frontend reads the
+// same file with the same code, quietly (the plugin reports a bad file), because the
+// window and the video plugin's viewport must be sized before either exists. The default
+// path is the frontend's own: the plugin's DefaultConfigPath resolves from its dylib.
+static bool LayoutUsesPointer(const std::string & ExeDir)
+{
+    const char * Env = getenv("PJ64_INPUT_YAML");
+    const std::string Path = (Env != nullptr && Env[0] != '\0') ? std::string(Env) : ExeDir + "/Config/input.yaml";
+    InputConfig & Config = InputConfig::Get();
+    return Config.Load(Path.c_str(), true) && Config.UsesPointer();
+}
+
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).
 static void ConfigurePlugins(void)
 {
@@ -236,6 +250,23 @@ int main(int argc, char ** argv)
             setenv("PJ64_INPUT_YAML", Layout, 1);
             fprintf(stderr, "input layout: %s\n", Layout);
         }
+    }
+
+    // A layout that uses the pointer gets the panel: the window grows by its height and the
+    // video plugin lifts the game by the same amount, so the game renders unscaled at the
+    // top (Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md). Tiles never
+    // get one. The variable is cleared otherwise, so a value inherited from the caller
+    // cannot lift a keyboard run.
+    if (!TileMode && LayoutUsesPointer(ExecutableDirectory()))
+    {
+        TileRect.h += POINTER_PANEL_HEIGHT;
+        char Offset[16];
+        snprintf(Offset, sizeof(Offset), "%d", POINTER_PANEL_HEIGHT);
+        setenv("PJ64_VIEWPORT_OFFSET", Offset, 1);
+    }
+    else
+    {
+        unsetenv("PJ64_VIEWPORT_OFFSET");
     }
 
     SDL_SetHint(SDL_HINT_MOUSE_AUTO_CAPTURE, "0");
