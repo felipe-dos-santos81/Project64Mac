@@ -179,3 +179,13 @@ is to regenerate and commit, and the check's failure message says so.
 - The drift check pins the pictures to the SDL build. That is the intended trade: a
   false failure after a Homebrew upgrade costs one regenerate, a silently stale screenshot
   costs a reader's trust.
+
+## Changed during implementation
+
+This section records where the shipped code diverged from the text above. The text above
+is left as originally written; this is appended, not a correction of it.
+
+- Stop `06-zone.png` is taken after pressing `4` a second time, not straight after the
+  click. `CaptureZone` leaves zone mode the moment a slot is taken, so the panel is no
+  longer drawn then; pressing `4` again redraws it with the taken slot labelled, which is
+  the picture Part 2 describes. Escape then leaves the mode before the tour moves on.

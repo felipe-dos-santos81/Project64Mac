@@ -19,7 +19,7 @@ pulled back in by accident.
 ```sh
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
-make unit-test                           # every headless unit test below
+make unit-test                           # every headless unit test below, then the screenshot drift check
 make input-config-test                   # parser tests for the YAML input mapping
 make pointer-layout-test                 # geometry tests for the mouse panel and stick
 make face-gesture-test                   # classifier tests for the face gestures
@@ -28,6 +28,8 @@ make wizard-draft-test                   # tests for the wizard's draft and the 
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
 make wizard-selftest                     # the wizard's screens, driven by synthetic events
+make wizard-screenshots                  # render the user guide's wizard pictures into Docs/img/wizard
+make wizard-screenshots-check            # fail if those pictures no longer match what the wizard draws
 make run-wizard                          # launch the binding wizard window
 make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
 make run rom=Roms/game.z64
@@ -73,6 +75,11 @@ which must report the strip's key pattern. It needs a window server and takes ~4
 every ROM in a folder, in parallel, and reports each as a screenshot or a black/hang/crash
 failure — the broad-compatibility sweep version of the single-ROM check above.
 
+Touching `Source/Project64-wizard/Screens.cpp` changes the pictures in `Docs/UserGuide.md`.
+Run `make wizard-screenshots` and commit `Docs/img/wizard/` with the change, or
+`make unit-test` fails on the drift check. The check compares bytes, so a Homebrew SDL
+upgrade that changes the debug font can fail it too; regenerate and commit in that case.
+
 ## Architecture
 
 **Four dylibs and a frontend across a C ABI.** The core is a static library linked into
@@ -99,6 +106,12 @@ test it headlessly; `Screens.cpp` turns one event into one call on the draft, wh
 `--selftest <path>` can drive the real screens with synthetic events — a flag on the
 binary itself, which `Scripts/wizard_selftest.sh` (what `make wizard-selftest` runs) calls
 but does not own.
+
+`--screenshots <dir>` (`Screenshots.cpp`) walks a second fixed tour through the same
+screens and writes one PNG per stop through `SDL_CreateSoftwareRenderer` and
+`SDL_SavePNG`, with no window and no `SDL_Init`; the user guide references those eleven
+files by name and `Scripts/wizard_screenshots_check.sh` compares a fresh render with the
+committed `Docs/img/wizard/` byte for byte.
 
 **Grid mode runs one process per ROM.** `Source/Project64-sdl/GridHost.cpp` turns
 `--grid a b c` into an orchestrator that lays out 4:3 tiles, spawns
@@ -239,6 +252,13 @@ Only the `Aarch64` backend directory survives.
   why `WizardDraft` tracks explicit-versus-inherited instead of just writing all fifteen
   lines, and why loading a base reads the file twice — `InputConfig` merges over the
   defaults and cannot say which controls a file named.
+- **The screenshot tour must stay machine-independent.** The save screen's first choice and
+  every base row but the first print `SDL_GetBasePath()`, which is the checkout's absolute
+  path; a tour stop that shows either bakes one machine's path into a committed PNG and the
+  drift check fails everywhere else. Typed paths in the tour live under `/Users/you/`.
+- **The user guide's tables are copied facts.** `Docs/UserGuide.md` lists the built-in
+  bindings and every `PJ64_*` variable by hand. A change to `DefaultBindings` in
+  `InputConfig.cpp` or a new `getenv` needs a matching guide edit; nothing checks it.
 
 ## Design docs
 
