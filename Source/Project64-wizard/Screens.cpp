@@ -350,12 +350,22 @@ static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
         SDL_RenderFillRect(Renderer, &R);
 
         // Whatever the draft already puts in this slot, so the choice is made in context.
+        // The same two-character label the game's own overlay draws here, not the full
+        // control name, which would spill across neighbouring slots. Stick has no overlay
+        // label, so it falls back to the first two characters of its full name ("St").
         for (int i = 0; i < (int)N64Control::Count; i++)
         {
             const std::vector<Binding> & B = Draft.Bindings((N64Control)i);
             if (B.empty() || B[0].kind != Binding::Kind::Zone || B[0].code != Zone) continue;
+            const char * Label = InputConfig::ControlLabel((N64Control)i);
+            char Short[3];
+            if (Label[0] == '\0')
+            {
+                snprintf(Short, sizeof(Short), "%.2s", WizardControlName((N64Control)i));
+                Label = Short;
+            }
             Colour(Renderer, false);
-            WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, WizardControlName((N64Control)i));
+            WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, Label);
             break;
         }
     }
@@ -369,7 +379,7 @@ static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dr
         snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
         return true;
     }
-    if (Event.type != SDL_EVENT_MOUSE_BUTTON_DOWN) return false;
+    if (Event.type != SDL_EVENT_MOUSE_BUTTON_DOWN || Event.button.button != SDL_BUTTON_LEFT) return false;
     const int Zone = ZoneAtPoint(Event.button.x, Event.button.y);
     if (Zone == POINTER_ZONE_NONE)
     {
@@ -532,10 +542,14 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
         WizardText(Renderer, 24.0f, 228.0f, kBody, "5  a face gesture");
     }
     if (Ui.Mode == WIZARD_MODE_ZONE) DrawPanel(Renderer, Draft);
+    // DrawPanel leaves the draw colour wherever its last slot left it, so restore ours
+    // before drawing text of our own.
+    Colour(Renderer, false);
     // Split across two lines: at kBody scale each glyph advances 16px, and the single-line
-    // version from the design ran to 912px in an 800px window.
-    WizardText(Renderer, 24.0f, 268.0f, kBody, "Enter keep   Backspace back");
-    WizardText(Renderer, 24.0f, 290.0f, kBody, "Delete inherit   Esc review");
+    // version from the design ran to 912px in an 800px window. Kept on the grid the "1".."5"
+    // lines use (22px apart) and above y=300, where the panel's top edge begins.
+    WizardText(Renderer, 24.0f, 250.0f, kBody, "Enter keep   Backspace back");
+    WizardText(Renderer, 24.0f, 272.0f, kBody, "Delete inherit   Esc review");
 }
 
 void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui,
