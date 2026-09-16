@@ -189,3 +189,16 @@ is left as originally written; this is appended, not a correction of it.
   click. `CaptureZone` leaves zone mode the moment a slot is taken, so the panel is no
   longer drawn then; pressing `4` again redraws it with the taken slot labelled, which is
   the picture Part 2 describes. Escape then leaves the mode before the tour moves on.
+- Stop `07-gestures.png` shows the tracker's status as text, not a dot: `FaceStatusText`
+  (`Source/Project64-wizard/Screens.cpp:620`) renders `FACE_TRACKING` as the word
+  "tracking" on its own status line, below the gesture rows. There is no separate hollow,
+  filled or crossed dot on this screen; Part 2's "the tracker dot filled" describes the
+  panel overlay drawn during play (section 8 of the guide), not this picture.
+- The SDL 3.4 floor added to the `deps` stage (`Makefile:361-365`) is not a hard gate under
+  a parallel build. `all`'s prerequisite list is `deps common core rsp video audio input
+  frontend wizard config` (`Makefile:468`), and under `make -j8 all` an unrelated
+  prerequisite can run before `deps` finishes checking `pkg-config --atleast-version=3.4
+  sdl3`. `wizard`, `run-wizard`, `unit-test` and `wizard-screenshots` also depend only on
+  the wizard binary, never on `deps`, so building any of them directly skips the check
+  entirely. An SDL older than 3.4 can therefore surface first as an `SDL_SavePNG` compile
+  error in `Screenshots.cpp` rather than as the intended `deps` message.

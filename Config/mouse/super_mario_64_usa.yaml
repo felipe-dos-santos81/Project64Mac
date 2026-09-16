@@ -1,6 +1,6 @@
 # Mouse-and-face layout for Super Mario 64. Select with
 #   make run rom=... input=Config/mouse/super_mario_64_usa.yaml face=1
-# or PJ64_INPUT_YAML. See README "Playing with a mouse".
+# or PJ64_INPUT_YAML. See Docs/UserGuide.md section 7, "Playing with a mouse".
 #
 # The game image is the stick and the zone "game" (a click anywhere in it). The panel
 # below holds the slots: pad-up, pad-down, pad-left, pad-right (left cross), c-up,

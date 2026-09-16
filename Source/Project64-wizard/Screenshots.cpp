@@ -96,6 +96,7 @@ void Walk(Tour & T)
 
     // 03: 1 arms key capture.
     Send(T, KeyEvent(SDL_SCANCODE_1));
+    if (!Expect(T, T.Ui.Mode == WIZARD_MODE_KEY, "1 did not arm key capture")) return;
     Capture(T, "03-key-armed.png", 0, FACE_OFF);
 
     // 04: X is taken as it comes.
@@ -120,6 +121,7 @@ void Walk(Tour & T)
     Send(T, ClickEvent(120.0f, 556.0f));
     if (!Expect(T, T.Draft.Describe(N64Control::Z) == "zone mid1", "the click did not take mid1")) return;
     Send(T, KeyEvent(SDL_SCANCODE_4));
+    if (!Expect(T, T.Ui.Mode == WIZARD_MODE_ZONE, "the second 4 did not reopen zone mode")) return;
     Capture(T, "06-zone.png", 0, FACE_OFF);
     Send(T, KeyEvent(SDL_SCANCODE_ESCAPE));
     Send(T, KeyEvent(SDL_SCANCODE_RETURN));  // Z -> Start
@@ -128,6 +130,7 @@ void Walk(Tour & T)
     // 07: on Start, 5 opens the gesture list. The tracker never runs here; the draw call is
     // told a face is tracked and mouth-open is firing, so that row lights with "<- now".
     Send(T, KeyEvent(SDL_SCANCODE_5), POINTER_GESTURE_MOUTH_OPEN);
+    if (!Expect(T, T.Ui.Mode == WIZARD_MODE_GESTURE, "5 did not open the gesture list")) return;
     Capture(T, "07-gestures.png", POINTER_GESTURE_MOUTH_OPEN, FACE_TRACKING);
     Send(T, KeyEvent(SDL_SCANCODE_SPACE), POINTER_GESTURE_MOUTH_OPEN);  // binds what fires
     if (!Expect(T, T.Draft.Describe(N64Control::Start) == "gesture mouth-open (Mo)",

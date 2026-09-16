@@ -35,8 +35,9 @@ and what to do when something goes wrong.
 
 ## What works
 
-Super Mario 64 renders, plays audio and runs at full speed. Keyboard, gamepad, a
-one-button mouse with optional face gestures, and the face alone all work as controllers.
+Super Mario 64 renders, plays audio and runs at full speed. Keyboard, gamepad (after
+swapping in the commented block in `Config/input.yaml`), a one-button mouse with optional
+face gestures, and the face alone all work as controllers.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is no

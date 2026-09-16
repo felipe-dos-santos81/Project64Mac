@@ -78,7 +78,9 @@ The built-in controls, keyboard and gamepad at once:
 | D-pad up, down, left, right | I, K, J, L | D-pad |
 | Control stick | Arrow keys | Left stick |
 
-A gamepad is picked up when it is plugged in, before or after launch.
+A gamepad is picked up when it is plugged in, before or after launch. That said, a fresh
+build's shipped `Config/input.yaml` names every control with a key only, so the gamepad
+column does nothing until you edit that file — section 5 shows how.
 
 Section 5 changes the table by editing a file; section 6 builds that file for you.
 
@@ -92,7 +94,7 @@ full speed with sound.
 make grid roms="Roms/a.z64 Roms/b.z64 Roms/c.z64"
 ```
 
-or `./Bin/macOS/Project64 --grid a.z64 b.z64 …`. One to sixteen games open side by side in
+or `./Bin/macOS/Project64 --grid Roms/a.z64 Roms/b.z64 …`. One to sixteen games open side by side in
 a near-square grid, each at the largest 4:3 size that fits its cell, all muted. A small
 always-on-top strip along the bottom owns the keyboard and sends every key to every game
 at once; the tiles never take focus. Escape on the strip, or closing it, quits everything.
@@ -128,8 +130,8 @@ The forms: `{key: <name>}` with an SDL key name such as `X`, `Return`, `Space`, 
 Sections 7 and 8 add the forms for the mouse panel, face gestures and head pose.
 
 A file with a mistake is ignored whole and the built-in table is used instead. The
-emulator prints one line on stderr starting `input:` that names the file, the line and
-the problem.
+emulator prints one line on stderr starting `input:` that names the file and the problem,
+and, where it can, the line.
 
 `PJ64_INPUT_YAML=/path/to/file.yaml` in the environment overrides the file for one run:
 
@@ -187,9 +189,9 @@ saved, shown or logged.
 
 ![The gesture list with mouth-open lit and the tracker reporting "tracking"](img/wizard/07-gestures.png)
 
-**The stick.** It has one mode, the six forms: either gamepad stick, the mouse, your head
-in analog or digital, or four keys captured one after the other. Pushing a gamepad stick
-picks it directly.
+**The stick.** Press `1` to open its one mode, the six forms: either gamepad stick, the
+mouse, your head in analog or digital, or four keys captured one after the other. Pushing a
+gamepad stick picks it directly.
 
 ![The six stick forms, head-digital highlighted](img/wizard/08-stick-forms.png)
 
@@ -209,7 +211,8 @@ where the file will go; Enter again writes it.
 Two destinations get a warning and need a second Enter. A file with a mouse, face or head
 binding aimed at `Config/input.yaml` would replace the keyboard table that grid mode
 depends on. A file aimed at `Config/mouse/` or `Config/face/` lands in a folder every build
-deletes and recopies.
+deletes and recopies. The warning names where the *shipped* layouts live; your own belongs
+beside the ROM instead (destination `2`, section 9), not in either of those folders.
 
 ![The warning for a mouse or face binding aimed at Config/input.yaml](img/wizard/11-save-warning.png)
 
@@ -249,8 +252,8 @@ the arrows); the panel always draws. The cursor is never captured.
 In a layout file the forms are `{zone: <name>}` for a slot and `{stick: pointer}` for the
 stick. The slots are `game`, `pad-up`, `pad-down`, `pad-left`, `pad-right`, `c-up`,
 `c-down`, `c-left`, `c-right` and `mid1` to `mid5`; any control can take any slot. The
-shipped layouts also move three buttons onto face gestures, which is why the camera
-starts (next section).
+shipped layouts also move three buttons onto face gestures — `eyebrows`, `head-left` and
+`head-right` in all three — which is why the camera starts (next section).
 
 ## 8. Playing with your face
 
@@ -328,7 +331,8 @@ the viewport origin.
 the binary. `make all` copies them; a hand-rolled build that skipped `make config` did not.
 
 **"input: … using built-in defaults" on stderr.** The mapping file was rejected whole. The
-line names the file, the line number and the reason. Fix it, or let the wizard write it.
+line names the file and the reason, and, where it can, the line number. Fix it, or let the
+wizard write it.
 
 **The game sits at the bottom of a tall window, and there is no panel.** The video plugin
 is older than the emulator and ignores the lift the emulator asks for. Rebuild with
@@ -370,5 +374,5 @@ hidden.
 | `make grid roms="…"` | Run one to sixteen games side by side. |
 | `make run-wizard` | Open the binding wizard. |
 | `make wizard-screenshots` | Re-render the pictures in this guide. |
-| `make unit-test` | Every headless test, including a check that those pictures are current. |
+| `make unit-test` | Every headless test, including a check that those pictures are current. If only that check fails, right after a Homebrew SDL upgrade, the wizard itself still works fine — the committed pictures are just stale for a contributor to regenerate. |
 | `make clean` | Remove the build and `Bin/macOS`, including your saves in `Bin/macOS/Save/` and your edited `Config/input.yaml`. |

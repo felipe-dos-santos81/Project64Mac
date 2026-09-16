@@ -65,8 +65,8 @@ PJ64_FRAME_DUMP=/tmp/frame.ppm PJ64_FRAME_DUMP_AT=400 \
 
 That writes one 640x480 binary PPM from the back buffer. A healthy Super Mario 64 boot
 measures ~89% non-black pixels; below 80% something broke. `PJ64_TRACE` raises trace
-levels (see README). The core and each plugin hold their own trace state, so one value
-covers all of them and each ignores names it does not know.
+levels (see `Docs/UserGuide.md` section 11). The core and each plugin hold their own trace
+state, so one value covers all of them and each ignores names it does not know.
 
 `make grid-selftest rom=…` is the grid's end-to-end proof: one ROM in four tiles, each of
 which must report the strip's key pattern. It needs a window server and takes ~40 s.
@@ -76,9 +76,15 @@ every ROM in a folder, in parallel, and reports each as a screenshot or a black/
 failure — the broad-compatibility sweep version of the single-ROM check above.
 
 Touching `Source/Project64-wizard/Screens.cpp` changes the pictures in `Docs/UserGuide.md`.
-Run `make wizard-screenshots` and commit `Docs/img/wizard/` with the change, or
-`make unit-test` fails on the drift check. The check compares bytes, so a Homebrew SDL
-upgrade that changes the debug font can fail it too; regenerate and commit in that case.
+So can touching what it draws from without touching that file itself: `DefaultBindings` in
+`Source/Project64-sdl/InputConfig.cpp:160` sets what an inherited binding reads as;
+`WizardControlName` and `WizardDraft::Describe` in `Source/Project64-wizard/WizardDraft.cpp`
+turn a control and its binding into the "now:" line and the review; and `PointerGestureName`
+and `PointerGestureTag` in `Source/Common/PointerState.h` label the gesture list. Any of
+those can change pictures 02, 07, 08 or 09. Run `make wizard-screenshots` and commit
+`Docs/img/wizard/` with the change, or `make unit-test` fails on the drift check. The check
+compares bytes, so a Homebrew SDL upgrade that changes the debug font can fail it too;
+regenerate and commit in that case.
 
 ## Architecture
 
@@ -252,13 +258,22 @@ Only the `Aarch64` backend directory survives.
   why `WizardDraft` tracks explicit-versus-inherited instead of just writing all fifteen
   lines, and why loading a base reads the file twice — `InputConfig` merges over the
   defaults and cannot say which controls a file named.
-- **The screenshot tour must stay machine-independent.** The save screen's first choice and
-  every base row but the first print `SDL_GetBasePath()`, which is the checkout's absolute
-  path; a tour stop that shows either bakes one machine's path into a committed PNG and the
-  drift check fails everywhere else. Typed paths in the tour live under `/Users/you/`.
+- **The screenshot tour must stay machine-independent.** The save screen's first choice
+  prints `SDL_GetBasePath()` — the checkout's absolute path — as the "to:" line. The base
+  screen's shipped-layout rows (every row but the first and the last; the last is "a file I
+  will type the path of", not a layout) print no path on screen, but choosing one resolves
+  its file through `SDL_GetBasePath()` to load it, and that resolved path only exists where
+  `make config` has run. A tour stop that shows the save screen's first choice, or picks a
+  shipped-layout row, bakes one machine's state into a committed PNG and the drift check
+  fails everywhere else; the tour only ever picks base row 0. Typed paths in the tour live
+  under `/Users/you/`.
 - **The user guide's tables are copied facts.** `Docs/UserGuide.md` lists the built-in
-  bindings and every `PJ64_*` variable by hand. A change to `DefaultBindings` in
-  `InputConfig.cpp` or a new `getenv` needs a matching guide edit; nothing checks it.
+  bindings (section 3) and every `PJ64_*` variable (section 11) by hand. A change to
+  `DefaultBindings` in `Source/Project64-sdl/InputConfig.cpp:160` does fail
+  `make wizard-screenshots-check` — it changes what pictures 02, 07, 08 or 09 show — but that
+  only catches the wizard's own on-screen text. Nothing checks the guide's written-out
+  markdown table, and a new `getenv` is invisible to the check entirely: both still need a
+  matching guide edit by hand.
 
 ## Design docs
 

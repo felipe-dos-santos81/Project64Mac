@@ -30,7 +30,7 @@ done
 for f in "$TMP"/*.png "$DOCS"/*.png; do
     case " $STOPS " in
         *" $(basename "$f") "*) ;;
-        *) echo "wizard-screenshots-check: $f is not in the stop list" >&2; exit 1 ;;
+        *) echo "wizard-screenshots-check: $f is not in the stop list; make wizard-screenshots will not remove it, so git rm the stray file, or add it to the stop list, the tour (Screenshots.cpp) and the guide" >&2; exit 1 ;;
     esac
 done
 echo "ok: wizard screenshots"

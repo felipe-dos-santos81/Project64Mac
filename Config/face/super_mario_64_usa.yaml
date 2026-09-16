@@ -1,7 +1,8 @@
 # Face-only layout for Super Mario 64. Select with
 #   make run rom=... input=Config/face/super_mario_64_usa.yaml
-# Head pose is the stick; every button here is a held facial gesture. See README
-# "Playing with your face". Controls not listed keep their keyboard keys.
+# Head pose is the stick; every button here is a held facial gesture. See
+# Docs/UserGuide.md section 8, "Playing with your face". Controls not listed keep their
+# keyboard keys.
 
 bindings:
   Stick:     {stick: head}
