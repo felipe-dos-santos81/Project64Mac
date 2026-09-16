@@ -15,8 +15,9 @@
 static const int kBody = 2;
 static const int kHead = 3;
 static const float kLine = 22.0f;
-// The window is 800x640 (see main.cpp); screens are laid out for this fixed size rather
-// than the live, resizable window size.
+// The window is 800x640 and not resizable (see main.cpp, which drops SDL_WINDOW_RESIZABLE
+// for this reason); screens are laid out for that fixed size, and every WizardTextFit budget
+// below is derived from it rather than from the live window size.
 static const float kWindowWidth = 800.0f;
 static const float kWindowHeight = 640.0f;
 // Where WizardDrawScreen (bottom of this file) draws Ui.Message: (float)H - 32.0f, with H
@@ -110,7 +111,7 @@ static const char * BaseRowLabel(int Row)
 static void BasePath(int Row, char * Out, size_t Size)
 {
     const char * Dir = SDL_GetBasePath();
-    snprintf(Out, Size, "%s%s", Dir != NULL ? Dir : "", WizardBaseFile(Row - 1));
+    snprintf(Out, Size, "%s%s", Dir != nullptr ? Dir : "", WizardBaseFile(Row - 1));
 }
 
 // Every path onto the control screen lands here, so List (whatever list the base screen
@@ -148,6 +149,12 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
         if (!Draft->LoadBase(Path))
         {
             snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+            // The screen gets 48 glyphs; stderr gets the whole thing, with the path the
+            // message has no room for. One line, and never a non-zero exit: a base that will
+            // not load is something the player picks again, not a reason to quit. (This is an
+            // fprintf, not an SDL device call, so it does not break --selftest's headless
+            // drive of these same handlers.)
+            fprintf(stderr, "wizard: base %s: %s\n", Path, Draft->Error());
             return;
         }
         snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->List - 1));
@@ -161,6 +168,9 @@ static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
     if (!Draft->LoadBase(Ui->Typed))
     {
         snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+        // Same one line as ChooseBase above, and for the typed path it matters more: a typo
+        // is easiest to spot against the path as it was actually read.
+        fprintf(stderr, "wizard: base %s: %s\n", Ui->Typed, Draft->Error());
         return;
     }
     snprintf(Ui->Base, sizeof(Ui->Base), "%s", Ui->Typed);
@@ -346,6 +356,35 @@ static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
 
 static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
+    // The design's Part 3: "{stick: left} and {stick: right} (chosen, or captured by moving a
+    // gamepad stick)". Pushing a stick is the obvious way to say which stick you mean, and
+    // until now the list could only be driven by the arrow keys. A decisive push moves the
+    // highlight onto that stick's row and takes it, exactly as if the player had arrowed there
+    // and pressed Enter — hence going through Ui->List and ChooseStickForm rather than calling
+    // SetStickWhole directly, so a row and its setter still have one place that pairs them.
+    if (Event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
+    {
+        // Gated on HasGamepad the same way modes 2 and 3 are. main.cpp sets it from the pad it
+        // has open; this file reads an event and never asks a device anything, which is what
+        // lets --selftest drive these handlers with no SDL at all.
+        if (!Ui->HasGamepad) return true;
+        const int Axis = (int)Event.gaxis.axis;
+        const bool LeftStick = Axis == SDL_GAMEPAD_AXIS_LEFTX || Axis == SDL_GAMEPAD_AXIS_LEFTY;
+        const bool RightStick = Axis == SDL_GAMEPAD_AXIS_RIGHTX || Axis == SDL_GAMEPAD_AXIS_RIGHTY;
+        // A trigger is an axis too, and neither stick: it must not pick a row.
+        if (!LeftStick && !RightStick) return true;
+        // kStickThreshold is the plugin's own STICK_THRESHOLD (PluginInput.cpp), reused rather
+        // than invented so the wizard and the game agree on what counts as pushed — and so a
+        // resting or slightly drifting stick, which sits well inside it, never picks a form the
+        // player did not ask for.
+        if (Event.gaxis.value <= kStickThreshold && Event.gaxis.value >= -kStickThreshold)
+        {
+            return true;
+        }
+        Ui->List = LeftStick ? 0 : 1;
+        ChooseStickForm(Ui, Draft);
+        return true;
+    }
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
     switch (Event.key.scancode)
     {
@@ -600,7 +639,12 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
     {
     case SDL_SCANCODE_1:
         if (IsStick) { Ui->Mode = WIZARD_MODE_STICK; Ui->List = 0;
-                       snprintf(Ui->Message, sizeof(Ui->Message), "Pick a form, Enter to take it."); }
+                       // With a pad open, CaptureStickForm also takes a stick push as the
+                       // choice, so the instruction says so — an undiscoverable shortcut is
+                       // not the one the design asked for. Both strings fit 48 glyphs whole.
+                       snprintf(Ui->Message, sizeof(Ui->Message),
+                                Ui->HasGamepad ? "Pick a form and Enter, or push a stick."
+                                               : "Pick a form, Enter to take it."); }
         else { Ui->Mode = WIZARD_MODE_KEY;
                snprintf(Ui->Message, sizeof(Ui->Message), "Press any key. It is taken as it comes."); }
         break;
@@ -692,6 +736,15 @@ static void EnterReview(WizardUi * Ui, WizardDraft * Draft)
     else
     {
         snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+        // The third of the spec's three failures: a round-trip the reader rejects. One line,
+        // the reader's own words, and no change to the exit code. Draft->Error() is that line
+        // with Validate's temp path already cut out of it, so it normally begins with the
+        // ":<line>:<col>:" that followed the path; the leading colon is skipped so this does
+        // not read "mapping: :4:14: ...", and a reader message that never named a file (and
+        // so has no leading colon) prints unchanged.
+        const char * Err = Draft->Error();
+        fprintf(stderr, "wizard: the reader rejected this mapping%s%s\n",
+                Err[0] == ':' ? " at " : ": ", Err[0] == ':' ? Err + 1 : Err);
     }
 }
 
@@ -708,6 +761,7 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
         Ui->Screen = WIZARD_SAVE;
         Ui->SaveChoice = 0;
         Ui->ConfirmClobber = false;
+        Ui->ConfirmDefault = false;
         snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
         break;
     case SDL_SCANCODE_BACKSPACE:
@@ -820,7 +874,7 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
     if (Ui.SaveChoice == 0)
     {
         const char * Dir = SDL_GetBasePath();
-        snprintf(Out, Size, "%sConfig/input.yaml", Dir != NULL ? Dir : "");
+        snprintf(Out, Size, "%sConfig/input.yaml", Dir != nullptr ? Dir : "");
         return;
     }
     if (Ui.SaveChoice == 1)
@@ -839,7 +893,7 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
         snprintf(Out, Size, "%s", Ui.Typed);
         char * Dot = strrchr(Out, '.');
         char * Slash = strrchr(Out, '/');
-        if (Dot != NULL && (Slash == NULL || Dot > Slash)) *Dot = '\0';
+        if (Dot != nullptr && (Slash == nullptr || Dot > Slash)) *Dot = '\0';
         const size_t Len = strlen(Out);
         if (Len == 0 || Out[Len - 1] == '/')
         {
@@ -862,9 +916,54 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
 // second, entirely plausible case.
 static bool IsClobbered(const char * Path)
 {
-    if (strstr(Path, "/Config/mouse/") != NULL || strstr(Path, "/Config/face/") != NULL) return true;
+    if (strstr(Path, "/Config/mouse/") != nullptr || strstr(Path, "/Config/face/") != nullptr) return true;
     return strncmp(Path, "Config/mouse/", strlen("Config/mouse/")) == 0 ||
            strncmp(Path, "Config/face/", strlen("Config/face/")) == 0;
+}
+
+// The default mapping, which AGENTS.md's traps require to stay keyboard-active. Matched as
+// a suffix, both of an absolute path (SavePath's choice 1 builds SDL_GetBasePath() plus
+// "Config/input.yaml") and of a path typed bare from Bin/macOS, the same two shapes
+// IsClobbered above matches. Suffix, not substring: "Config/input.yaml.bak" and
+// "Config/mouse/input.yaml" are other files and must not warn.
+static bool IsDefaultInput(const char * Path)
+{
+    static const char kTail[] = "/Config/input.yaml";
+    const size_t TailLen = sizeof(kTail) - 1;
+    const size_t Len = strlen(Path);
+    if (Len >= TailLen && strcmp(Path + (Len - TailLen), kTail) == 0) return true;
+    return strcmp(Path, "Config/input.yaml") == 0;
+}
+
+// True when the draft explicitly binds anything the keyboard and gamepad alone cannot
+// produce. Binding::Kind (Source/Project64-sdl/InputConfig.h) has nine values; Key, Button,
+// Axis, Stick (a gamepad stick, {stick: left} or {stick: right}) and Keys (four keyboard
+// keys) are the keyboard-and-gamepad ones. The other four are exactly the kinds this looks
+// for: Zone is a mouse-panel slot, Face a camera gesture, Pointer the Stick form
+// {stick: pointer}, and HeadStick the Stick forms {stick: head} and {stick: head-digital}
+// (code 0 and 1) — every one of them needs a mouse or the camera to be usable at all.
+//
+// Inherited controls are skipped because Emit never writes them, so they cannot be what
+// lands in the file. Every binding of an explicit control is checked, not just the first:
+// the wizard's own setters always produce exactly one, but LoadBase copies whatever the
+// reader resolved, and a warning that silently looked at half a control would be worse
+// than none.
+static bool HasNonKeyboardBinding(const WizardDraft & Draft)
+{
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (!Draft.Explicit((N64Control)i)) continue;
+        const std::vector<Binding> & B = Draft.Bindings((N64Control)i);
+        for (size_t b = 0; b < B.size(); b++)
+        {
+            if (B[b].kind == Binding::Kind::Zone || B[b].kind == Binding::Kind::Face ||
+                B[b].kind == Binding::Kind::Pointer || B[b].kind == Binding::Kind::HeadStick)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static void DoSave(WizardUi * Ui, WizardDraft * Draft)
@@ -886,9 +985,23 @@ static void DoSave(WizardUi * Ui, WizardDraft * Draft)
                  "make deletes and recopies this. Enter again.");
         return;
     }
+    // The second warning, independent of the clobber one above and never a refusal: the
+    // reader accepts such a file, so the wizard must not block a player who means it. Its own
+    // flag, and its own Enter — a path that somehow tripped both warnings asks twice, and
+    // neither confirmation counts as the other. DrawSave spells out why and where these
+    // layouts belong while ConfirmDefault is set; this line has 48 glyphs to flag it and say
+    // what the next key does.
+    if (IsDefaultInput(Path) && HasNonKeyboardBinding(*Draft) && !Ui->ConfirmDefault)
+    {
+        Ui->ConfirmDefault = true;
+        snprintf(Ui->Message, sizeof(Ui->Message),
+                 "Mouse/face here breaks the grid. Enter again.");
+        return;
+    }
     if (!Draft->Save(Path, Ui->Base))
     {
         snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+        fprintf(stderr, "wizard: %s\n", Draft->Error());
         return;
     }
     // Path is not folded in here: it can run to 116+ characters (SDL_GetBasePath() plus
@@ -916,11 +1029,13 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     case SDL_SCANCODE_1:
         Ui->SaveChoice = 0;
         Ui->ConfirmClobber = false;
+        Ui->ConfirmDefault = false;
         break;
     case SDL_SCANCODE_2:
     case SDL_SCANCODE_3:
         Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? 1 : 2;
         Ui->ConfirmClobber = false;
+        Ui->ConfirmDefault = false;
         Ui->Typing = true;
         Ui->Typed[0] = '\0';
         snprintf(Ui->Message, sizeof(Ui->Message),
@@ -976,6 +1091,27 @@ static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardD
         // caret has to stay visible, or the player loses all on-screen feedback for what they
         // are typing once the path runs past about 42 characters.
         WizardTextFitTail(Renderer, 24.0f, 188.0f, kBody, Line, kWindowWidth - 24.0f);
+    }
+    if (Ui.ConfirmDefault)
+    {
+        // The why and the where behind DoSave's warning line. The message line at the bottom
+        // of the screen has 48 glyphs, which is enough to flag the problem and say what the
+        // next key does but not to teach the rule, so the rule lives here, on the screen the
+        // player is already looking at, and only while the confirmation is pending. Each line
+        // is hand-wrapped to the same 48-glyph budget a line at x=24 gets, and sits in the
+        // empty band between the path lines above and the "Escape quits." line below.
+        Colour(Renderer, true);
+        static const char * const kWhy[4] = {
+            "Config/input.yaml must stay keyboard-active:",
+            "a mouse or face binding replaces the keyboard",
+            "one and breaks the grid's key broadcast. Those",
+            "layouts live in Config/mouse/ and Config/face/.",
+        };
+        for (int Row = 0; Row < 4; Row++)
+        {
+            WizardTextFit(Renderer, 24.0f, 240.0f + kLine * (float)Row, kBody, kWhy[Row],
+                          kWindowWidth - 24.0f);
+        }
     }
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, kMessageY - kLine, kBody, "Escape quits.");
@@ -1084,6 +1220,9 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
 void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui,
                       const WizardDraft & Draft, uint32_t Gestures, uint32_t Face)
 {
+    // W is unused on purpose: the window is not resizable (main.cpp), so the live width is
+    // always kWindowWidth, and every budget below is taken from that constant instead. H is
+    // used only to pin the message line to the bottom.
     (void)W;
     if (Ui.Screen == WIZARD_BASE) DrawBase(Renderer, Ui);
     else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft, Gestures, Face);

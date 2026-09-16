@@ -23,6 +23,7 @@ make input-config-test                   # parser tests for the YAML input mappi
 make pointer-layout-test                 # geometry tests for the mouse panel and stick
 make face-gesture-test                   # classifier tests for the face gestures
 make game-config-test                    # lookup tests for the per-game YAML
+make wizard-draft-test                   # tests for the wizard's draft and the YAML it writes
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
 make wizard-selftest                     # the wizard's screens, driven by synthetic events
@@ -192,7 +193,9 @@ Only the `Aarch64` backend directory survives.
   the tracker report `denied` without a new prompt; the fix is in System Settings.
 - **`Config/input.yaml` must stay keyboard-active.** A mouse block there would replace the
   keyboard bindings under the one-binding rule and break the grid's keyboard broadcast and
-  `make grid-selftest`. Mouse layouts live in `Config/mouse/`.
+  `make grid-selftest`. Mouse layouts live in `Config/mouse/`. The wizard warns before
+  saving a zone, face, pointer or head binding here and asks for a second Enter, but never
+  refuses: the reader accepts such a file, so this stays a trap and not a rule.
 - **A YAML beside a ROM silently changes that game's bindings.** `<rom>.yaml` next to
   `<rom>.z64`, or `Config/mouse/<rom>.yaml`, is loaded instead of `input.yaml`, the window
   becomes 640x640 with the panel, and the camera starts if it binds a gesture. The stderr

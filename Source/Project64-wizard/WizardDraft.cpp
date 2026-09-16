@@ -80,7 +80,7 @@ const char * WizardStickFormLabel(int Index)
 // scancodes like "Left Shift" and "Keypad Enter".
 static std::string Scalar(const char * Name)
 {
-    if (Name == NULL || Name[0] == '\0') return "\"\"";
+    if (Name == nullptr || Name[0] == '\0') return "\"\"";
     bool Plain = true;
     for (const char * P = Name; *P != '\0'; P++)
     {
@@ -364,7 +364,7 @@ std::string WizardDraft::Emit(const char * BaseName) const
 {
     std::string Out;
     Out += "# Written by Project64-wizard from ";
-    Out += (BaseName != NULL && BaseName[0] != '\0') ? BaseName : "the built-in bindings";
+    Out += (BaseName != nullptr && BaseName[0] != '\0') ? BaseName : "the built-in bindings";
     Out += ".\n#\n";
     Out += "# A control named here gets exactly one input, replacing its built-in binding.\n";
     Out += "# An omitted control keeps its built-in binding.\n\n";
@@ -423,10 +423,10 @@ static bool LoadCapturingStderr(const char * Path, std::string * Message)
     if (!Ok)
     {
         FILE * Scratch = fopen(ScratchPath, "r");
-        if (Scratch != NULL)
+        if (Scratch != nullptr)
         {
             char Line[512];
-            if (fgets(Line, sizeof(Line), Scratch) != NULL)
+            if (fgets(Line, sizeof(Line), Scratch) != nullptr)
             {
                 size_t Len = strlen(Line);
                 while (Len > 0 && (Line[Len - 1] == '\n' || Line[Len - 1] == '\r')) Line[--Len] = '\0';
@@ -484,7 +484,7 @@ bool WizardDraft::Save(const char * Path, const char * BaseName)
 {
     if (!Validate(BaseName)) return false;
     FILE * F = fopen(Path, "w");
-    if (F == NULL)
+    if (F == nullptr)
     {
         m_Error = "could not write ";
         m_Error += Path;

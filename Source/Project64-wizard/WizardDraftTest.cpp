@@ -21,8 +21,57 @@ static bool Has(const std::string & Text, const char * Needle)
     return Text.find(Needle) != std::string::npos;
 }
 
+// The shipped layouts this test loads as bases live at the repository root, which is neither
+// the test binary's own directory (build/macos/) nor necessarily the working directory: with
+// a bare relative path, every LoadBase below failed for anyone who ran the binary from
+// anywhere but the root, and the CHECKs that failed with it said nothing about why. Resolved
+// the way Scripts/wizard_selftest.sh now resolves ROOT — from its own location — by walking
+// up from SDL_GetBasePath(), and from the working directory too, so a run from the root still
+// costs nothing. FindRoot's failure is a hard failure below, never a silent pass.
+static std::string g_Root;
+
+static bool HasLayouts(const std::string & Dir)
+{
+    FILE * F = fopen((Dir + "Config/face/super_mario_64_usa.yaml").c_str(), "r");
+    if (F == nullptr) return false;
+    fclose(F);
+    return true;
+}
+
+static bool FindRoot()
+{
+    const char * Base = SDL_GetBasePath();
+    const std::string Starts[2] = { std::string("./"), std::string(Base != nullptr ? Base : "") };
+    for (int s = 0; s < 2; s++)
+    {
+        if (Starts[s].empty()) continue;
+        std::string Dir = Starts[s];
+        // Six levels is well past build/macos/ back to the root, and bounded so a checkout
+        // without the layouts fails rather than walking to "/" one "../" at a time.
+        for (int Up = 0; Up < 6; Up++)
+        {
+            if (HasLayouts(Dir)) { g_Root = Dir; return true; }
+            Dir += "../";
+        }
+    }
+    return false;
+}
+
+// A repository-relative path, against the root FindRoot located.
+static std::string Layout(const char * Relative)
+{
+    return g_Root + Relative;
+}
+
 int main()
 {
+    if (!FindRoot())
+    {
+        fprintf(stderr, "FAIL: cannot find Config/face/super_mario_64_usa.yaml from the "
+                        "working directory or from the test binary's own directory\n");
+        return 1;
+    }
+
     // Control names are the reader's own spelling.
     CHECK(strcmp(WizardControlName(N64Control::A), "A") == 0);
     CHECK(strcmp(WizardControlName(N64Control::CUp), "CUp") == 0);
@@ -111,7 +160,7 @@ int main()
     // still accepts. The SM64 face layout names eight controls and inherits the rest.
     {
         WizardDraft D;
-        CHECK(D.LoadBase("Config/face/super_mario_64_usa.yaml"));
+        CHECK(D.LoadBase(Layout("Config/face/super_mario_64_usa.yaml").c_str()));
         CHECK(D.Explicit(N64Control::Stick));
         CHECK(D.Explicit(N64Control::A));
         CHECK(D.Explicit(N64Control::CRight));
@@ -129,7 +178,7 @@ int main()
     for (int i = 0; i < WizardBaseCount(); i++)
     {
         WizardDraft D;
-        CHECK(D.LoadBase(WizardBaseFile(i)));
+        CHECK(D.LoadBase(Layout(WizardBaseFile(i)).c_str()));
         CHECK(D.Validate(WizardBaseFile(i)));
         if (!D.Validate(WizardBaseFile(i))) fprintf(stderr, "  base %s: %s\n", WizardBaseFile(i), D.Error());
     }
@@ -137,7 +186,7 @@ int main()
     // A mouse layout's zones come back as zones.
     {
         WizardDraft D;
-        CHECK(D.LoadBase("Config/mouse/super_mario_64_usa.yaml"));
+        CHECK(D.LoadBase(Layout("Config/mouse/super_mario_64_usa.yaml").c_str()));
         CHECK(D.Explicit(N64Control::Stick));
         CHECK(D.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
         CHECK(Has(D.Emit("x"), "{stick: pointer}"));
@@ -160,7 +209,7 @@ int main()
     // since the substring check above passes whether or not the stripping actually happened.
     {
         WizardDraft D;
-        CHECK(D.LoadBase("Config/face/super_mario_64_usa.yaml"));
+        CHECK(D.LoadBase(Layout("Config/face/super_mario_64_usa.yaml").c_str()));
         D.SetGesture(N64Control::DPadUp, POINTER_GESTURE_HEAD_UP);
         CHECK(!D.Validate("x"));
         CHECK(strstr(D.Error(), "head-up cannot be bound while Stick is head") != NULL);

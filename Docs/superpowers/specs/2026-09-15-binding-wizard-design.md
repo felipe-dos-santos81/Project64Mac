@@ -216,3 +216,51 @@ is left as originally written; this is appended, not a correction of it.
   document's original count; counting `Overlay.cpp`'s actual glyph table during Task 10
   found twenty-one, and `AGENTS.md` was corrected to match at the time. This document was
   missed until the final branch review.
+- The window is also **not resizable**, where Part 1 above says "720x640, resizable". Every
+  screen is laid out against a fixed 800x640 and each `WizardTextFit` budget is derived from
+  that constant, not from the live window size, so a resized window would not reflow: it would
+  truncate text at the wrong place or draw it past the right edge. Five separate over-long-line
+  defects were found and fixed against exactly that fixed budget. `SDL_WINDOW_RESIZABLE` was
+  dropped rather than the fixed layout rebuilt, because the layout is fixed by design for a
+  utility screen drawn in SDL's 8x8 debug font.
+- **The review screen warns when two controls share an input.** Part 2 above specifies Review
+  only as "All fifteen with their bindings, inherited ones marked"; `SharesInput`
+  (`Screens.cpp`) additionally marks each such control "(also bound elsewhere)" and adds a
+  summary line. It was added during review as an improvement, not a correction: the reader
+  allows two controls on one input — the N64 genuinely can have two buttons on one key — so the
+  wizard warns and never blocks. Without it the collision is invisible until the mapping is
+  played, and the review screen is the last place the player sees all fifteen at once. It
+  compares only `Bindings[0]`, so Stick's four-key form, whose four scancodes live inside one
+  `Kind::Keys` binding, is not compared against anything.
+- **Validation calls `InputConfig::Load(Path, false)`, not `Load(path, true)` as Part 4 above
+  says.** The code is right and the spec text is wrong. `Quiet=true` makes `ConfigError`
+  (`InputConfig.cpp`) return before its `fprintf` — it suppresses the reader's message
+  entirely, leaving `LoadCapturingStderr` (`WizardDraft.cpp`) nothing to capture. That would
+  defeat the sentence two lines later in the same paragraph, which requires the review screen
+  to show "the reader's own error line rather than a paraphrase". The two halves of Part 4's
+  validation paragraph contradict each other; the shipped code keeps the half that matters.
+- **Saving to `Config/input.yaml` warns when the draft is not keyboard-or-gamepad.** Not in
+  the text above at all. `AGENTS.md` records the trap: that file must stay keyboard-active,
+  because one binding per control means a mouse or face binding there *replaces* the keyboard
+  one and breaks the grid's key broadcast and `make grid-selftest`, and `make config` copies
+  the file with `cp -n`, so a wrong one survives every later build. `DoSave` now asks for a
+  second Enter when the destination resolves to `Config/input.yaml` and the draft explicitly
+  binds a `Zone`, `Face`, `Pointer` or `HeadStick` — the four `Binding::Kind` values that need
+  a mouse or the camera. It has its own flag, separate from the `Config/mouse`-and-`Config/face`
+  clobber warning, so neither confirmation can be spent on the other. Like that warning it is
+  never a refusal: the reader accepts such a file, so the wizard must not block a player who
+  means it.
+- **A stick push takes `{stick: left}` or `{stick: right}`.** Part 3's "chosen, or captured by
+  moving a gamepad stick" was dropped by the implementation plan and, because every task review
+  measured the code against the plan, missed by twelve reviews. `CaptureStickForm`
+  (`Screens.cpp`) now also reads `SDL_EVENT_GAMEPAD_AXIS_MOTION`: past the plugin's own
+  `STICK_THRESHOLD`, a left-stick axis selects row 0 and a right-stick axis row 1, then commits
+  through the same `ChooseStickForm` the Enter key uses. Triggers are ignored, and it is gated
+  on `WizardUi::HasGamepad` the same way modes 2 and 3 are, so `Screens.cpp` still asks no
+  device anything.
+- **Three failures now also print one line on stderr**, as Part 5 above always required: a base
+  that will not load (`ChooseBase` and `TypedBase`), a round-trip the reader rejects
+  (`EnterReview`) and a save that cannot be written (`DoSave`). Until this wave only the
+  on-screen half existed, and the screen has 48 glyphs — too few for the path that usually says
+  what went wrong. Exit codes are unchanged: the wizard still exits non-zero only when SDL
+  itself cannot start, and nothing about camera frames is logged.

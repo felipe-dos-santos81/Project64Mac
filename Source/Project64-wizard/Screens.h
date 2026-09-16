@@ -42,6 +42,11 @@ struct WizardUi
     bool Typing;
     int SaveChoice;          // 0 default file, 1 beside a ROM, 2 a typed path
     bool ConfirmClobber;     // a second Enter is needed for Config/mouse or Config/face
+    // A second, independent Enter, needed when a draft holding a mouse-panel, face-gesture,
+    // pointer or head binding is aimed at Config/input.yaml. Separate from ConfirmClobber on
+    // purpose: the two warnings are about different things, they can both apply to one path,
+    // and one Enter must never be allowed to satisfy the other.
+    bool ConfirmDefault;
     char Message[256];       // the line under the screen
     bool WantCamera;         // set the first time gesture mode is entered
     bool HasGamepad;         // set by main.cpp each frame: a gamepad is currently open

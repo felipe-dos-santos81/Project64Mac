@@ -76,6 +76,18 @@ static SDL_Event KeyEventRepeat(SDL_Scancode Code)
     return E;
 }
 
+// A gamepad axis at a given value, as CapturePad and CaptureStickForm (Screens.cpp) read it:
+// only `type`, `gaxis.axis` and `gaxis.value`.
+static SDL_Event AxisEvent(SDL_GamepadAxis Axis, Sint16 Value)
+{
+    SDL_Event E;
+    memset(&E, 0, sizeof(E));
+    E.type = SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    E.gaxis.axis = (Uint8)Axis;
+    E.gaxis.value = Value;
+    return E;
+}
+
 static SDL_Event ClickEvent(float X, float Y)
 {
     SDL_Event E;
@@ -185,8 +197,32 @@ static int Selftest(const char * Path)
         WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
     }
 
-    // Stick: the fifth form, a digital head stick. The second Enter here is Advance() from
-    // the last control (Stick), which lands on the review screen.
+    // Stick, first the one path no key event can reach: the design's "{stick: left} and
+    // {stick: right} ... captured by moving a gamepad stick". With no pad open the push must
+    // be ignored, by the same HasGamepad gate modes 2 and 3 use; with one open, a decisive
+    // push of the right stick selects and takes {stick: right}. Both results are overwritten
+    // by the canned four-DOWN choice below, so the emitted file — and the expected block in
+    // Scripts/wizard_selftest.sh — is exactly what it was before this path existed.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
+    WizardHandleEvent(AxisEvent(SDL_GAMEPAD_AXIS_LEFTX, -32000), &Ui, &Draft, 0);
+    if (Draft.Explicit(N64Control::Stick))
+    {
+        fprintf(stderr, "wizard-selftest: a stick push with no gamepad bound the stick\n");
+        return 1;
+    }
+    // Restored after the L step above turned it off; from here on a pad is open again.
+    Ui.HasGamepad = true;
+    WizardHandleEvent(AxisEvent(SDL_GAMEPAD_AXIS_RIGHTX, 32000), &Ui, &Draft, 0);
+    if (Draft.Describe(N64Control::Stick) != "stick right")
+    {
+        fprintf(stderr, "wizard-selftest: a right-stick push gave %s, not stick right\n",
+                Draft.Describe(N64Control::Stick).c_str());
+        return 1;
+    }
+
+    // Stick: the fifth form, a digital head stick, which replaces the {stick: right} above.
+    // The second Enter here is Advance() from the last control (Stick), which lands on the
+    // review screen.
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
     for (int i = 0; i < 4; i++) WizardHandleEvent(KeyEvent(SDL_SCANCODE_DOWN), &Ui, &Draft, 0);
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
@@ -205,7 +241,33 @@ static int Selftest(const char * Path)
     // The typed-path destination (3), not the default (choice 1): SavePath's default calls
     // SDL_GetBasePath, which returns garbage before SDL_Init, which --selftest never calls.
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_S), &Ui, &Draft, 0);
+
+    // First, the Config/input.yaml warning (Screens.cpp's IsDefaultInput and
+    // HasNonKeyboardBinding). This draft binds a panel zone, a face gesture and a head stick,
+    // so aiming it at the default mapping has to ask a second time — AGENTS.md's trap: a
+    // non-keyboard binding there replaces the keyboard one under the one-binding rule and
+    // breaks the grid's key broadcast. The path is under a directory that does not exist, and
+    // the second Enter that would confirm is never sent, so nothing is written either way: if
+    // the warning ever stopped firing, this would fail on the message rather than write a file.
+    static const char kDefaultish[] = "/tmp/pj64-wizard-selftest-no-such-dir/Config/input.yaml";
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_3), &Ui, &Draft, 0);
+    WizardHandleEvent(TextEvent(kDefaultish), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+    if (!Ui.ConfirmDefault || strstr(Ui.Message, "Enter again") == nullptr)
+    {
+        fprintf(stderr, "wizard-selftest: Config/input.yaml did not warn: %s\n", Ui.Message);
+        return 1;
+    }
+
+    // Choosing a destination again clears that pending confirmation, so the Enter it was
+    // waiting for can never be spent on a different path than the one it warned about.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_3), &Ui, &Draft, 0);
+    if (Ui.ConfirmDefault)
+    {
+        fprintf(stderr, "wizard-selftest: a new destination left the warning confirmed\n");
+        return 1;
+    }
     WizardHandleEvent(TextEvent(Path), &Ui, &Draft, 0);
     // The first Enter only ends typing: HandleTyping's RETURN case, off the base screen,
     // clears Ui.Typing and asks for a second Enter rather than saving immediately. The second
@@ -246,16 +308,22 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 800, 640,
-                                           SDL_WINDOW_RESIZABLE);
-    if (Window == NULL)
+    // Not SDL_WINDOW_RESIZABLE. Screens.cpp lays every screen out against a fixed 800x640
+    // (kWindowWidth/kWindowHeight) and hands WizardTextFit a pixel budget derived from it,
+    // so a resized window would not reflow: it would truncate text at the wrong place, or
+    // draw it off the right edge. Five separate over-long-line defects were found and fixed
+    // against exactly that fixed budget. A resizable window therefore advertised a freedom
+    // the layout does not have; the flag goes rather than the layout, which is fixed by
+    // design for a utility screen drawn in SDL's 8x8 debug font.
+    SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 800, 640, 0);
+    if (Window == nullptr)
     {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
-    SDL_Renderer * Renderer = SDL_CreateRenderer(Window, NULL);
-    if (Renderer == NULL)
+    SDL_Renderer * Renderer = SDL_CreateRenderer(Window, nullptr);
+    if (Renderer == nullptr)
     {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(Window);
@@ -298,7 +366,7 @@ int main(int argc, char ** argv)
         if (Ui.WantCamera && !CameraStarted)
         {
             const char * Off = getenv("PJ64_FACE");
-            if (Off != NULL && strcmp(Off, "0") == 0)
+            if (Off != nullptr && strcmp(Off, "0") == 0)
             {
                 g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
                 Ui.WantCamera = false;
