@@ -46,6 +46,10 @@ public:
     // the same file quietly to size its window; the plugin's load reports the error.
     bool Load(const char * Path, bool Quiet = false);
 
+    // Restore the built-in bindings, discarding whatever a file applied. The wizard starts
+    // a draft from these; the plugin and the frontend never call it.
+    void Reset();
+
     const std::vector<Binding> & Bindings(N64Control Control) const;
 
     // Two-character overlay label for a control ("St", "C^", ...); "" for Stick.

@@ -294,6 +294,9 @@ INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
+# The wizard's own sources. main.cpp and Screens.cpp join this list in Task 4; until then
+# the draft is the only part that exists, and only its test builds.
+WIZARD_SRC = Project64-wizard/WizardDraft.cpp
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
@@ -308,9 +311,10 @@ AUDIO_OBJS    = $(call objs,$(AUDIO_SRC))
 INPUT_OBJS    = $(call objs,$(INPUT_SRC))
 FRONTEND_OBJS = $(call objs,$(FRONTEND_SRC))
 FRONTEND_MM_OBJS = $(call objs,$(FRONTEND_MM_SRC))
+WIZARD_OBJS = $(call objs,$(WIZARD_SRC))
 ALL_OBJS      = $(COMMON_OBJS) $(SETTINGS_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) $(ASMJIT_OBJS) \
   $(SOFTFLOAT_OBJS) $(CORE_OBJS) $(RSP_OBJS) $(VIDEO_OBJS) $(AUDIO_OBJS) $(INPUT_OBJS) \
-  $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS)
+  $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS)
 
 # The four plugin dylibs, named once: the build rules and the smoke test both use this.
 PLUGIN_DYLIBS = $(PLUGINS)/GFX/Project64-video.dylib $(PLUGINS)/Audio/Project64-audio.dylib \
@@ -339,11 +343,11 @@ $(SOFTFLOAT_OBJS): CFLAGS += -Wno-implicit-function-declaration
 $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
-$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(SDL_CFLAGS)
-$(INPUT_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o: CPPFLAGS += $(YAML_CFLAGS)
-$(FRONTEND_OBJS) $(FRONTEND_MM_OBJS): WARN = -Wall
+$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(SDL_CFLAGS)
+$(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
+$(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test test clean
+.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -495,6 +499,10 @@ face-gesture-test: $(BUILD)/Project64-sdl/FaceGesturesTest.o $(BUILD)/Project64-
 game-config-test: $(BUILD)/Project64-sdl/GameConfigTest.o $(BUILD)/Project64-sdl/GameConfig.o ## Run the GameConfigPath lookup tests
 	$(CXX) $(LDFLAGS) -o $(BUILD)/game-config-test $^
 	@$(BUILD)/game-config-test
+
+wizard-draft-test: $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/WizardDraft.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the WizardDraft tests
+	$(CXX) $(LDFLAGS) -o $(BUILD)/wizard-draft-test $^ $(SDL_LIBS) $(YAML_LIBS)
+	@$(BUILD)/wizard-draft-test
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version

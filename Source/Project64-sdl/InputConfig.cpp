@@ -15,6 +15,11 @@ InputConfig::InputConfig()
     DefaultBindings(m_Bindings);
 }
 
+void InputConfig::Reset()
+{
+    DefaultBindings(m_Bindings);
+}
+
 InputConfig & InputConfig::Get()
 {
     static InputConfig Instance;
