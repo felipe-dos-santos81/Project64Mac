@@ -460,20 +460,18 @@ static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
         // The same two-character label the game's own overlay draws here, not the full
         // control name, which would spill across neighbouring slots. Stick has no overlay
         // label, so it falls back to the first two characters of its full name ("St").
-        for (int i = 0; i < (int)N64Control::Count; i++)
+        const N64Control Owner = Draft.ZoneOwner(Zone);
+        if (Owner != N64Control::Count)
         {
-            const std::vector<Binding> & B = Draft.Bindings((N64Control)i);
-            if (B.empty() || B[0].kind != Binding::Kind::Zone || B[0].code != Zone) continue;
-            const char * Label = InputConfig::ControlLabel((N64Control)i);
+            const char * Label = InputConfig::ControlLabel(Owner);
             char Short[3];
             if (Label[0] == '\0')
             {
-                snprintf(Short, sizeof(Short), "%.2s", WizardControlName((N64Control)i));
+                snprintf(Short, sizeof(Short), "%.2s", WizardControlName(Owner));
                 Label = Short;
             }
             Colour(Renderer, false);
             WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, Label);
-            break;
         }
     }
 }
@@ -780,36 +778,6 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
     (void)Draft;
 }
 
-// Two explicit controls on the same input. The reader allows it — the N64 can have two
-// buttons on one key — so this warns and never blocks.
-//
-// Only Bindings[0] is compared, so Stick's four-key form — whose UpKey/DownKey/LeftKey/
-// RightKey live inside one Kind::Keys binding rather than in code/positive — is never
-// checked against any other control's binding. That form's collisions go unwarned.
-static bool SharesInput(const WizardDraft & Draft, int Index)
-{
-    if (!Draft.Explicit((N64Control)Index)) return false;
-    const std::vector<Binding> & Mine = Draft.Bindings((N64Control)Index);
-    if (Mine.empty()) return false;
-    for (int i = 0; i < (int)N64Control::Count; i++)
-    {
-        if (i == Index || !Draft.Explicit((N64Control)i)) continue;
-        const std::vector<Binding> & Other = Draft.Bindings((N64Control)i);
-        if (Other.empty()) continue;
-        // positive only distinguishes anything for Axis (+ vs -); WizardDraft's setters for
-        // every other kind zero-init it to false while InputConfig's own Make* helpers
-        // hardcode it true, so comparing it unconditionally would compare wizard-made
-        // bindings against wizard-made bindings only, missing a wizard binding that lands on
-        // the same key/button/zone/face slot as one the base layout already set explicitly.
-        if (Other[0].kind == Mine[0].kind && Other[0].code == Mine[0].code &&
-            (Other[0].kind != Binding::Kind::Axis || Other[0].positive == Mine[0].positive))
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
 {
     Colour(Renderer, false);
@@ -819,7 +787,7 @@ static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const Wizar
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         const N64Control C = (N64Control)i;
-        const bool Twice = SharesInput(Draft, i);
+        const bool Twice = Draft.SharesInput(C);
         if (Twice) Shared++;
         Colour(Renderer, Draft.Explicit(C));
         snprintf(Line, sizeof(Line), "%-10s %s%s", WizardControlName(C),

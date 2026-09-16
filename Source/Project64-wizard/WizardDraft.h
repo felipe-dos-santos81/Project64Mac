@@ -56,6 +56,22 @@ public:
     bool Explicit(N64Control Control) const;
     const std::vector<Binding> & Bindings(N64Control Control) const;
 
+    // True when another explicit control is bound to the same input. The reader allows it —
+    // the N64 can have two buttons on one key — so this is something to warn about, never to
+    // refuse. An inherited control is neither asked about nor compared against: only what
+    // Emit writes can collide in the file.
+    //
+    // Only Bindings[0] is compared, so Stick's four-key form — whose UpKey/DownKey/LeftKey/
+    // RightKey live inside one Kind::Keys binding rather than in code/positive — is never
+    // checked against any other control's binding. That form's collisions go unwarned.
+    bool SharesInput(N64Control Control) const;
+
+    // The first control whose binding is this panel slot, or N64Control::Count when nothing
+    // sits there. Bindings[0] only, the same first-binding rule SharesInput uses; unlike
+    // SharesInput, an inherited control counts, because the panel shows what the player will
+    // actually find in the slot rather than only what this draft will write.
+    N64Control ZoneOwner(int Zone) const;
+
     // What the control is bound to, in English: "key X", "zone mid1",
     // "gesture mouth-open (Mo)", "keys Up/Down/Left/Right". An inherited control reads
     // "inherited: " followed by every built-in input, joined by " or ".

@@ -374,6 +374,40 @@ const std::vector<Binding> & WizardDraft::Bindings(N64Control Control) const
     return m_Bindings[(int)Control];
 }
 
+bool WizardDraft::SharesInput(N64Control Control) const
+{
+    const int Index = (int)Control;
+    if (!m_Explicit[Index] || m_Bindings[Index].empty()) return false;
+    const Binding & Mine = m_Bindings[Index][0];
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (i == Index || !m_Explicit[i] || m_Bindings[i].empty()) continue;
+        const Binding & Other = m_Bindings[i][0];
+        // positive only distinguishes anything for Axis (+ vs -); the setters above zero-init
+        // it to false for every other kind while InputConfig's own Make* helpers hardcode it
+        // true, so comparing it unconditionally would compare wizard-made bindings against
+        // wizard-made bindings only, missing a wizard binding that lands on the same
+        // key/button/zone/face slot as one the base layout already set explicitly.
+        if (Other.kind == Mine.kind && Other.code == Mine.code &&
+            (Other.kind != Binding::Kind::Axis || Other.positive == Mine.positive))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+N64Control WizardDraft::ZoneOwner(int Zone) const
+{
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (m_Bindings[i].empty()) continue;
+        const Binding & B = m_Bindings[i][0];
+        if (B.kind == Binding::Kind::Zone && B.code == Zone) return (N64Control)i;
+    }
+    return N64Control::Count;
+}
+
 // One binding in English. ValueText is the file's voice; this is the screen's. Both read the
 // same BindingFacts and render it differently, which is the whole point of the split: nothing
 // here is quoted, bracketed or comma-separated, and the gesture kind reads by its English
