@@ -154,6 +154,7 @@ static void HandleTyping(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
     else if (Event.key.scancode == SDL_SCANCODE_RETURN)
     {
         if (Ui->Screen == WIZARD_BASE) TypedBase(Ui, Draft);
+        else { Ui->Typing = false; snprintf(Ui->Message, sizeof(Ui->Message), "Enter again to save."); }
     }
 }
 
@@ -196,7 +197,11 @@ static N64Control CurrentControl(const WizardUi & Ui)
     return (N64Control)Ui.Control;
 }
 
-static void Advance(WizardUi * Ui)
+// Defined further down, alongside HandleReview and DrawReview, but Advance (and
+// HandleControl's Escape case below) need to call it before that point in the file.
+static void EnterReview(WizardUi * Ui, WizardDraft * Draft);
+
+static void Advance(WizardUi * Ui, WizardDraft * Draft)
 {
     if (Ui->Control + 1 < (int)N64Control::Count)
     {
@@ -206,10 +211,7 @@ static void Advance(WizardUi * Ui)
     }
     else
     {
-        Ui->Screen = WIZARD_REVIEW;
-        Ui->Mode = WIZARD_MODE_NONE;
-        Ui->List = 0;
-        snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
+        EnterReview(Ui, Draft);
     }
 }
 
@@ -589,7 +591,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
                  "Arrows and Enter, or Space for what is firing.");
         break;
     case SDL_SCANCODE_RETURN:
-        Advance(Ui);
+        Advance(Ui, Draft);
         break;
     case SDL_SCANCODE_BACKSPACE:
         if (Ui->Control > 0) Ui->Control--;
@@ -605,13 +607,237 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         Bound(Ui, *Draft);
         break;
     case SDL_SCANCODE_ESCAPE:
-        Ui->Screen = WIZARD_REVIEW;
-        Ui->List = 0;
-        snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
+        EnterReview(Ui, Draft);
         break;
     default:
         break;
     }
+}
+
+// Arriving at the review runs the same round-trip that saving will, so a mapping the
+// reader refuses says so here — in the reader's words — rather than at the last step.
+static void EnterReview(WizardUi * Ui, WizardDraft * Draft)
+{
+    Ui->Screen = WIZARD_REVIEW;
+    Ui->Mode = WIZARD_MODE_NONE;
+    Ui->List = 0;
+    if (Draft->Validate(Ui->Base))
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
+    }
+    else
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+    }
+}
+
+static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Event.type != SDL_EVENT_KEY_DOWN) return;
+    // Every key here is one-shot (there is no list to scroll on this screen), so one guard
+    // ahead of the switch is enough — the same shape HandleControl's outer switch uses, and
+    // for the same reason: without it, a held key re-fires the action on every OS repeat.
+    if (Event.key.repeat) return;
+    switch (Event.key.scancode)
+    {
+    case SDL_SCANCODE_S:
+        Ui->Screen = WIZARD_SAVE;
+        Ui->SaveChoice = 0;
+        Ui->ConfirmClobber = false;
+        snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
+        break;
+    case SDL_SCANCODE_BACKSPACE:
+        Ui->Screen = WIZARD_CONTROL;
+        Ui->Control = (int)N64Control::Count - 1;
+        Ui->Mode = WIZARD_MODE_NONE;
+        break;
+    case SDL_SCANCODE_ESCAPE:
+        Ui->Quit = true;
+        break;
+    default:
+        break;
+    }
+    (void)Draft;
+}
+
+// Two explicit controls on the same input. The reader allows it — the N64 can have two
+// buttons on one key — so this warns and never blocks.
+static bool SharesInput(const WizardDraft & Draft, int Index)
+{
+    if (!Draft.Explicit((N64Control)Index)) return false;
+    const std::vector<Binding> & Mine = Draft.Bindings((N64Control)Index);
+    if (Mine.empty()) return false;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (i == Index || !Draft.Explicit((N64Control)i)) continue;
+        const std::vector<Binding> & Other = Draft.Bindings((N64Control)i);
+        if (Other.empty()) continue;
+        if (Other[0].kind == Mine[0].kind && Other[0].code == Mine[0].code &&
+            Other[0].positive == Mine[0].positive)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+{
+    Colour(Renderer, false);
+    WizardText(Renderer, 24.0f, 24.0f, kHead, "Review");
+    char Line[320];
+    int Shared = 0;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        const N64Control C = (N64Control)i;
+        const bool Twice = SharesInput(Draft, i);
+        if (Twice) Shared++;
+        Colour(Renderer, Draft.Explicit(C));
+        snprintf(Line, sizeof(Line), "%-10s %s%s", WizardControlName(C),
+                 Draft.Describe(C).c_str(), Twice ? "   (also bound elsewhere)" : "");
+        // Fifteen Describe strings land here, the longest 48-59 characters once the control
+        // name and "(also bound elsewhere)" are folded in — well past the 48-glyph budget
+        // this window gives a line starting at x=24. WizardTextFit exists for exactly this.
+        WizardTextFit(Renderer, 24.0f, 64.0f + kLine * (float)i, kBody, Line, kWindowWidth - 24.0f);
+    }
+    if (Shared > 0)
+    {
+        Colour(Renderer, true);
+        snprintf(Line, sizeof(Line),
+                 "%d controls share an input. That is allowed; press S to save anyway.", Shared);
+        WizardTextFit(Renderer, 24.0f, 64.0f + kLine * (float)N64Control::Count + 12.0f, kBody,
+                      Line, kWindowWidth - 24.0f);
+    }
+    (void)Ui;
+}
+
+// Where the three destinations put the file.
+static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
+{
+    if (Ui.SaveChoice == 0)
+    {
+        const char * Dir = SDL_GetBasePath();
+        snprintf(Out, Size, "%sConfig/input.yaml", Dir != NULL ? Dir : "");
+        return;
+    }
+    if (Ui.SaveChoice == 1)
+    {
+        // Beside the ROM, named after it: the per-ROM lookup finds it with no input=.
+        snprintf(Out, Size, "%s", Ui.Typed);
+        char * Dot = strrchr(Out, '.');
+        char * Slash = strrchr(Out, '/');
+        if (Dot != NULL && (Slash == NULL || Dot > Slash)) *Dot = '\0';
+        const size_t Len = strlen(Out);
+        snprintf(Out + Len, Size - Len, ".yaml");
+        return;
+    }
+    snprintf(Out, Size, "%s", Ui.Typed);
+}
+
+// make deletes and recopies both of these on every build, so a file saved there is gone
+// after the next one.
+static bool IsClobbered(const char * Path)
+{
+    return strstr(Path, "/Config/mouse/") != NULL || strstr(Path, "/Config/face/") != NULL;
+}
+
+static void DoSave(WizardUi * Ui, WizardDraft * Draft)
+{
+    char Path[512];
+    SavePath(*Ui, Path, sizeof(Path));
+    if (Path[0] == '\0')
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "Type a path first.");
+        return;
+    }
+    if (IsClobbered(Path) && !Ui->ConfirmClobber)
+    {
+        Ui->ConfirmClobber = true;
+        // Message is drawn through WizardTextFit at 48 glyphs from x=24 (see the bottom of
+        // WizardDrawScreen): this has to fit whole, or the "Enter again" instruction that
+        // matters most would be the part cut off.
+        snprintf(Ui->Message, sizeof(Ui->Message),
+                 "make deletes and recopies this. Enter again.");
+        return;
+    }
+    if (!Draft->Save(Path, Ui->Base))
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
+        return;
+    }
+    snprintf(Ui->Message, sizeof(Ui->Message), "Saved %s. Escape to quit.", Path);
+}
+
+static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
+    if (Event.type != SDL_EVENT_KEY_DOWN) return;
+    // Same reasoning as HandleReview above: every key here is one-shot, and without this
+    // guard a held Enter would call DoSave again on every OS repeat — including immediately
+    // after the same held Enter finished typing a path (see HandleTyping's RETURN case),
+    // which is exactly the accidental double-save this guard exists to prevent. The clobber
+    // confirmation's "second Enter" still works, because it requires a genuine new keydown
+    // (repeat == false) after the key is released and pressed again.
+    if (Event.key.repeat) return;
+    switch (Event.key.scancode)
+    {
+    case SDL_SCANCODE_1:
+        Ui->SaveChoice = 0;
+        Ui->ConfirmClobber = false;
+        break;
+    case SDL_SCANCODE_2:
+    case SDL_SCANCODE_3:
+        Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? 1 : 2;
+        Ui->ConfirmClobber = false;
+        Ui->Typing = true;
+        Ui->Typed[0] = '\0';
+        snprintf(Ui->Message, sizeof(Ui->Message),
+                 Ui->SaveChoice == 1 ? "Type the ROM's path, then Enter."
+                                     : "Type where to save, then Enter.");
+        break;
+    case SDL_SCANCODE_RETURN:
+        DoSave(Ui, Draft);
+        break;
+    case SDL_SCANCODE_BACKSPACE:
+        Ui->Screen = WIZARD_REVIEW;
+        break;
+    case SDL_SCANCODE_ESCAPE:
+        Ui->Quit = true;
+        break;
+    default:
+        break;
+    }
+}
+
+static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+{
+    Colour(Renderer, false);
+    WizardText(Renderer, 24.0f, 24.0f, kHead, "Save");
+    const char * const kRows[3] = {
+        "1  the default mapping, Config/input.yaml",
+        "2  beside a ROM, so it loads for that game",
+        "3  a path I will type",
+    };
+    for (int Row = 0; Row < 3; Row++)
+    {
+        Colour(Renderer, Row == Ui.SaveChoice);
+        WizardText(Renderer, 24.0f, 72.0f + kLine * (float)Row, kBody, kRows[Row]);
+    }
+    char Path[512];
+    SavePath(Ui, Path, sizeof(Path));
+    Colour(Renderer, false);
+    char Line[600];
+    snprintf(Line, sizeof(Line), "to: %s", Path);
+    // Path can be SDL_GetBasePath() plus "Config/input.yaml" — well past the 48-glyph budget
+    // a line starting at x=24 gets, so this is Fit rather than plain WizardText.
+    WizardTextFit(Renderer, 24.0f, 160.0f, kBody, Line, kWindowWidth - 24.0f);
+    if (Ui.Typing)
+    {
+        Colour(Renderer, true);
+        snprintf(Line, sizeof(Line), "path: %s_", Ui.Typed);
+        WizardTextFit(Renderer, 24.0f, 188.0f, kBody, Line, kWindowWidth - 24.0f);
+    }
+    (void)Draft;
 }
 
 void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft, uint32_t LitGestures)
@@ -619,6 +845,8 @@ void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
     if (Ui->Screen == WIZARD_BASE) HandleBase(Event, Ui, Draft);
     else if (Ui->Screen == WIZARD_CONTROL) HandleControl(Event, Ui, Draft, LitGestures);
+    else if (Ui->Screen == WIZARD_REVIEW) HandleReview(Event, Ui, Draft);
+    else if (Ui->Screen == WIZARD_SAVE) HandleSave(Event, Ui, Draft);
 }
 
 static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
@@ -712,6 +940,8 @@ void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui
     (void)W;
     if (Ui.Screen == WIZARD_BASE) DrawBase(Renderer, Ui);
     else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft, Gestures, Face);
+    else if (Ui.Screen == WIZARD_REVIEW) DrawReview(Renderer, Ui, Draft);
+    else if (Ui.Screen == WIZARD_SAVE) DrawSave(Renderer, Ui, Draft);
 
     Colour(Renderer, false);
     WizardTextFit(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message, kWindowWidth - 24.0f);
