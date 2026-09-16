@@ -99,50 +99,119 @@ static std::string Scalar(const char * Name)
     return Out;
 }
 
-static std::string KeyName(SDL_Scancode Code)
+namespace
 {
-    return Scalar(SDL_GetScancodeName(Code));
-}
+// What one binding says about itself, read off it once. Two renderings work from this and
+// nothing else — ValueText below writes the file's voice, DescribeBinding (further down,
+// beside Describe, which is its only caller) the screen's — so a Binding's fields are
+// unpacked in one place rather than in two nine-case switches that drift apart.
+//
+// They stay two functions on purpose. YAML punctuation has no business on the review screen,
+// and "gesture mouth-open (Mo)" has none in a file the reader has to accept; the shared part
+// is which fields a kind uses, not how they are spelled.
+struct BindingFacts
+{
+    const char * YamlKey;   // the mapping key the file writes: "key", "axis", "stick", "keys"
+    const char * Noun;      // what the screen calls it: the same word, except face/gesture
+    const char * Name;      // the input's own name: "X", "leftx", "mid1", "mouth-open", "left"
+    const char * Tag;       // Kind::Face only: the gesture's two-character overlay tag
+    char Sign;              // Kind::Axis only: '+' or '-'
+    const char * Keys[4];   // Kind::Keys only: up, down, left, right
+};
 
-// The flow mapping for one binding, e.g. "{key: X}".
-static std::string ValueText(const Binding & B)
+// Every name stored here outlives the call: SDL's and PointerLayout's name functions all
+// return static strings, and the rest are literals. A kind neither renderer knows leaves the
+// result zeroed, which reads as "{}" in the file and "nothing" on screen — the two fallbacks
+// the switches below used to spell separately.
+BindingFacts FactsOf(const Binding & B)
 {
-    char Buf[160];
+    BindingFacts F = {};
     switch (B.kind)
     {
     case Binding::Kind::Key:
-        snprintf(Buf, sizeof(Buf), "{key: %s}", KeyName((SDL_Scancode)B.code).c_str());
-        return Buf;
+        F.YamlKey = "key";
+        F.Noun = "key";
+        F.Name = SDL_GetScancodeName((SDL_Scancode)B.code);
+        break;
     case Binding::Kind::Button:
-        snprintf(Buf, sizeof(Buf), "{button: %s}",
-                 Scalar(SDL_GetGamepadStringForButton((SDL_GamepadButton)B.code)).c_str());
-        return Buf;
+        F.YamlKey = "button";
+        F.Noun = "button";
+        F.Name = SDL_GetGamepadStringForButton((SDL_GamepadButton)B.code);
+        break;
     case Binding::Kind::Axis:
-        snprintf(Buf, sizeof(Buf), "{axis: %s, sign: %c}",
-                 Scalar(SDL_GetGamepadStringForAxis((SDL_GamepadAxis)B.code)).c_str(),
-                 B.positive ? '+' : '-');
-        return Buf;
+        F.YamlKey = "axis";
+        F.Noun = "axis";
+        F.Name = SDL_GetGamepadStringForAxis((SDL_GamepadAxis)B.code);
+        F.Sign = B.positive ? '+' : '-';
+        break;
     case Binding::Kind::Zone:
-        snprintf(Buf, sizeof(Buf), "{zone: %s}", PointerZoneName(B.code));
-        return Buf;
+        F.YamlKey = "zone";
+        F.Noun = "zone";
+        F.Name = PointerZoneName(B.code);
+        break;
     case Binding::Kind::Face:
-        snprintf(Buf, sizeof(Buf), "{face: %s}",
-                 PointerGestureName(PointerGestureIndex((uint32_t)B.code)));
-        return Buf;
-    case Binding::Kind::Stick:
-        return B.code == (int)SDL_GAMEPAD_AXIS_LEFTX ? "{stick: left}" : "{stick: right}";
-    case Binding::Kind::Pointer:
-        return "{stick: pointer}";
-    case Binding::Kind::HeadStick:
-        return B.code == 0 ? "{stick: head}" : "{stick: head-digital}";
-    case Binding::Kind::Keys:
-        snprintf(Buf, sizeof(Buf), "{keys: {up: %s, down: %s, left: %s, right: %s}}",
-                 KeyName(B.UpKey).c_str(), KeyName(B.DownKey).c_str(),
-                 KeyName(B.LeftKey).c_str(), KeyName(B.RightKey).c_str());
-        return Buf;
-    default:
-        return "{}";
+    {
+        // The one kind whose two voices differ in the word itself: the file's key is "face",
+        // because that is the grammar the reader accepts, but a player reads "gesture".
+        const int Index = PointerGestureIndex((uint32_t)B.code);
+        F.YamlKey = "face";
+        F.Noun = "gesture";
+        F.Name = PointerGestureName(Index);
+        F.Tag = PointerGestureTag(Index);
+        break;
     }
+    case Binding::Kind::Stick:
+        F.YamlKey = "stick";
+        F.Noun = "stick";
+        F.Name = B.code == (int)SDL_GAMEPAD_AXIS_LEFTX ? "left" : "right";
+        break;
+    case Binding::Kind::Pointer:
+        F.YamlKey = "stick";
+        F.Noun = "stick";
+        F.Name = "pointer";
+        break;
+    case Binding::Kind::HeadStick:
+        F.YamlKey = "stick";
+        F.Noun = "stick";
+        F.Name = B.code == 0 ? "head" : "head-digital";
+        break;
+    case Binding::Kind::Keys:
+        F.YamlKey = "keys";
+        F.Noun = "keys";
+        F.Keys[0] = SDL_GetScancodeName(B.UpKey);
+        F.Keys[1] = SDL_GetScancodeName(B.DownKey);
+        F.Keys[2] = SDL_GetScancodeName(B.LeftKey);
+        F.Keys[3] = SDL_GetScancodeName(B.RightKey);
+        break;
+    }
+    return F;
+}
+}
+
+// The flow mapping for one binding, e.g. "{key: X}". The file's voice.
+static std::string ValueText(const Binding & B)
+{
+    const BindingFacts F = FactsOf(B);
+    if (F.YamlKey == nullptr) return "{}";
+    char Buf[160];
+    if (F.Keys[0] != nullptr)
+    {
+        snprintf(Buf, sizeof(Buf), "{%s: {up: %s, down: %s, left: %s, right: %s}}", F.YamlKey,
+                 Scalar(F.Keys[0]).c_str(), Scalar(F.Keys[1]).c_str(),
+                 Scalar(F.Keys[2]).c_str(), Scalar(F.Keys[3]).c_str());
+    }
+    else if (F.Sign != '\0')
+    {
+        snprintf(Buf, sizeof(Buf), "{%s: %s, sign: %c}", F.YamlKey, Scalar(F.Name).c_str(), F.Sign);
+    }
+    else
+    {
+        // Every name goes through Scalar, though only a scancode name ("Left Shift", "Keypad
+        // Enter") has ever needed the quoting: a zone, gesture or stick name is already a
+        // plain scalar, and Scalar hands those back unchanged.
+        snprintf(Buf, sizeof(Buf), "{%s: %s}", F.YamlKey, Scalar(F.Name).c_str());
+    }
+    return Buf;
 }
 
 WizardDraft::WizardDraft()
@@ -305,46 +374,33 @@ const std::vector<Binding> & WizardDraft::Bindings(N64Control Control) const
     return m_Bindings[(int)Control];
 }
 
-// One binding in English. ValueText is the file's voice; this is the screen's.
+// One binding in English. ValueText is the file's voice; this is the screen's. Both read the
+// same BindingFacts and render it differently, which is the whole point of the split: nothing
+// here is quoted, bracketed or comma-separated, and the gesture kind reads by its English
+// noun and its overlay tag rather than by the file's "face" key.
 static std::string DescribeBinding(const Binding & B)
 {
+    const BindingFacts F = FactsOf(B);
+    if (F.Noun == nullptr) return "nothing";
     char Buf[160];
-    switch (B.kind)
+    if (F.Keys[0] != nullptr)
     {
-    case Binding::Kind::Key:
-        snprintf(Buf, sizeof(Buf), "key %s", SDL_GetScancodeName((SDL_Scancode)B.code));
-        return Buf;
-    case Binding::Kind::Button:
-        snprintf(Buf, sizeof(Buf), "button %s",
-                 SDL_GetGamepadStringForButton((SDL_GamepadButton)B.code));
-        return Buf;
-    case Binding::Kind::Axis:
-        snprintf(Buf, sizeof(Buf), "axis %s %c",
-                 SDL_GetGamepadStringForAxis((SDL_GamepadAxis)B.code), B.positive ? '+' : '-');
-        return Buf;
-    case Binding::Kind::Zone:
-        snprintf(Buf, sizeof(Buf), "zone %s", PointerZoneName(B.code));
-        return Buf;
-    case Binding::Kind::Face:
+        snprintf(Buf, sizeof(Buf), "%s %s/%s/%s/%s", F.Noun, F.Keys[0], F.Keys[1], F.Keys[2],
+                 F.Keys[3]);
+    }
+    else if (F.Sign != '\0')
     {
-        const int Index = PointerGestureIndex((uint32_t)B.code);
-        snprintf(Buf, sizeof(Buf), "gesture %s (%s)", PointerGestureName(Index),
-                 PointerGestureTag(Index));
-        return Buf;
+        snprintf(Buf, sizeof(Buf), "%s %s %c", F.Noun, F.Name, F.Sign);
     }
-    case Binding::Kind::Stick:
-        return B.code == (int)SDL_GAMEPAD_AXIS_LEFTX ? "stick left" : "stick right";
-    case Binding::Kind::Pointer:
-        return "stick pointer";
-    case Binding::Kind::HeadStick:
-        return B.code == 0 ? "stick head" : "stick head-digital";
-    case Binding::Kind::Keys:
-        snprintf(Buf, sizeof(Buf), "keys %s/%s/%s/%s", SDL_GetScancodeName(B.UpKey),
-                 SDL_GetScancodeName(B.DownKey), SDL_GetScancodeName(B.LeftKey),
-                 SDL_GetScancodeName(B.RightKey));
-        return Buf;
+    else if (F.Tag != nullptr)
+    {
+        snprintf(Buf, sizeof(Buf), "%s %s (%s)", F.Noun, F.Name, F.Tag);
     }
-    return "nothing";
+    else
+    {
+        snprintf(Buf, sizeof(Buf), "%s %s", F.Noun, F.Name);
+    }
+    return Buf;
 }
 
 std::string WizardDraft::Describe(N64Control Control) const
