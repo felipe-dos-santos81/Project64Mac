@@ -19,6 +19,10 @@ int WizardBaseCount();
 const char * WizardBaseLabel(int Index);   // "Mouse: Super Mario 64"; "" out of range
 const char * WizardBaseFile(int Index);    // "Config/mouse/super_mario_64_usa.yaml"; "" out of range
 
+// The six forms the Stick chooser offers, in the order it lists them.
+int WizardStickFormCount();
+const char * WizardStickFormLabel(int Index);
+
 class WizardDraft
 {
 public:
@@ -38,12 +42,24 @@ public:
     void SetZone(N64Control Control, int Zone);
     void SetGesture(N64Control Control, uint32_t Bit);
 
+    // Stick only. Whole: {stick: left} or {stick: right}. Head: {stick: head} or
+    // {stick: head-digital}. Keys: four scancodes as a digital stick.
+    void SetStickWhole(bool Right);
+    void SetStickPointer();
+    void SetStickHead(bool Digital);
+    void SetStickKeys(SDL_Scancode Up, SDL_Scancode Down, SDL_Scancode Left, SDL_Scancode Right);
+
     // Back to inherited: the control leaves the file and keeps its built-in binding,
     // which may be a pair the one-input-per-control grammar cannot write out.
     void Clear(N64Control Control);
 
     bool Explicit(N64Control Control) const;
     const std::vector<Binding> & Bindings(N64Control Control) const;
+
+    // What the control is bound to, in English: "key X", "zone mid1",
+    // "gesture mouth-open (Mo)", "keys Up/Down/Left/Right". An inherited control reads
+    // "inherited: " followed by every built-in input, joined by " or ".
+    std::string Describe(N64Control Control) const;
 
     // The YAML this draft emits, always ending in a newline. BaseName goes in the header.
     std::string Emit(const char * BaseName) const;

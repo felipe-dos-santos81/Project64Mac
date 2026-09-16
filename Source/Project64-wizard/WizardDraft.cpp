@@ -56,6 +56,26 @@ const char * WizardBaseFile(int Index)
     return (Index >= 0 && Index < kBaseCount) ? kBases[Index].File : "";
 }
 
+namespace
+{
+const char * const kStickForms[] = {
+    "gamepad left stick",
+    "gamepad right stick",
+    "the mouse (stick: pointer)",
+    "head pose, analog (stick: head)",
+    "head pose, four directions (stick: head-digital)",
+    "four keyboard keys",
+};
+const int kStickFormCount = (int)(sizeof(kStickForms) / sizeof(kStickForms[0]));
+}
+
+int WizardStickFormCount() { return kStickFormCount; }
+
+const char * WizardStickFormLabel(int Index)
+{
+    return (Index >= 0 && Index < kStickFormCount) ? kStickForms[Index] : "";
+}
+
 // A YAML scalar that needs no quoting is plain; anything else is double quoted. SDL spells
 // scancodes like "Left Shift" and "Keypad Enter".
 static std::string Scalar(const char * Name)
@@ -108,6 +128,17 @@ static std::string ValueText(const Binding & B)
     case Binding::Kind::Face:
         snprintf(Buf, sizeof(Buf), "{face: %s}",
                  PointerGestureName(PointerGestureIndex((uint32_t)B.code)));
+        return Buf;
+    case Binding::Kind::Stick:
+        return B.code == (int)SDL_GAMEPAD_AXIS_LEFTX ? "{stick: left}" : "{stick: right}";
+    case Binding::Kind::Pointer:
+        return "{stick: pointer}";
+    case Binding::Kind::HeadStick:
+        return B.code == 0 ? "{stick: head}" : "{stick: head-digital}";
+    case Binding::Kind::Keys:
+        snprintf(Buf, sizeof(Buf), "{keys: {up: %s, down: %s, left: %s, right: %s}}",
+                 KeyName(B.UpKey).c_str(), KeyName(B.DownKey).c_str(),
+                 KeyName(B.LeftKey).c_str(), KeyName(B.RightKey).c_str());
         return Buf;
     default:
         return "{}";
@@ -221,6 +252,40 @@ void WizardDraft::SetGesture(N64Control Control, uint32_t Bit)
     Replace(Control, B);
 }
 
+void WizardDraft::SetStickWhole(bool Right)
+{
+    Binding B = {};
+    B.kind = Binding::Kind::Stick;
+    B.code = (int)(Right ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX);
+    Replace(N64Control::Stick, B);
+}
+
+void WizardDraft::SetStickPointer()
+{
+    Binding B = {};
+    B.kind = Binding::Kind::Pointer;
+    Replace(N64Control::Stick, B);
+}
+
+void WizardDraft::SetStickHead(bool Digital)
+{
+    Binding B = {};
+    B.kind = Binding::Kind::HeadStick;
+    B.code = Digital ? 1 : 0;
+    Replace(N64Control::Stick, B);
+}
+
+void WizardDraft::SetStickKeys(SDL_Scancode Up, SDL_Scancode Down, SDL_Scancode Left, SDL_Scancode Right)
+{
+    Binding B = {};
+    B.kind = Binding::Kind::Keys;
+    B.UpKey = Up;
+    B.DownKey = Down;
+    B.LeftKey = Left;
+    B.RightKey = Right;
+    Replace(N64Control::Stick, B);
+}
+
 void WizardDraft::Clear(N64Control Control)
 {
     const int i = (int)Control;
@@ -238,6 +303,61 @@ bool WizardDraft::Explicit(N64Control Control) const
 const std::vector<Binding> & WizardDraft::Bindings(N64Control Control) const
 {
     return m_Bindings[(int)Control];
+}
+
+// One binding in English. ValueText is the file's voice; this is the screen's.
+static std::string DescribeBinding(const Binding & B)
+{
+    char Buf[160];
+    switch (B.kind)
+    {
+    case Binding::Kind::Key:
+        snprintf(Buf, sizeof(Buf), "key %s", SDL_GetScancodeName((SDL_Scancode)B.code));
+        return Buf;
+    case Binding::Kind::Button:
+        snprintf(Buf, sizeof(Buf), "button %s",
+                 SDL_GetGamepadStringForButton((SDL_GamepadButton)B.code));
+        return Buf;
+    case Binding::Kind::Axis:
+        snprintf(Buf, sizeof(Buf), "axis %s %c",
+                 SDL_GetGamepadStringForAxis((SDL_GamepadAxis)B.code), B.positive ? '+' : '-');
+        return Buf;
+    case Binding::Kind::Zone:
+        snprintf(Buf, sizeof(Buf), "zone %s", PointerZoneName(B.code));
+        return Buf;
+    case Binding::Kind::Face:
+    {
+        const int Index = PointerGestureIndex((uint32_t)B.code);
+        snprintf(Buf, sizeof(Buf), "gesture %s (%s)", PointerGestureName(Index),
+                 PointerGestureTag(Index));
+        return Buf;
+    }
+    case Binding::Kind::Stick:
+        return B.code == (int)SDL_GAMEPAD_AXIS_LEFTX ? "stick left" : "stick right";
+    case Binding::Kind::Pointer:
+        return "stick pointer";
+    case Binding::Kind::HeadStick:
+        return B.code == 0 ? "stick head" : "stick head-digital";
+    case Binding::Kind::Keys:
+        snprintf(Buf, sizeof(Buf), "keys %s/%s/%s/%s", SDL_GetScancodeName(B.UpKey),
+                 SDL_GetScancodeName(B.DownKey), SDL_GetScancodeName(B.LeftKey),
+                 SDL_GetScancodeName(B.RightKey));
+        return Buf;
+    }
+    return "nothing";
+}
+
+std::string WizardDraft::Describe(N64Control Control) const
+{
+    const int i = (int)Control;
+    if (m_Bindings[i].empty()) return m_Explicit[i] ? "nothing" : "inherited: nothing";
+    std::string Text = DescribeBinding(m_Bindings[i][0]);
+    for (size_t b = 1; b < m_Bindings[i].size(); b++)
+    {
+        Text += " or ";
+        Text += DescribeBinding(m_Bindings[i][b]);
+    }
+    return m_Explicit[i] ? Text : ("inherited: " + Text);
 }
 
 std::string WizardDraft::Emit(const char * BaseName) const

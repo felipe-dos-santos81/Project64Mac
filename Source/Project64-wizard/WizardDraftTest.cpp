@@ -163,6 +163,66 @@ int main()
         CHECK(strstr(D.Error(), "head-up cannot be bound while Stick is head") != NULL);
     }
 
+    // Each Stick form emits its own syntax and survives the reader.
+    {
+        WizardDraft D;
+        D.SetStickWhole(false);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: left}"));
+        CHECK(D.Validate("x"));
+        D.SetStickWhole(true);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: right}"));
+        CHECK(D.Validate("x"));
+        D.SetStickPointer();
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}"));
+        CHECK(D.Validate("x"));
+        D.SetStickHead(false);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: head}"));
+        CHECK(D.Validate("x"));
+        D.SetStickHead(true);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: head-digital}"));
+        CHECK(D.Validate("x"));
+        D.SetStickKeys(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT);
+        CHECK(Has(D.Emit("x"), "Stick:     {keys: {up: Up, down: Down, left: Left, right: Right}}"));
+        CHECK(D.Validate("x"));
+    }
+
+    // A head stick beside a head-direction gesture is the reader's to reject, and the
+    // wizard reports the reader's line.
+    {
+        WizardDraft D;
+        D.SetStickHead(true);
+        D.SetGesture(N64Control::A, POINTER_GESTURE_HEAD_LEFT);
+        CHECK(!D.Validate("x"));
+        CHECK(strstr(D.Error(), "head-left cannot be bound while Stick is head") != NULL);
+    }
+
+    // Descriptions read as English, and an inherited control says so.
+    {
+        WizardDraft D;
+        D.SetKey(N64Control::A, SDL_SCANCODE_X);
+        CHECK(D.Describe(N64Control::A) == "key X");
+        D.SetButton(N64Control::B, SDL_GAMEPAD_BUTTON_SOUTH);
+        CHECK(D.Describe(N64Control::B) == "button a");
+        D.SetAxis(N64Control::Z, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, true);
+        CHECK(D.Describe(N64Control::Z) == "axis lefttrigger +");
+        D.SetZone(N64Control::Start, 8);
+        CHECK(D.Describe(N64Control::Start) == "zone mid1");
+        D.SetGesture(N64Control::L, POINTER_GESTURE_MOUTH_OPEN);
+        CHECK(D.Describe(N64Control::L) == "gesture mouth-open (Mo)");
+        D.SetStickHead(true);
+        CHECK(D.Describe(N64Control::Stick) == "stick head-digital");
+        D.SetStickKeys(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT);
+        CHECK(D.Describe(N64Control::Stick) == "keys Up/Down/Left/Right");
+        D.Clear(N64Control::A);
+        CHECK(D.Describe(N64Control::A).compare(0, 11, "inherited: ") == 0);
+    }
+
+    // The Stick chooser's six rows.
+    CHECK(WizardStickFormCount() == 6);
+    CHECK(strcmp(WizardStickFormLabel(0), "gamepad left stick") == 0);
+    CHECK(strcmp(WizardStickFormLabel(5), "four keyboard keys") == 0);
+    CHECK(strcmp(WizardStickFormLabel(6), "") == 0);
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: wizard draft\n");
     return 0;
