@@ -158,6 +158,9 @@ rules as above. Controls a layout leaves out keep their keyboard keys.
   its tag and its button (`Mo=A`, `W<=C<`), lit while held. Tags: `Br` brows, `H<` `H>`
   `H^` `Hv` head, `T<` `T>` tilt, `Mo` mouth, `Sm` smile, `W<` `W>` winks.
 
+If a nod, tilt or wink reads backwards, that is a known sign question fixed in
+`Source/Project64-sdl/FaceTracker.mm`, not something to fix in your layout.
+
 Thresholds are per measure, each with an override: `PJ64_FACE_BROW` (0.035),
 `PJ64_FACE_YAW` (0.25), `PJ64_FACE_PITCH` (0.20), `PJ64_FACE_ROLL` (0.25),
 `PJ64_FACE_MOUTH` (0.06), `PJ64_FACE_SMILE` (0.05), `PJ64_FACE_EYE` (0.12); angles in
@@ -170,7 +173,7 @@ Super Mario 64 renders, plays audio and runs at full speed, with keyboard input 
 SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`, a
 one-button mouse with optional face gestures works with a layout from `Config/mouse/`,
 and the face alone with one from `Config/face/` (see the two sections above). The window
-is 640x480, or 640x640 with a mouse layout, and the mouse cursor is never captured.
+is 640x480, or 640x640 with a mouse or face layout, and the mouse cursor is never captured.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is

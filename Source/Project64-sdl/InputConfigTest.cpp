@@ -254,6 +254,10 @@ int main()
     CHECK(C.Bindings(N64Control::R)[0].code == POINTER_GESTURE_EYEBROWS);
     CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));
     CHECK(!C.UsesHeadStick());                        // the mouse layouts have no head stick
+    CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
+    CHECK(!C.UsesHeadStick());
+    CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
+    CHECK(!C.UsesHeadStick());
 
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: input config\n");

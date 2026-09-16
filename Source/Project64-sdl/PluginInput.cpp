@@ -327,8 +327,7 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
                     const int Q = PointerQuadrant(X, Y);
                     if (B.code == 1)
                     {
-                        X = (int8_t)(Q == 1 ? N64_AXIS_MAX : Q == 3 ? -N64_AXIS_MAX : 0);
-                        Y = (int8_t)(Q == 0 ? N64_AXIS_MAX : Q == 2 ? -N64_AXIS_MAX : 0);
+                        PointerSnapToQuadrant(&X, &Y);
                     }
                     Keys->X_AXIS = X;
                     Keys->Y_AXIS = Y;

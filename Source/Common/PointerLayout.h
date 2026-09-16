@@ -142,6 +142,18 @@ inline int PointerQuadrant(int8_t StickX, int8_t StickY)
     return StickX > 0 ? 1 : 3;
 }
 
+// Snaps a stick pair to one of the four full-tilt axis directions, or to centre, by the
+// same quadrant rule PointerQuadrant already owns: 0 (up) -> (0,+80), 1 (right) -> (+80,0),
+// 2 (down) -> (0,-80), 3 (left) -> (-80,0), -1 (centred) -> (0,0). Used for a digital head
+// stick, so a tilted head reads as one of four N64 directions rather than an analog value.
+inline void PointerSnapToQuadrant(int8_t * X, int8_t * Y)
+{
+    const int Q = PointerQuadrant(*X, *Y);
+    const int8_t Max = 80;
+    *X = (int8_t)(Q == 1 ? Max : Q == 3 ? -Max : 0);
+    *Y = (int8_t)(Q == 0 ? Max : Q == 2 ? -Max : 0);
+}
+
 // Flick gate state: the previous poll's cursor and the stick it produced.
 struct PointerGate
 {

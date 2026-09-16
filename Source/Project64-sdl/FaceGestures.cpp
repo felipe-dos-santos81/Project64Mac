@@ -74,8 +74,11 @@ float GestureClassifier::Threshold(FaceMeasure Measure) const
     case FACE_ROLL: return m_T.Roll;
     case FACE_MOUTH: return m_T.Mouth;
     case FACE_SMILE: return m_T.Smile;
-    default: return m_T.Eye;   // both eyes
+    case FACE_EYE_LEFT: return m_T.Eye;
+    case FACE_EYE_RIGHT: return m_T.Eye;
+    case FACE_MEASURE_COUNT: break;
     }
+    return 0.0f;
 }
 
 uint32_t GestureClassifier::Bits() const

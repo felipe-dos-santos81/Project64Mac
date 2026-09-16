@@ -15,6 +15,7 @@ YAML="$ROOT/Config/face/super_mario_64_usa.yaml"
 TIMEOUT=20
 
 [ -x "$BIN" ] || { echo "frontend not built: $BIN" >&2; exit 1; }
+[ -f "$YAML" ] || { echo "layout not found: $YAML" >&2; exit 1; }
 
 # $1 = face inject spec, $2 = expected report tail. The pointer is pinned to the window's
 # corner with no button so the real mouse cannot trip the report early.

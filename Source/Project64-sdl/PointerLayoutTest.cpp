@@ -147,6 +147,26 @@ int main()
     CHECK(PointerQuadrant(56, 56) == 0);
     CHECK(PointerQuadrant(-56, -58) == 2);
 
+    // Head-digital snap: reads the pair, calls PointerQuadrant the same way the plugin
+    // does, and writes back the snapped pair. All four quadrants and the centred case.
+    int8_t Sx = 10, Sy = 50; PointerSnapToQuadrant(&Sx, &Sy);
+    CHECK(Sx == 0 && Sy == 80);       // quadrant 0 (up)
+    Sx = 50; Sy = 10; PointerSnapToQuadrant(&Sx, &Sy);
+    CHECK(Sx == 80 && Sy == 0);       // quadrant 1 (right)
+    Sx = 10; Sy = -50; PointerSnapToQuadrant(&Sx, &Sy);
+    CHECK(Sx == 0 && Sy == -80);      // quadrant 2 (down)
+    Sx = -50; Sy = 10; PointerSnapToQuadrant(&Sx, &Sy);
+    CHECK(Sx == -80 && Sy == 0);      // quadrant 3 (left)
+    Sx = 0; Sy = 0; PointerSnapToQuadrant(&Sx, &Sy);
+    CHECK(Sx == 0 && Sy == 0);        // centred
+    // The diagonal tie-break must agree with PointerQuadrant's own convention: derive the
+    // expected axis from PointerQuadrant itself rather than restating which way it snaps.
+    int8_t Dx = 56, Dy = 58;
+    const int DiagQ = PointerQuadrant(Dx, Dy);
+    PointerSnapToQuadrant(&Dx, &Dy);
+    CHECK(Dx == (int8_t)(DiagQ == 1 ? 80 : DiagQ == 3 ? -80 : 0));
+    CHECK(Dy == (int8_t)(DiagQ == 0 ? 80 : DiagQ == 2 ? -80 : 0));
+
     // Flick gate. A 300 px jump inside the image keeps the previous tilt; a 5 px move follows.
     PointerGate G = { false, 0, 0, 0, 0 };
     E = PointerLayoutEvaluate(320, 140, W, H, true);
