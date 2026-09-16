@@ -345,7 +345,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) 
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest unit-test input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -362,6 +362,7 @@ deps: # Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are presen
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
 	@command -v pkg-config >/dev/null || { echo "pkg-config not found: brew install pkg-config"; exit 1; }
 	@pkg-config --exists sdl3 || { echo "SDL3 not found: brew install sdl3"; exit 1; }
+	@pkg-config --atleast-version=3.4 sdl3 || { echo "SDL3 3.4 or newer is needed (SDL_SavePNG): brew upgrade sdl3"; exit 1; }
 	@pkg-config --exists yaml-cpp || { echo "yaml-cpp not found: brew install yaml-cpp"; exit 1; }
 	@echo "deps ok: SDL3 $$(pkg-config --modversion sdl3), yaml-cpp $$(pkg-config --modversion yaml-cpp), $$($(CXX) --version | head -1)"
 
@@ -497,6 +498,13 @@ face-selftest: ## Prove the injected-face path maps mouth-open to A and the head
 wizard-selftest: wizard ## Prove the wizard's screens write the mapping they show, with no window and no camera
 	Scripts/wizard_selftest.sh
 
+wizard-screenshots: wizard ## Render the user guide's wizard pictures into Docs/img/wizard (no window, no camera)
+	@mkdir -p Docs/img/wizard
+	PJ64_FACE=0 ./$(BIN)/Project64-wizard --screenshots Docs/img/wizard
+
+wizard-screenshots-check: wizard ## Prove the committed wizard pictures match what the wizard draws today
+	Scripts/wizard_screenshots_check.sh
+
 # ── Unit tests ───────────────────────────────────────────────────────────────
 # Five headless binaries, one recipe. Each is a Test.o plus the object(s) under test;
 # all five link SDL3 and yaml-cpp, and the linker drops libraries nothing references,
@@ -513,8 +521,9 @@ $(BUILD)/wizard-draft-test: $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)
 $(BUILD)/%-test:
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
-unit-test: $(addprefix $(BUILD)/, $(UNIT_TESTS)) ## Build and run all five headless unit tests
+unit-test: $(addprefix $(BUILD)/, $(UNIT_TESTS)) $(BIN)/Project64-wizard ## Build and run all five headless unit tests, then the wizard screenshot drift check
 	@set -e; for t in $(UNIT_TESTS); do $(BUILD)/$$t; done
+	@Scripts/wizard_screenshots_check.sh
 	@echo "ok: unit tests"
 
 # One documented name per binary: `make face-gesture-test` builds then runs it.
