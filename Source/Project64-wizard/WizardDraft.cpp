@@ -458,6 +458,19 @@ bool WizardDraft::Validate(const char * BaseName)
     if (Wrote)
     {
         Ok = LoadCapturingStderr(Path, &m_Error);
+        if (!Ok)
+        {
+            // The reader's message is "input: <path>:<line>:<col>: reason", and Path here is
+            // the exact temp file just written above — known literally, so cut through it
+            // rather than guess the prefix's shape by scanning for colons. Leaves ":<line>:
+            // <col>: reason" if found. If the message doesn't contain Path (a reader message
+            // that never named the file, say), it is shown unchanged.
+            const size_t Pos = m_Error.find(Path);
+            if (Pos != std::string::npos)
+            {
+                m_Error.erase(0, Pos + strlen(Path));
+            }
+        }
     }
     else
     {

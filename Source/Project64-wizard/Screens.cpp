@@ -18,6 +18,11 @@ static const float kLine = 22.0f;
 // The window is 800x640 (see main.cpp); screens are laid out for this fixed size rather
 // than the live, resizable window size.
 static const float kWindowWidth = 800.0f;
+static const float kWindowHeight = 640.0f;
+// Where WizardDrawScreen (bottom of this file) draws Ui.Message: (float)H - 32.0f, with H
+// the live window height. Screens laid out against this fixed-size assumption — as
+// kWindowWidth already is — use this rather than repeat the literal.
+static const float kMessageY = kWindowHeight - 32.0f;
 
 float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text)
 {
@@ -44,6 +49,34 @@ float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const 
     else
     {
         snprintf(Buffer, sizeof(Buffer), "%.*s", MaxChars > 0 ? MaxChars : 0, Text);
+    }
+    return WizardText(Renderer, X, Y, Scale, Buffer);
+}
+
+// Like WizardTextFit, but keeps the *tail* of Text — a leading "..." then as many trailing
+// characters as fit — instead of the head. Head-fitting is right for prose, where the start
+// carries the meaning, but wrong for a path: the start is a prefix the player already knows
+// or cannot act on ("/Users/.../"), while the end is the filename, or in an in-progress
+// typed path, the caret that has to stay visible for the player to see what they are doing.
+static float WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+{
+    const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * Scale;
+    const int MaxChars = GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+    const int Len = (int)strlen(Text);
+    if (Len <= MaxChars)
+    {
+        return WizardText(Renderer, X, Y, Scale, Text);
+    }
+    char Buffer[256];
+    const int Tail = MaxChars > 3 ? MaxChars - 3 : (MaxChars > 0 ? MaxChars : 0);
+    const char * From = Text + (Len - Tail);
+    if (MaxChars > 3)
+    {
+        snprintf(Buffer, sizeof(Buffer), "...%s", From);
+    }
+    else
+    {
+        snprintf(Buffer, sizeof(Buffer), "%s", From);
     }
     return WizardText(Renderer, X, Y, Scale, Buffer);
 }
@@ -82,11 +115,13 @@ static void BasePath(int Row, char * Out, size_t Size)
 
 // Every path onto the control screen lands here, so List (whatever list the base screen
 // left highlighted) and Mode never leak across the transition. Five later tasks add lists
-// of their own to the same field, which is why this is the one place that resets it.
-static void EnterControlScreen(WizardUi * Ui)
+// of their own to the same field, which is why this is the one place that resets it. The
+// review screen's Backspace is the one caller that wants a control other than 0 — it lands
+// on the last control rather than the first — hence the parameter.
+static void EnterControlScreen(WizardUi * Ui, int Control)
 {
     Ui->Screen = WIZARD_CONTROL;
-    Ui->Control = 0;
+    Ui->Control = Control;
     Ui->Mode = WIZARD_MODE_NONE;
     Ui->List = 0;
     snprintf(Ui->Message, sizeof(Ui->Message), "1-5 to bind, Enter to keep, Delete to inherit.");
@@ -117,7 +152,7 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
         }
         snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->List - 1));
     }
-    EnterControlScreen(Ui);
+    EnterControlScreen(Ui, 0);
 }
 
 static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
@@ -129,7 +164,7 @@ static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
         return;
     }
     snprintf(Ui->Base, sizeof(Ui->Base), "%s", Ui->Typed);
-    EnterControlScreen(Ui);
+    EnterControlScreen(Ui, 0);
 }
 
 static void HandleTyping(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
@@ -647,9 +682,11 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
         snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
         break;
     case SDL_SCANCODE_BACKSPACE:
-        Ui->Screen = WIZARD_CONTROL;
-        Ui->Control = (int)N64Control::Count - 1;
-        Ui->Mode = WIZARD_MODE_NONE;
+        // Routed through EnterControlScreen, the same as every other path onto this screen,
+        // so the control screen's own message ("1-5 to bind...") replaces this screen's —
+        // rather than leaving "S to save, Backspace to go back." on a screen where neither
+        // key does anything.
+        EnterControlScreen(Ui, (int)N64Control::Count - 1);
         break;
     case SDL_SCANCODE_ESCAPE:
         Ui->Quit = true;
@@ -662,6 +699,10 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
 
 // Two explicit controls on the same input. The reader allows it — the N64 can have two
 // buttons on one key — so this warns and never blocks.
+//
+// Only Bindings[0] is compared, so Stick's four-key form — whose UpKey/DownKey/LeftKey/
+// RightKey live inside one Kind::Keys binding rather than in code/positive — is never
+// checked against any other control's binding. That form's collisions go unwarned.
 static bool SharesInput(const WizardDraft & Draft, int Index)
 {
     if (!Draft.Explicit((N64Control)Index)) return false;
@@ -672,8 +713,13 @@ static bool SharesInput(const WizardDraft & Draft, int Index)
         if (i == Index || !Draft.Explicit((N64Control)i)) continue;
         const std::vector<Binding> & Other = Draft.Bindings((N64Control)i);
         if (Other.empty()) continue;
+        // positive only distinguishes anything for Axis (+ vs -); WizardDraft's setters for
+        // every other kind zero-init it to false while InputConfig's own Make* helpers
+        // hardcode it true, so comparing it unconditionally would compare wizard-made
+        // bindings against wizard-made bindings only, missing a wizard binding that lands on
+        // the same key/button/zone/face slot as one the base layout already set explicitly.
         if (Other[0].kind == Mine[0].kind && Other[0].code == Mine[0].code &&
-            Other[0].positive == Mine[0].positive)
+            (Other[0].kind != Binding::Kind::Axis || Other[0].positive == Mine[0].positive))
         {
             return true;
         }
@@ -700,14 +746,42 @@ static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const Wizar
         // this window gives a line starting at x=24. WizardTextFit exists for exactly this.
         WizardTextFit(Renderer, 24.0f, 64.0f + kLine * (float)i, kBody, Line, kWindowWidth - 24.0f);
     }
+    const float SummaryY = 64.0f + kLine * (float)N64Control::Count + 12.0f;
     if (Shared > 0)
     {
         Colour(Renderer, true);
-        snprintf(Line, sizeof(Line),
-                 "%d controls share an input. That is allowed; press S to save anyway.", Shared);
-        WizardTextFit(Renderer, 24.0f, 64.0f + kLine * (float)N64Control::Count + 12.0f, kBody,
-                      Line, kWindowWidth - 24.0f);
+        // Short enough to fit whole at 48 glyphs: the longer form this replaced ("...allowed;
+        // press S to save anyway.") ran to 67 characters and lost its own instruction to
+        // WizardTextFit's "..." — the player never learned the save was still available.
+        snprintf(Line, sizeof(Line), "%d controls share an input. That is allowed.", Shared);
+        WizardTextFit(Renderer, 24.0f, SummaryY, kBody, Line, kWindowWidth - 24.0f);
     }
+
+    // The reader's verdict, in the empty space between the summary line above and the
+    // message line WizardDrawScreen draws at the bottom of every screen. WizardDraft::Validate
+    // already stripped its own temp file's path out of this string, but a reason can still run
+    // well past one line's 48 glyphs, so it gets two here rather than the one the message line
+    // has room for.
+    const char * Err = Draft.Error();
+    if (Err[0] != '\0')
+    {
+        Colour(Renderer, true);
+        const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * kBody;
+        const int MaxChars = GlyphWidth > 0 ? (int)((kWindowWidth - 24.0f) / (float)GlyphWidth) : 0;
+        const int ErrLen = (int)strlen(Err);
+        const int FirstLen = ErrLen < MaxChars ? ErrLen : MaxChars;
+        char First[64];
+        snprintf(First, sizeof(First), "%.*s", FirstLen, Err);
+        WizardText(Renderer, 24.0f, SummaryY + kLine, kBody, First);
+        if (ErrLen > FirstLen)
+        {
+            WizardTextFit(Renderer, 24.0f, SummaryY + kLine * 2.0f, kBody, Err + FirstLen,
+                          kWindowWidth - 24.0f);
+        }
+    }
+
+    Colour(Renderer, false);
+    WizardText(Renderer, 24.0f, kMessageY - kLine, kBody, "Escape quits.");
     (void)Ui;
 }
 
@@ -722,12 +796,30 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
     }
     if (Ui.SaveChoice == 1)
     {
+        if (Ui.Typed[0] == '\0')
+        {
+            // An empty ROM field has no directory to write beside. Without this, SavePath
+            // would find no dot in "", append ".yaml", and return ".yaml" — a path that
+            // starts with '.', so the empty-path guard in DoSave never fires, and the file
+            // lands in the process's current directory rather than beside any ROM the player
+            // chose.
+            Out[0] = '\0';
+            return;
+        }
         // Beside the ROM, named after it: the per-ROM lookup finds it with no input=.
         snprintf(Out, Size, "%s", Ui.Typed);
         char * Dot = strrchr(Out, '.');
         char * Slash = strrchr(Out, '/');
         if (Dot != NULL && (Slash == NULL || Dot > Slash)) *Dot = '\0';
         const size_t Len = strlen(Out);
+        if (Len == 0 || Out[Len - 1] == '/')
+        {
+            // A folder, not a ROM: same problem as the empty field above — there is no
+            // filename to name the mapping after, so this would otherwise produce a hidden
+            // "<folder>/.yaml".
+            Out[0] = '\0';
+            return;
+        }
         snprintf(Out + Len, Size - Len, ".yaml");
         return;
     }
@@ -765,12 +857,18 @@ static void DoSave(WizardUi * Ui, WizardDraft * Draft)
         snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
         return;
     }
-    snprintf(Ui->Message, sizeof(Ui->Message), "Saved %s. Escape to quit.", Path);
+    // Path is not folded in here: it can run to 116+ characters (SDL_GetBasePath() plus
+    // "Config/input.yaml"), which would either overflow this line or, head-truncated, hide
+    // the filename that matters most. DrawSave's "to:" line already shows Path, tail-fitted
+    // so the filename stays visible; this line only has to say the save happened.
+    snprintf(Ui->Message, sizeof(Ui->Message), "Saved. Escape to quit.");
 }
 
 static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
-    if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
+    // No "if (Ui->Typing)" guard here: WizardHandleEvent already routes every event to
+    // HandleTyping while Ui->Typing is set, ahead of the per-screen dispatch that reaches
+    // this function at all, so a second check here could never see Typing true.
     if (Event.type != SDL_EVENT_KEY_DOWN) return;
     // Same reasoning as HandleReview above: every key here is one-shot, and without this
     // guard a held Enter would call DoSave again on every OS repeat — including immediately
@@ -799,7 +897,10 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         DoSave(Ui, Draft);
         break;
     case SDL_SCANCODE_BACKSPACE:
-        Ui->Screen = WIZARD_REVIEW;
+        // Re-validating on the way back is cheap and is what makes the review screen honest:
+        // without it, the review would show whatever message was left over from before Save
+        // was entered (or none), rather than "S to save..." or the reader's current verdict.
+        EnterReview(Ui, Draft);
         break;
     case SDL_SCANCODE_ESCAPE:
         Ui->Quit = true;
@@ -829,14 +930,21 @@ static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardD
     char Line[600];
     snprintf(Line, sizeof(Line), "to: %s", Path);
     // Path can be SDL_GetBasePath() plus "Config/input.yaml" — well past the 48-glyph budget
-    // a line starting at x=24 gets, so this is Fit rather than plain WizardText.
-    WizardTextFit(Renderer, 24.0f, 160.0f, kBody, Line, kWindowWidth - 24.0f);
+    // a line starting at x=24 gets. Tail-fitted rather than head-fitted: the destination is
+    // never legible from a head-truncated prefix (it is always the filename at the end that
+    // tells the player where the file goes), so this keeps the end and drops the front.
+    WizardTextFitTail(Renderer, 24.0f, 160.0f, kBody, Line, kWindowWidth - 24.0f);
     if (Ui.Typing)
     {
         Colour(Renderer, true);
         snprintf(Line, sizeof(Line), "path: %s_", Ui.Typed);
-        WizardTextFit(Renderer, 24.0f, 188.0f, kBody, Line, kWindowWidth - 24.0f);
+        // Tail-fitted for the same reason as "to:" above, and for one more: the trailing "_"
+        // caret has to stay visible, or the player loses all on-screen feedback for what they
+        // are typing once the path runs past about 42 characters.
+        WizardTextFitTail(Renderer, 24.0f, 188.0f, kBody, Line, kWindowWidth - 24.0f);
     }
+    Colour(Renderer, false);
+    WizardText(Renderer, 24.0f, kMessageY - kLine, kBody, "Escape quits.");
     (void)Draft;
 }
 
