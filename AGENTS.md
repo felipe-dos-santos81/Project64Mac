@@ -171,6 +171,15 @@ stands in for the tracker so `Scripts/face_selftest.sh` proves the path without 
 main-thread-only on macOS and marshal there, which deadlocks on the first swap because
 the main thread is itself waiting on the emulation thread. Do not "simplify" them back.
 
+**The single-game window scales; it never re-renders at a new size.** `MakeWindowScalable`
+in `Source/Project64-sdl/main.cpp` pins the GL surface at the launch size with
+`CGLSetParameter(kCGLCPSurfaceBackingSize)` and only then makes the window resizable, with
+its aspect locked and a half-size minimum; the window server scales the picture to fit,
+with bars in full screen. The video plugin, the overlay and `PJ64_FRAME_DUMP` never see the
+window's size, and `PublishMouse` maps the cursor back through `PointerFitToBase`
+(`Source/Common/PointerLayout.h`) so the published sample is always in launch-size pixels.
+Grid tiles stay fixed. Design: `Docs/superpowers/specs/2026-09-16-resizable-window-design.md`.
+
 **Interpreter only.** `ConfigurePlugins()` sets `Setting_ForceInterpreterCPU`, and
 `Source/Common/MemoryManagement.cpp` drops `PROT_EXEC` because Apple Silicon refuses
 writable-and-executable mappings. The recompiler still compiles but is unreachable: on
@@ -274,6 +283,16 @@ Only the `Aarch64` backend directory survives.
   only catches the wizard's own on-screen text. Nothing checks the guide's written-out
   markdown table, and a new `getenv` is invisible to the check entirely: both still need a
   matching guide edit by hand.
+- **A window resize is not a render event.** Never resize the drawable, call the video
+  plugin's `ChangeSize`, or do GL work in response to `SDL_EVENT_WINDOW_RESIZED`: the
+  surface is pinned on purpose and the SDL GL calls deadlock (see "GL belongs to the
+  emulation thread"). If the backing-size pin is refused, the window stays fixed and stderr
+  says `window stays fixed-size`.
+- **Window coordinates are not layout coordinates.** Anything that reads the cursor must
+  use the published `PointerSample`, which is in launch-size pixels, never
+  `SDL_GetWindowSize` or `SDL_GetMouseState` directly: in a resized or full-screen window
+  those are scaled and offset by the bars, and the panel's pixel constants would land on
+  the wrong slot.
 
 ## Design docs
 

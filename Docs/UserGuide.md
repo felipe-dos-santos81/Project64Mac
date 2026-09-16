@@ -61,8 +61,11 @@ cp ~/Downloads/super_mario_64.z64 Roms/
 make run rom=Roms/super_mario_64.z64
 ```
 
-or, once built, `./Bin/macOS/Project64 Roms/super_mario_64.z64`. The window is 640x480.
-Close it to quit. Saves go to `Bin/macOS/Save/`.
+or, once built, `./Bin/macOS/Project64 Roms/super_mario_64.z64`. The window opens at
+640x480. Drag a corner to resize it, down to half that size, or use the green button for
+full screen. The picture keeps its shape, with black bars at the sides in full screen, and
+is scaled up from 640x480 rather than drawn at the larger size, so it looks softer when big.
+Close the window to quit. Saves go to `Bin/macOS/Save/`.
 
 The built-in controls, keyboard and gamepad at once:
 
@@ -100,7 +103,7 @@ always-on-top strip along the bottom owns the keyboard and sends every key to ev
 at once; the tiles never take focus. Escape on the strip, or closing it, quits everything.
 
 Each game is its own process, so one crashing cannot take the others down. Per-game
-layouts (section 9) are ignored in the grid.
+layouts (section 9) are ignored in the grid, and the tiles cannot be resized.
 
 ## 5. Bindings by hand
 
@@ -231,7 +234,9 @@ make run rom=Roms/super_mario_64.z64 input=Config/mouse/super_mario_64_usa.yaml 
 make run rom=Roms/super_mario_64.z64 input=Config/mouse/super_mario_64_usa.yaml face=0  # mouse only
 ```
 
-The window becomes 640x640: the game in the top 640x480, a panel in the 160 rows below.
+The window opens at 640x640: the game in the top 640x480, a panel in the 160 rows below.
+It resizes like any game window (section 3) and the panel scales with the game; the pixel
+distances below are at that starting size and grow with the window.
 
 - **The game image is the stick.** Distance from its centre is the tilt, full at 160 px
   with a 16 px dead zone. Four faint diagonal lines split the image into direction
