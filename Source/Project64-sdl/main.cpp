@@ -187,6 +187,11 @@ static void MakeWindowScalable(SDL_Window * Window, CGLContextObj Cgl, int W, in
         return;
     }
     const GLint Backing[2] = {W, H};
+    // The whole OpenGL/CGL API is marked deprecated on macOS; this port depends on it by
+    // design (see the file header), so the deprecation warning is silenced right here rather
+    // than for the whole file.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     CGLError Err = CGLSetParameter(Cgl, kCGLCPSurfaceBackingSize, Backing);
     if (Err != kCGLNoError)
     {
@@ -199,6 +204,7 @@ static void MakeWindowScalable(SDL_Window * Window, CGLContextObj Cgl, int W, in
         fprintf(stderr, "window stays fixed-size: CGLEnable(kCGLCESurfaceBackingSize): %s\n", CGLErrorString(Err));
         return;
     }
+#pragma clang diagnostic pop
     const float Aspect = (float)W / (float)H;
     SDL_SetWindowAspectRatio(Window, Aspect, Aspect);
     SDL_SetWindowMinimumSize(Window, W / 2, H / 2);
