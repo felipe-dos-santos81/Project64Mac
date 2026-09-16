@@ -483,6 +483,18 @@ std::string WizardDraft::Emit(const char * BaseName) const
     return Out;
 }
 
+// A scratch file under /tmp, its name expanded into Path. Returns the open fd, or -1 with
+// the reason in *Message. Both users below want the path as well as the fd — one redirects
+// stderr onto it, the other writes the draft to it and hands the name to the reader — and
+// both remove it themselves once done.
+static int OpenScratchFile(const char * Template, char * Path, size_t Size, std::string * Message)
+{
+    snprintf(Path, Size, "%s", Template);
+    const int Fd = mkstemp(Path);
+    if (Fd < 0) *Message = "could not create a temporary file";
+    return Fd;
+}
+
 // Loads Path through the reader with stderr captured, so a rejection comes back in the
 // reader's own words. Redirects the fd underneath stderr with dup2, not freopen: freopen
 // would reassociate the stderr FILE object with a regular file and leave it fully buffered
@@ -490,13 +502,9 @@ std::string WizardDraft::Emit(const char * BaseName) const
 static bool LoadCapturingStderr(const char * Path, std::string * Message)
 {
     char ScratchPath[64];
-    snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-wizard-err-XXXXXX");
-    int Fd = mkstemp(ScratchPath);
-    if (Fd < 0)
-    {
-        *Message = "could not create a temporary file";
-        return false;
-    }
+    const int Fd = OpenScratchFile("/tmp/pj64-wizard-err-XXXXXX", ScratchPath,
+                                   sizeof(ScratchPath), Message);
+    if (Fd < 0) return false;
 
     fflush(stderr);
     const int SavedStderr = dup(fileno(stderr));
@@ -534,13 +542,8 @@ bool WizardDraft::Validate(const char * BaseName)
 {
     m_Error.clear();
     char Path[64];
-    snprintf(Path, sizeof(Path), "/tmp/pj64-wizard-XXXXXX");
-    const int Fd = mkstemp(Path);
-    if (Fd < 0)
-    {
-        m_Error = "could not create a temporary file";
-        return false;
-    }
+    const int Fd = OpenScratchFile("/tmp/pj64-wizard-XXXXXX", Path, sizeof(Path), &m_Error);
+    if (Fd < 0) return false;
     const std::string Text = Emit(BaseName);
     const bool Wrote = write(Fd, Text.data(), Text.size()) == (ssize_t)Text.size();
     close(Fd);
