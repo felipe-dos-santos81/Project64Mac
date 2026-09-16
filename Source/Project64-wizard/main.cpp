@@ -13,6 +13,22 @@
 #include <stdio.h>
 #include <string.h>
 
+// SDL3 delivers SDL_EVENT_GAMEPAD_BUTTON_DOWN and SDL_EVENT_GAMEPAD_AXIS_MOTION only for a
+// gamepad that has been opened, so mode 2 and 3 capture would otherwise see nothing. Follows
+// the pattern at Source/Project64-sdl/PluginInput.cpp:134-159.
+static SDL_Gamepad * OpenFirstGamepad(void)
+{
+    SDL_Gamepad * Pad = nullptr;
+    int Count = 0;
+    SDL_JoystickID * Ids = SDL_GetGamepads(&Count);
+    if (Ids != nullptr)
+    {
+        if (Count > 0) Pad = SDL_OpenGamepad(Ids[0]);
+        SDL_free(Ids);
+    }
+    return Pad;
+}
+
 int main(int argc, char ** argv)
 {
     if (argc >= 2 && strcmp(argv[1], "--version") == 0)
@@ -26,6 +42,8 @@ int main(int argc, char ** argv)
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
+
+    SDL_Gamepad * Gamepad = OpenFirstGamepad();
 
     SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 800, 640,
                                            SDL_WINDOW_RESIZABLE);
@@ -62,6 +80,16 @@ int main(int argc, char ** argv)
         while (SDL_PollEvent(&Event))
         {
             if (Event.type == SDL_EVENT_QUIT) { Ui.Quit = true; break; }
+            if (Event.type == SDL_EVENT_GAMEPAD_ADDED && Gamepad == nullptr)
+            {
+                Gamepad = SDL_OpenGamepad(Event.gdevice.which);
+            }
+            else if (Event.type == SDL_EVENT_GAMEPAD_REMOVED && Gamepad != nullptr &&
+                     Event.gdevice.which == SDL_GetGamepadID(Gamepad))
+            {
+                SDL_CloseGamepad(Gamepad);
+                Gamepad = nullptr;
+            }
             WizardHandleEvent(Event, &Ui, &Draft,
                               State.Gestures.load(std::memory_order_relaxed));
         }
@@ -86,6 +114,7 @@ int main(int argc, char ** argv)
 
     if (WasTyping) SDL_StopTextInput(Window);
     if (CameraStarted) FaceTrackerStop();
+    if (Gamepad != nullptr) SDL_CloseGamepad(Gamepad);
     SDL_DestroyRenderer(Renderer);
     SDL_DestroyWindow(Window);
     SDL_Quit();

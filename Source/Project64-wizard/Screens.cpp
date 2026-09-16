@@ -156,11 +156,206 @@ static void HandleBase(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     }
 }
 
+// The plugin's own gate for "this axis is pushed", so the wizard and the game agree.
+static const int kStickThreshold = 16000;
+
+static N64Control CurrentControl(const WizardUi & Ui)
+{
+    return (N64Control)Ui.Control;
+}
+
+static void Advance(WizardUi * Ui)
+{
+    if (Ui->Control + 1 < (int)N64Control::Count)
+    {
+        Ui->Control++;
+        Ui->Mode = WIZARD_MODE_NONE;
+        Ui->List = 0;
+    }
+    else
+    {
+        Ui->Screen = WIZARD_REVIEW;
+        Ui->Mode = WIZARD_MODE_NONE;
+        Ui->List = 0;
+        snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
+    }
+}
+
+static void Bound(WizardUi * Ui, const WizardDraft & Draft)
+{
+    snprintf(Ui->Message, sizeof(Ui->Message), "%s is %s",
+             WizardControlName(CurrentControl(*Ui)),
+             Draft.Describe(CurrentControl(*Ui)).c_str());
+    Ui->Mode = WIZARD_MODE_NONE;
+}
+
+// Mode 1: the next keydown is the binding, whatever it is. There is no cancel, because
+// every key is a legal answer — Escape and the arrows included.
+static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    if (Ui->Mode == WIZARD_MODE_STICK_KEYS)
+    {
+        Ui->Keys[Ui->KeyStep] = Event.key.scancode;
+        if (++Ui->KeyStep == 4)
+        {
+            Draft->SetStickKeys(Ui->Keys[0], Ui->Keys[1], Ui->Keys[2], Ui->Keys[3]);
+            Ui->KeyStep = 0;
+            Bound(Ui, *Draft);
+        }
+        return true;
+    }
+    Draft->SetKey(CurrentControl(*Ui), Event.key.scancode);
+    Bound(Ui, *Draft);
+    return true;
+}
+
+// Modes 2 and 3 do not consume keys, so Escape leaves them.
+static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
+    {
+        Ui->Mode = WIZARD_MODE_NONE;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        return true;
+    }
+    if (Ui->Mode == WIZARD_MODE_BUTTON && Event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+    {
+        Draft->SetButton(CurrentControl(*Ui), (SDL_GamepadButton)Event.gbutton.button);
+        Bound(Ui, *Draft);
+        return true;
+    }
+    if (Ui->Mode == WIZARD_MODE_AXIS && Event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
+    {
+        if (Event.gaxis.value > kStickThreshold || Event.gaxis.value < -kStickThreshold)
+        {
+            Draft->SetAxis(CurrentControl(*Ui), (SDL_GamepadAxis)Event.gaxis.axis,
+                           Event.gaxis.value > 0);
+            Bound(Ui, *Draft);
+        }
+        return true;
+    }
+    return false;
+}
+
+static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
+{
+    switch (Ui->List)
+    {
+    case 0: Draft->SetStickWhole(false); break;
+    case 1: Draft->SetStickWhole(true); break;
+    case 2: Draft->SetStickPointer(); break;
+    case 3: Draft->SetStickHead(false); break;
+    case 4: Draft->SetStickHead(true); break;
+    default:
+        Ui->Mode = WIZARD_MODE_STICK_KEYS;
+        Ui->KeyStep = 0;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Press the key for up.");
+        return;
+    }
+    Bound(Ui, *Draft);
+}
+
+static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    switch (Event.key.scancode)
+    {
+    case SDL_SCANCODE_UP:
+        if (Ui->List > 0) Ui->List--;
+        return true;
+    case SDL_SCANCODE_DOWN:
+        if (Ui->List < WizardStickFormCount() - 1) Ui->List++;
+        return true;
+    case SDL_SCANCODE_RETURN:
+        ChooseStickForm(Ui, Draft);
+        return true;
+    case SDL_SCANCODE_ESCAPE:
+        Ui->Mode = WIZARD_MODE_NONE;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        return true;
+    default:
+        return true;
+    }
+}
+
+static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    switch (Ui->Mode)
+    {
+    case WIZARD_MODE_KEY:
+    case WIZARD_MODE_STICK_KEYS:
+        if (CaptureKey(Event, Ui, Draft)) return;
+        break;
+    case WIZARD_MODE_BUTTON:
+    case WIZARD_MODE_AXIS:
+        if (CapturePad(Event, Ui, Draft)) return;
+        break;
+    case WIZARD_MODE_STICK:
+        if (CaptureStickForm(Event, Ui, Draft)) return;
+        break;
+    default:
+        break;
+    }
+    if (Ui->Mode != WIZARD_MODE_NONE || Event.type != SDL_EVENT_KEY_DOWN) return;
+
+    const bool IsStick = CurrentControl(*Ui) == N64Control::Stick;
+    switch (Event.key.scancode)
+    {
+    case SDL_SCANCODE_1:
+        if (IsStick) { Ui->Mode = WIZARD_MODE_STICK; Ui->List = 0;
+                       snprintf(Ui->Message, sizeof(Ui->Message), "Pick a form, Enter to take it."); }
+        else { Ui->Mode = WIZARD_MODE_KEY;
+               snprintf(Ui->Message, sizeof(Ui->Message), "Press any key. It is taken as it comes."); }
+        break;
+    case SDL_SCANCODE_2:
+        if (IsStick) break;
+        if (!SDL_HasGamepad())
+        {
+            snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
+            break;
+        }
+        Ui->Mode = WIZARD_MODE_BUTTON;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Press a gamepad button. Escape cancels.");
+        break;
+    case SDL_SCANCODE_3:
+        if (IsStick) break;
+        if (!SDL_HasGamepad())
+        {
+            snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
+            break;
+        }
+        Ui->Mode = WIZARD_MODE_AXIS;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Push a stick or trigger. Escape cancels.");
+        break;
+    case SDL_SCANCODE_RETURN:
+        Advance(Ui);
+        break;
+    case SDL_SCANCODE_BACKSPACE:
+        if (Ui->Control > 0) Ui->Control--;
+        else Ui->Screen = WIZARD_BASE;
+        Ui->Mode = WIZARD_MODE_NONE;
+        break;
+    case SDL_SCANCODE_DELETE:
+        Draft->Clear(CurrentControl(*Ui));
+        Bound(Ui, *Draft);
+        break;
+    case SDL_SCANCODE_ESCAPE:
+        Ui->Screen = WIZARD_REVIEW;
+        Ui->List = 0;
+        snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
+        break;
+    default:
+        break;
+    }
+}
+
 void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft, uint32_t LitGestures)
 {
     (void)LitGestures;
     if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
     if (Ui->Screen == WIZARD_BASE) HandleBase(Event, Ui, Draft);
+    else if (Ui->Screen == WIZARD_CONTROL) HandleControl(Event, Ui, Draft);
 }
 
 static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
@@ -184,14 +379,62 @@ static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
     }
 }
 
+static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+{
+    const N64Control C = (N64Control)Ui.Control;
+    char Line[320];
+
+    Colour(Renderer, false);
+    snprintf(Line, sizeof(Line), "Control %d of %d", Ui.Control + 1, (int)N64Control::Count);
+    WizardText(Renderer, 24.0f, 24.0f, kBody, Line);
+
+    Colour(Renderer, true);
+    WizardText(Renderer, 24.0f, 56.0f, kHead, WizardControlName(C));
+
+    Colour(Renderer, false);
+    snprintf(Line, sizeof(Line), "now: %s", Draft.Describe(C).c_str());
+    WizardText(Renderer, 24.0f, 96.0f, kBody, Line);
+
+    if (C == N64Control::Stick && Ui.Mode == WIZARD_MODE_STICK)
+    {
+        for (int Row = 0; Row < WizardStickFormCount(); Row++)
+        {
+            Colour(Renderer, Row == Ui.List);
+            WizardText(Renderer, 40.0f, 140.0f + kLine * (float)Row, kBody,
+                       Row == Ui.List ? ">" : " ");
+            WizardText(Renderer, 64.0f, 140.0f + kLine * (float)Row, kBody,
+                       WizardStickFormLabel(Row));
+        }
+        return;
+    }
+
+    Colour(Renderer, false);
+    if (C == N64Control::Stick)
+    {
+        WizardText(Renderer, 24.0f, 140.0f, kBody, "1  choose how the stick is driven");
+    }
+    else
+    {
+        WizardText(Renderer, 24.0f, 140.0f, kBody, "1  a keyboard key");
+        WizardText(Renderer, 24.0f, 162.0f, kBody, "2  a gamepad button");
+        WizardText(Renderer, 24.0f, 184.0f, kBody, "3  a gamepad axis");
+        WizardText(Renderer, 24.0f, 206.0f, kBody, "4  a panel slot");
+        WizardText(Renderer, 24.0f, 228.0f, kBody, "5  a face gesture");
+    }
+    // Split across two lines: at kBody scale each glyph advances 16px, and the single-line
+    // version from the design ran to 912px in an 800px window.
+    WizardText(Renderer, 24.0f, 268.0f, kBody, "Enter keep   Backspace back");
+    WizardText(Renderer, 24.0f, 290.0f, kBody, "Delete inherit   Esc review");
+}
+
 void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui,
                       const WizardDraft & Draft, uint32_t Gestures, uint32_t Face)
 {
     (void)W;
-    (void)Draft;
     (void)Gestures;
     (void)Face;
     if (Ui.Screen == WIZARD_BASE) DrawBase(Renderer, Ui);
+    else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft);
 
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message);
