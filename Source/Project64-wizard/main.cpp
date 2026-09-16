@@ -27,7 +27,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 720, 640,
+    SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 800, 640,
                                            SDL_WINDOW_RESIZABLE);
     if (Window == NULL)
     {
@@ -52,6 +52,10 @@ int main(int argc, char ** argv)
     WizardUiInit(&Ui);
 
     bool CameraStarted = false;
+    // WizardHandleEvent stays window-free (a later task drives it with synthetic events and
+    // no window at all), so text input is started and stopped here, from the transitions of
+    // Ui.Typing, rather than inside the handler.
+    bool WasTyping = false;
     while (!Ui.Quit)
     {
         SDL_Event Event;
@@ -60,6 +64,13 @@ int main(int argc, char ** argv)
             if (Event.type == SDL_EVENT_QUIT) { Ui.Quit = true; break; }
             WizardHandleEvent(Event, &Ui, &Draft,
                               State.Gestures.load(std::memory_order_relaxed));
+        }
+
+        if (Ui.Typing != WasTyping)
+        {
+            if (Ui.Typing) SDL_StartTextInput(Window);
+            else SDL_StopTextInput(Window);
+            WasTyping = Ui.Typing;
         }
 
         int W = 0, H = 0;
@@ -73,6 +84,7 @@ int main(int argc, char ** argv)
         SDL_Delay(16);
     }
 
+    if (WasTyping) SDL_StopTextInput(Window);
     if (CameraStarted) FaceTrackerStop();
     SDL_DestroyRenderer(Renderer);
     SDL_DestroyWindow(Window);

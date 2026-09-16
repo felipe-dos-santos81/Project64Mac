@@ -57,6 +57,18 @@ static void BasePath(int Row, char * Out, size_t Size)
     snprintf(Out, Size, "%s%s", Dir != NULL ? Dir : "", WizardBaseFile(Row - 1));
 }
 
+// Every path onto the control screen lands here, so List (whatever list the base screen
+// left highlighted) and Mode never leak across the transition. Five later tasks add lists
+// of their own to the same field, which is why this is the one place that resets it.
+static void EnterControlScreen(WizardUi * Ui)
+{
+    Ui->Screen = WIZARD_CONTROL;
+    Ui->Control = 0;
+    Ui->Mode = WIZARD_MODE_NONE;
+    Ui->List = 0;
+    snprintf(Ui->Message, sizeof(Ui->Message), "1-5 to bind, Enter to keep, Delete to inherit.");
+}
+
 static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
 {
     if (Ui->List == 0)
@@ -82,10 +94,7 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
         }
         snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->List - 1));
     }
-    Ui->Screen = WIZARD_CONTROL;
-    Ui->Control = 0;
-    Ui->Mode = WIZARD_MODE_NONE;
-    snprintf(Ui->Message, sizeof(Ui->Message), "1-5 to bind, Enter to keep, Delete to inherit.");
+    EnterControlScreen(Ui);
 }
 
 static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
@@ -97,9 +106,7 @@ static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
         return;
     }
     snprintf(Ui->Base, sizeof(Ui->Base), "%s", Ui->Typed);
-    Ui->Screen = WIZARD_CONTROL;
-    Ui->Control = 0;
-    snprintf(Ui->Message, sizeof(Ui->Message), "1-5 to bind, Enter to keep, Delete to inherit.");
+    EnterControlScreen(Ui);
 }
 
 static void HandleTyping(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
