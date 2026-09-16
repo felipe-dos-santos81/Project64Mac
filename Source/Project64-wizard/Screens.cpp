@@ -275,6 +275,16 @@ static void Bound(WizardUi * Ui, const WizardDraft & Draft)
     Ui->Mode = WIZARD_MODE_NONE;
 }
 
+// Escape out of an armed capture. Four capture functions below end this way, and all four
+// must clear the mode in the same call that consumes the keydown: HandleControl's outer
+// repeat guard is what filters the repeats of that same held Escape, and it only ever sees
+// them because the mode is already back to NONE by then (see the comment there).
+static void Cancelled(WizardUi * Ui)
+{
+    Ui->Mode = WIZARD_MODE_NONE;
+    snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+}
+
 // The four steps of WIZARD_MODE_STICK_KEYS, in the order ChooseStickForm starts them and
 // SetStickKeys below takes them (Up, Down, Left, Right) — index by Ui->KeyStep *after* it
 // has advanced, to name the direction still wanted.
@@ -320,8 +330,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
 {
     if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
     {
-        Ui->Mode = WIZARD_MODE_NONE;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        Cancelled(Ui);
         return true;
     }
     if (Ui->Mode == WIZARD_MODE_BUTTON && Event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
@@ -410,10 +419,9 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
         ChooseStickForm(Ui, Draft);
         return true;
     case SDL_SCANCODE_ESCAPE:
-        // Same reasoning as Enter above: this sets Ui->Mode to NONE directly, so a repeat of
-        // this held key is never routed back here either.
-        Ui->Mode = WIZARD_MODE_NONE;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        // Same reasoning as Enter above: Cancelled sets Ui->Mode to NONE directly, so a
+        // repeat of this held key is never routed back here either.
+        Cancelled(Ui);
         return true;
     default:
         return true;
@@ -487,8 +495,7 @@ static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dr
 {
     if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
     {
-        Ui->Mode = WIZARD_MODE_NONE;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        Cancelled(Ui);
         return true;
     }
     if (Event.type != SDL_EVENT_MOUSE_BUTTON_DOWN || Event.button.button != SDL_BUTTON_LEFT) return false;
@@ -556,10 +563,10 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         return true;
     }
     case SDL_SCANCODE_ESCAPE:
-        // No repeat guard needed, for the same reason as Enter above: this sets Ui->Mode to
-        // NONE directly, so a repeat of this same held key is never routed back here.
-        Ui->Mode = WIZARD_MODE_NONE;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        // No repeat guard needed, for the same reason as Enter above: Cancelled sets
+        // Ui->Mode to NONE directly, so a repeat of this same held key is never routed
+        // back here.
+        Cancelled(Ui);
         return true;
     default:
         return true;
@@ -598,6 +605,21 @@ static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t 
     // truncation as a defence against a future string that doesn't.
     WizardTextFit(Renderer, 40.0f, 140.0f + kLine * (float)POINTER_GESTURE_COUNT + 12.0f, kBody,
                   FaceStatusText(Face), kWindowWidth - 40.0f);
+}
+
+// Modes 2 and 3 are the two that need a pad open, and they refuse the same way. Gated on
+// Ui->HasGamepad, which main.cpp sets from the pad it actually has open: this file reads
+// events and never asks a device anything, which is what lets --selftest drive these
+// handlers with no SDL at all. Both prompts fit the message line's 48 glyphs whole.
+static void ArmGamepadMode(WizardUi * Ui, WizardMode Mode, const char * Prompt)
+{
+    if (!Ui->HasGamepad)
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
+        return;
+    }
+    Ui->Mode = Mode;
+    snprintf(Ui->Message, sizeof(Ui->Message), "%s", Prompt);
 }
 
 static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft,
@@ -655,23 +677,11 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case SDL_SCANCODE_2:
         if (IsStick) break;
-        if (!Ui->HasGamepad)
-        {
-            snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
-            break;
-        }
-        Ui->Mode = WIZARD_MODE_BUTTON;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Press a gamepad button. Escape cancels.");
+        ArmGamepadMode(Ui, WIZARD_MODE_BUTTON, "Press a gamepad button. Escape cancels.");
         break;
     case SDL_SCANCODE_3:
         if (IsStick) break;
-        if (!Ui->HasGamepad)
-        {
-            snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
-            break;
-        }
-        Ui->Mode = WIZARD_MODE_AXIS;
-        snprintf(Ui->Message, sizeof(Ui->Message), "Push a stick or trigger. Escape cancels.");
+        ArmGamepadMode(Ui, WIZARD_MODE_AXIS, "Push a stick or trigger. Escape cancels.");
         break;
     case SDL_SCANCODE_4:
         if (IsStick) break;
