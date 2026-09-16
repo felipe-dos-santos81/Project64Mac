@@ -9,6 +9,7 @@
 #include <Project64-core/TraceModulesProject64.h>
 #include <OpenGL/gl.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 static const float kDim = 0.35f;       // resting line and label alpha
@@ -17,7 +18,8 @@ static const float kWedge = 0.08f;     // fill of the lit quadrant
 static const float kPanelGrey = 0.12f; // the panel's opaque ground
 static const int kScale = 3;           // font pixel size; a glyph is 15x21 window pixels
 
-// 5x7 glyphs, one byte per row, bit 4 is the left column. Only what the labels need.
+// 5x7 glyphs, one byte per row, bit 4 is the left column. The slot labels, the guide arrows
+// and the gesture tags.
 struct Glyph { char C; unsigned char Rows[7]; };
 static const Glyph kGlyphs[] = {
     { 'A', { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 } },
@@ -33,6 +35,14 @@ static const Glyph kGlyphs[] = {
     { 'v', { 0x00, 0x00, 0x00, 0x00, 0x11, 0x0A, 0x04 } },
     { '<', { 0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02 } },
     { '>', { 0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08 } },
+    { 'H', { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 } },
+    { 'M', { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 } },
+    { 'T', { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 } },
+    { 'W', { 0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11 } },
+    { 'm', { 0x00, 0x00, 0x1A, 0x15, 0x15, 0x15, 0x15 } },
+    { 'o', { 0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E } },
+    { 'r', { 0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10 } },
+    { '=', { 0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00 } },
 };
 
 static const Glyph * FindGlyph(char C)
@@ -44,14 +54,14 @@ static const Glyph * FindGlyph(char C)
     return nullptr;
 }
 
-// Draws Text with its centre at (Cx, Cy).
-static void DrawText(const char * Text, float Cx, float Cy, float Alpha)
+// Draws Text with its left edge at X and its vertical centre at Cy, at Scale pixels per
+// font pixel. Returns the width drawn.
+static float DrawTextLeft(const char * Text, float X, float Cy, float Alpha, int Scale)
 {
     const int Len = (int)strlen(Text);
-    if (Len == 0) return;
-    const float GlyphW = 6.0f * kScale; // 5 columns plus one of spacing
-    const float GlyphH = 7.0f * kScale;
-    float X = Cx - (Len * GlyphW - kScale) / 2.0f;
+    if (Len == 0) return 0.0f;
+    const float GlyphW = 6.0f * Scale; // 5 columns plus one of spacing
+    const float GlyphH = 7.0f * Scale;
     const float Y = Cy - GlyphH / 2.0f;
     glColor4f(1.0f, 1.0f, 1.0f, Alpha);
     glBegin(GL_QUADS);
@@ -64,15 +74,23 @@ static void DrawText(const char * Text, float Cx, float Cy, float Alpha)
             for (int Col = 0; Col < 5; Col++)
             {
                 if ((G->Rows[Row] & (0x10 >> Col)) == 0) continue;
-                const float Px = X + Col * kScale, Py = Y + Row * kScale;
+                const float Px = X + Col * Scale, Py = Y + Row * Scale;
                 glVertex2f(Px, Py);
-                glVertex2f(Px + kScale, Py);
-                glVertex2f(Px + kScale, Py + kScale);
-                glVertex2f(Px, Py + kScale);
+                glVertex2f(Px + Scale, Py);
+                glVertex2f(Px + Scale, Py + Scale);
+                glVertex2f(Px, Py + Scale);
             }
         }
     }
     glEnd();
+    return Len * GlyphW - Scale;
+}
+
+// Draws Text with its centre at (Cx, Cy) at the label scale.
+static void DrawText(const char * Text, float Cx, float Cy, float Alpha)
+{
+    const float Width = (float)strlen(Text) * 6.0f * kScale - kScale;
+    DrawTextLeft(Text, Cx - Width / 2.0f, Cy, Alpha, kScale);
 }
 
 static void DrawCircle(float Cx, float Cy, float R, float Alpha, bool Filled)
@@ -108,7 +126,12 @@ static void DrawLine(float X0, float Y0, float X1, float Y1, float Alpha)
     glEnd();
 }
 
-// The tracker mark with the three gesture labels to its right, bright while held.
+// The tracker mark, then one entry per bound gesture in bit order: the gesture's two-glyph
+// tag, '=', the bound control's label; bright while held. Drawn at kStripScale in the free
+// band under the middle slots (x 164..484, y from the mark's row down), wrapping to a new
+// row when an entry would cross the band's right edge, so eleven entries fit.
+static const int kStripScale = 2;
+
 static void DrawFaceStatus(const PointerState * State, float Cx, float Cy)
 {
     const uint32_t Face = State->Face.load(std::memory_order_relaxed);
@@ -128,11 +151,21 @@ static void DrawFaceStatus(const PointerState * State, float Cx, float Cy)
         }
     }
     const uint32_t Bits = State->Gestures.load(std::memory_order_relaxed);
-    const uint32_t kOrder[3] = { POINTER_GESTURE_EYEBROWS, POINTER_GESTURE_HEAD_LEFT, POINTER_GESTURE_HEAD_RIGHT };
-    for (int i = 0; i < 3; i++)
+    const float BandLeft = 164.0f, BandRight = 484.0f, Gap = 10.0f, RowH = 22.0f;
+    float X = Cx + R + Gap, Y = Cy;
+    for (int i = 0; i < POINTER_GESTURE_COUNT; i++)
     {
         if (State->GestureLabels[i][0] == '\0') continue;
-        DrawText(State->GestureLabels[i], Cx + 28.0f + 36.0f * i, Cy, (Bits & kOrder[i]) != 0 ? kBright : kDim);
+        char Entry[8];
+        snprintf(Entry, sizeof(Entry), "%s=%s", PointerGestureTag(i), State->GestureLabels[i]);
+        const float Width = (float)strlen(Entry) * 6.0f * kStripScale - kStripScale;
+        if (X + Width > BandRight)
+        {
+            X = BandLeft;
+            Y += RowH;
+        }
+        DrawTextLeft(Entry, X, Y, (Bits & (1u << i)) != 0 ? kBright : kDim, kStripScale);
+        X += Width + Gap;
     }
 }
 
@@ -155,7 +188,7 @@ static void DrawPanel(const PointerState * State, int W, int H, int GameH, int L
         DrawRect(X0, Y0, X1, Y1, Alpha);
         DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
     }
-    DrawFaceStatus(State, 178.0f, (float)H - 40.0f);
+    DrawFaceStatus(State, 178.0f, (float)H - 88.0f);
 }
 
 // The guide over the game: the lit quadrant's wedge, the four 45-degree rays, the ring and

@@ -106,8 +106,8 @@ of distance from the camera:
 | `EyeRight` | `rightEye` | the same for `rightEye` |
 
 The eye ratio stays comparable as the head turns, because both extents shrink together. A
-region that Vision returns with zero points makes the frame count as no face for that
-measure's channels only; the other channels still update.
+region that Vision returns with zero points keeps that measure at its previous frame's
+value; the other measures update normally.
 
 **Sample.** `GestureSample` becomes `{ bool FaceFound; float M[FACE_MEASURE_COUNT];
 double Time; }`, indexed by the `FaceMeasure` enum above, replacing the two named fields.
@@ -189,10 +189,12 @@ accepts the eleven names; after the whole file parses, the head-direction rule o
 checked and reported against the offending `face` value's mark. The `Quiet` path is
 unchanged.
 
-**Overlay** (`Overlay.cpp`). The tracker dot stays where it is. The three labels beside it
-become a strip of one entry per *bound* gesture in bit order, each the gesture's two-glyph
-tag, `=`, and the bound control's label (`Mo=A`, `W<=C<`, `Br=Z`), drawn with the existing
-bitmap font at scale 2 (the slot labels use 3) so that eleven entries fit the panel's width,
+**Overlay** (`Overlay.cpp`). The tracker dot moves up to the top of the free band under the
+middle slots (x 164..484, y from 72 px into the panel), and the strip flows right of it and
+wraps onto up to two more rows below. The three labels beside it become a strip of one
+entry per *bound* gesture in bit order, each the gesture's two-glyph tag, `=`, and the
+bound control's label (`Mo=A`, `W<=C<`, `Br=Z`), drawn with the existing bitmap font at
+scale 2 (the slot labels use 3), wrapping within the band so that eleven entries fit,
 bright while held and dim otherwise. Tags, in bit order: `Br`, `H<`, `H>`, `H^`, `Hv`,
 `T<`, `T>`, `Mo`, `Sm`, `W<`, `W>`. The font gains `=` if it lacks it. The guide over the
 game draws unchanged: the lit quadrant and edge arrows follow `Quadrant`, which the head
