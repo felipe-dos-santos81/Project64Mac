@@ -306,6 +306,81 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
     }
 }
 
+// The panel as the game lays it out: a 640x640 window, the game image on top, the
+// thirteen slots below. The wizard draws that rectangle scaled into its own window, so a
+// slot is exactly where the player will find it in the game.
+static const int kPanelW = 640;
+static const int kPanelH = 640;
+static const float kPanelScale = 0.5f;
+static const float kPanelX = 24.0f;
+static const float kPanelY = 300.0f;
+
+static SDL_FRect ZoneScreenRect(int Zone)
+{
+    float X0 = 0, Y0 = 0, X1 = 0, Y1 = 0;
+    PointerZoneRect(Zone, kPanelW, kPanelH, &X0, &Y0, &X1, &Y1);
+    SDL_FRect R;
+    R.x = kPanelX + X0 * kPanelScale;
+    R.y = kPanelY + Y0 * kPanelScale;
+    R.w = (X1 - X0) * kPanelScale;
+    R.h = (Y1 - Y0) * kPanelScale;
+    return R;
+}
+
+// The zone under a click in the wizard's window, or POINTER_ZONE_NONE.
+static int ZoneAtPoint(float X, float Y)
+{
+    for (int Zone = 0; Zone < POINTER_ZONE_COUNT; Zone++)
+    {
+        const SDL_FRect R = ZoneScreenRect(Zone);
+        if (X >= R.x && X < R.x + R.w && Y >= R.y && Y < R.y + R.h) return Zone;
+    }
+    return POINTER_ZONE_NONE;
+}
+
+static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
+{
+    // The game image first, so the slots sit on top of it.
+    for (int Zone = POINTER_ZONE_COUNT - 1; Zone >= 0; Zone--)
+    {
+        const SDL_FRect R = ZoneScreenRect(Zone);
+        SDL_SetRenderDrawColor(Renderer, Zone == POINTER_ZONE_GAME ? 28 : 44,
+                               Zone == POINTER_ZONE_GAME ? 28 : 44,
+                               Zone == POINTER_ZONE_GAME ? 34 : 52, 255);
+        SDL_RenderFillRect(Renderer, &R);
+
+        // Whatever the draft already puts in this slot, so the choice is made in context.
+        for (int i = 0; i < (int)N64Control::Count; i++)
+        {
+            const std::vector<Binding> & B = Draft.Bindings((N64Control)i);
+            if (B.empty() || B[0].kind != Binding::Kind::Zone || B[0].code != Zone) continue;
+            Colour(Renderer, false);
+            WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, WizardControlName((N64Control)i));
+            break;
+        }
+    }
+}
+
+static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+{
+    if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
+    {
+        Ui->Mode = WIZARD_MODE_NONE;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        return true;
+    }
+    if (Event.type != SDL_EVENT_MOUSE_BUTTON_DOWN) return false;
+    const int Zone = ZoneAtPoint(Event.button.x, Event.button.y);
+    if (Zone == POINTER_ZONE_NONE)
+    {
+        snprintf(Ui->Message, sizeof(Ui->Message), "That is a gap. Click a slot or the game image.");
+        return true;
+    }
+    Draft->SetZone(CurrentControl(*Ui), Zone);
+    Bound(Ui, *Draft);
+    return true;
+}
+
 static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
     switch (Ui->Mode)
@@ -320,6 +395,9 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case WIZARD_MODE_STICK:
         if (CaptureStickForm(Event, Ui, Draft)) return;
+        break;
+    case WIZARD_MODE_ZONE:
+        if (CaptureZone(Event, Ui, Draft)) return;
         break;
     default:
         break;
@@ -354,6 +432,11 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         }
         Ui->Mode = WIZARD_MODE_AXIS;
         snprintf(Ui->Message, sizeof(Ui->Message), "Push a stick or trigger. Escape cancels.");
+        break;
+    case SDL_SCANCODE_4:
+        if (IsStick) break;
+        Ui->Mode = WIZARD_MODE_ZONE;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Click a slot or the game image. Escape cancels.");
         break;
     case SDL_SCANCODE_RETURN:
         Advance(Ui);
@@ -448,6 +531,7 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
         WizardText(Renderer, 24.0f, 206.0f, kBody, "4  a panel slot");
         WizardText(Renderer, 24.0f, 228.0f, kBody, "5  a face gesture");
     }
+    if (Ui.Mode == WIZARD_MODE_ZONE) DrawPanel(Renderer, Draft);
     // Split across two lines: at kBody scale each glyph advances 16px, and the single-line
     // version from the design ran to 912px in an 800px window.
     WizardText(Renderer, 24.0f, 268.0f, kBody, "Enter keep   Backspace back");
