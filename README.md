@@ -23,6 +23,8 @@ make test                 # smoke test: version string and plugin exports
 make input-config-test    # parser tests for the YAML input mapping
 make pointer-layout-test  # geometry tests for the mouse panel and stick
 make face-gesture-test    # classifier tests for the face gestures
+make wizard-draft-test    # tests for the wizard's draft and the YAML it writes
+make wizard-selftest      # drives the wizard's screens and checks the file they produce
 make face-selftest rom=Roms/a.z64   # end-to-end face path, no camera
 make game-config-test     # lookup tests for the per-game YAML
 ```
@@ -68,6 +70,37 @@ and for `Stick` also `{stick: left}` or `{keys: {up: Up, …}}` — so naming a 
 its built-in binding. The shipped file maps the **keyboard**; its commented block is the
 full gamepad alternative. Delete the file, or leave a mistake in it, for the built-in
 mapping — a bad file is ignored whole, with one line on stderr.
+
+## Building a mapping with the wizard
+
+`make wizard && ./Bin/macOS/Project64-wizard` opens a small window that walks the fifteen
+controls and writes a mapping file. It never loads a ROM.
+
+Start from the built-in bindings, one of the five shipped layouts, or a file you name.
+Then, for each control, press a number to say how you want to bind it — `1` a keyboard
+key, `2` a gamepad button, `3` a gamepad axis, `4` a slot on the mouse panel, `5` a face
+gesture — and do the thing. Modes `2` and `3` need a gamepad connected, and say so when
+there is none. Enter keeps what a control already has, Delete returns it to its built-in
+binding, Backspace goes back, Escape jumps to the review.
+
+Inside mode `1` the next key you press *is* the binding, Escape and the arrows included,
+so there is no way to cancel it: press `1` again to capture a different key. The other
+modes ignore the keyboard, so Escape leaves them.
+
+The gesture list shows all eleven with their panel tags, and lights the ones your face is
+firing right now, which also makes it a way to see how the thresholds suit you. The camera
+starts the first time you open that list and not before; `PJ64_FACE=0` keeps it shut and
+the list still works, just unlit. Frames are never saved, shown or logged.
+
+The review lists all fifteen, marking the ones that inherit their built-in binding rather
+than being written to the file. Saving offers `Config/input.yaml`, a path beside a ROM so
+the per-game lookup finds it, or a path you type — and warns you if you aim at
+`Config/mouse/` or `Config/face/`, which `make` deletes and recopies on every build.
+
+Nothing is written until the emulator's own parser has accepted it: the wizard emits the
+file, loads it back through the same reader the plugin uses, and refuses to save when that
+reader objects, showing you the reader's own reason with the wizard's own scratch-file
+path removed from it.
 
 ## Playing with a mouse
 
@@ -174,6 +207,8 @@ SDL3; a gamepad works after swapping in the commented block in `Config/input.yam
 one-button mouse with optional face gestures works with a layout from `Config/mouse/`,
 and the face alone with one from `Config/face/` (see the two sections above). The window
 is 640x480, or 640x640 with a mouse or face layout, and the mouse cursor is never captured.
+A mapping can be built interactively with `make wizard` (see "Building a mapping with the
+wizard").
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is

@@ -25,6 +25,7 @@ make face-gesture-test                   # classifier tests for the face gesture
 make game-config-test                    # lookup tests for the per-game YAML
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
+make wizard-selftest                     # the wizard's screens, driven by synthetic events
 make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
@@ -85,6 +86,16 @@ main thread, release the context, capture the underlying `CGLContextObj`, `AppIn
 point the four `Plugin_*_Current` settings at the dylib paths, then
 `CN64System::RunFileImage(argv[1])`. After that the main thread only pumps SDL events
 and watches for `g_BaseSystem` going null.
+
+`Bin/macOS/Project64-wizard` is a second binary from `Source/Project64-wizard/`. It shares
+`InputConfig.o`, `FaceGestures.o` and `FaceTracker.o` with the frontend but links no
+OpenGL: it draws with `SDL_Renderer` and SDL's 8x8 debug font, because the overlay's font
+has twenty-one glyphs and cannot spell a scancode name. `WizardDraft` holds the mapping
+and emits the YAML with no SDL window in sight, which is why `make wizard-draft-test` can
+test it headlessly; `Screens.cpp` turns one event into one call on the draft, which is why
+`--selftest <path>` can drive the real screens with synthetic events — a flag on the
+binary itself, which `Scripts/wizard_selftest.sh` (what `make wizard-selftest` runs) calls
+but does not own.
 
 **Grid mode runs one process per ROM.** `Source/Project64-sdl/GridHost.cpp` turns
 `--grid a b c` into an orchestrator that lays out 4:3 tiles, spawns
@@ -217,6 +228,12 @@ Only the `Aarch64` backend directory survives.
 - **Vision's `leftEye`/`rightEye` may be named for the observer, not the player.** The
   two winks can come out mirrored; the fix is the two `EyeAperture` calls in
   `FaceTracker.mm`, and only a manual run of a face layout decides whether to swap them.
+- **A control that inherits its built-in binding must stay out of the file.** The grammar
+  allows exactly one input per control, and several built-in bindings are a *pair* (a key
+  and a gamepad input), so a pair can only survive by the control being omitted. This is
+  why `WizardDraft` tracks explicit-versus-inherited instead of just writing all fifteen
+  lines, and why loading a base reads the file twice — `InputConfig` merges over the
+  defaults and cannot say which controls a file named.
 
 ## Design docs
 
