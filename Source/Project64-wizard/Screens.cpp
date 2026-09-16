@@ -286,11 +286,6 @@ static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
 static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
-    // Same repeat hazard CaptureKey and CaptureGesture guard against: an unfiltered held
-    // Enter would take the highlighted form and then let the repeat fall through to the
-    // outer switch's SDL_SCANCODE_RETURN and skip a control. Arrow-key repeat for list
-    // navigation stays intact; only this early return is gated on it.
-    if (Event.key.repeat) return true;
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
@@ -300,9 +295,15 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
         if (Ui->List < WizardStickFormCount() - 1) Ui->List++;
         return true;
     case SDL_SCANCODE_RETURN:
+        // Filtered here, not ahead of the switch: Up/Down must keep responding to a held
+        // key so the list scrolls, but an unfiltered held Enter would take the highlighted
+        // form once and then let the repeat fall through to the outer switch's
+        // SDL_SCANCODE_RETURN and skip a control.
+        if (Event.key.repeat) return true;
         ChooseStickForm(Ui, Draft);
         return true;
     case SDL_SCANCODE_ESCAPE:
+        if (Event.key.repeat) return true;
         Ui->Mode = WIZARD_MODE_NONE;
         snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
         return true;
@@ -400,12 +401,6 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
                            uint32_t LitGestures)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
-    // SDL3 resends SDL_EVENT_KEY_DOWN for OS key repeat; unfiltered, a held Enter would
-    // bind the gesture and then let the repeat fall through to the outer switch's
-    // SDL_SCANCODE_RETURN and skip a control (a held Escape would similarly cancel and
-    // then jump to the review). Arrow-key repeat for list navigation stays intact: only
-    // this early return is gated on it, not the individual cases below.
-    if (Event.key.repeat) return true;
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
@@ -415,11 +410,19 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         if (Ui->List < POINTER_GESTURE_COUNT - 1) Ui->List++;
         return true;
     case SDL_SCANCODE_RETURN:
+        // Filtered here, not ahead of the switch: Up/Down must keep responding to a held
+        // key so the list scrolls, but an unfiltered held Enter would bind the gesture once
+        // and then let the repeat fall through to the outer switch's SDL_SCANCODE_RETURN
+        // and skip a control.
+        if (Event.key.repeat) return true;
         Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->List);
         Bound(Ui, *Draft);
         return true;
     case SDL_SCANCODE_SPACE:
     {
+        // Filtered for the same reason as Enter: a held Space should pick the firing
+        // gesture (or complain) once, not once per repeat.
+        if (Event.key.repeat) return true;
         // Only when exactly one gesture is firing: two at once is ambiguous, and taking
         // the lower bit would silently pick for the player.
         int Lit = -1, Count = 0;
@@ -443,6 +446,9 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         return true;
     }
     case SDL_SCANCODE_ESCAPE:
+        // A held Escape must cancel once, not cancel and then, on the repeat, fall through
+        // to the outer switch's own SDL_SCANCODE_ESCAPE and jump straight to the review.
+        if (Event.key.repeat) return true;
         Ui->Mode = WIZARD_MODE_NONE;
         snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
         return true;
