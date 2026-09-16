@@ -1018,6 +1018,11 @@ static void DoSave(WizardUi * Ui, WizardDraft * Draft)
     // the filename that matters most. DrawSave's "to:" line already shows Path, tail-fitted
     // so the filename stays visible; this line only has to say the save happened.
     snprintf(Ui->Message, sizeof(Ui->Message), "Saved. Escape to quit.");
+    // Both confirmations are for a save that has not happened yet; once it has, DrawSave must
+    // stop drawing the ConfirmDefault why-block (and must not re-arm ConfirmOverwrite) under
+    // "Saved. Escape to quit.", or a further Enter would silently re-save the same file.
+    Ui->ConfirmOverwrite = false;
+    Ui->ConfirmDefault = false;
 }
 
 static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)

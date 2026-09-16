@@ -250,6 +250,16 @@ is left as originally written; this is appended, not a correction of it.
   clobber warning, so neither confirmation can be spent on the other. Like that warning it is
   never a refusal: the reader accepts such a file, so the wizard must not block a player who
   means it.
+- **`IsDefaultInput` matches the path's text, not the file it resolves to,** so it can be
+  evaded: a symlink that points at `Config/input.yaml` under another name, a case-variant
+  path such as `Config/INPUT.yaml` on a case-insensitive macOS volume (the same file as
+  `Config/input.yaml` on disk, but a different string), or a bare `input.yaml` typed from a
+  working directory already inside `Config/` (no `Config/` segment left in `Path` for the
+  suffix check to find) all reach the real file without tripping this warning.
+  `Config/mouse/../input.yaml` is not one of these silent cases: `IsOverwrittenByMake`'s bare
+  `Config/mouse/` prefix match still catches it, so it trips the *other* warning instead. None
+  of this calls for a `realpath` resolution — the mechanism here is a warning, never a gate,
+  so a player who names a path deliberately is not the problem it exists to catch.
 - **A stick push takes `{stick: left}` or `{stick: right}`.** Part 3's "chosen, or captured by
   moving a gamepad stick" was dropped by the implementation plan and, because every task review
   measured the code against the plan, missed by twelve reviews. `CaptureStickForm`

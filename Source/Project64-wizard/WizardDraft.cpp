@@ -63,7 +63,7 @@ const char * const kStickForms[] = {
     "gamepad right stick",
     "the mouse (stick: pointer)",
     "head pose, analog (stick: head)",
-    "head pose, four directions (stick: head-digital)",
+    "head pose, digital (stick: head-digital)",
     "four keyboard keys",
 };
 const int kStickFormCount = (int)(sizeof(kStickForms) / sizeof(kStickForms[0]));
