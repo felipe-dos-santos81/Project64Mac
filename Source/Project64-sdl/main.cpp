@@ -1,6 +1,8 @@
 // Project64 - A Nintendo 64 emulator
-// SDL3 frontend for macOS. Windowed only; the cursor is never grabbed or hidden. The main
-// loop publishes the mouse for the input plugin (see Common/PointerState.h).
+// SDL3 frontend for macOS. No SDL fullscreen mode is ever requested, but macOS's own green
+// button can still take the resizable single-game window full screen (see
+// MakeWindowScalable); the cursor is never grabbed or hidden. The main loop publishes the
+// mouse for the input plugin (see Common/PointerState.h).
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "SdlNotification.h"
 #include "SdlRenderWindow.h"
@@ -175,10 +177,13 @@ static void PublishFaceInject(PointerState * State, const FaceInject & F)
 // surface is pinned at the launch size (W x H) and the window server scales it to fit,
 // centred, keeping its shape. The video plugin, the overlay and the frame dump therefore
 // keep working in launch-size pixels, and PublishMouse maps the cursor back into them.
-// Nothing here or anywhere reacts to a resize event, and nothing may: resizing the drawable
-// or calling the plugin's ChangeSize from the main thread is the deadlock described at
-// CSdlRenderWindow::GfxThreadInit. If either CGL call is refused the window stays fixed,
-// because a resizable window over an unpinned surface would show a stale picture.
+// Nothing here or anywhere reacts to a resize event, and nothing may: GL belongs to the
+// emulation thread (AGENTS.md), which binds the context directly rather than through SDL
+// precisely because SDL's own GL calls are main-thread-only and marshal there (see
+// CSdlRenderWindow::GfxThreadInit and SwapWindow) -- calling them, or the plugin's
+// ChangeSize, from this thread would deadlock against the emulation thread that owns the
+// context. If either CGL call is refused the window stays fixed, because a resizable
+// window over an unpinned surface would show a stale picture.
 static void MakeWindowScalable(SDL_Window * Window, CGLContextObj Cgl, int W, int H)
 {
     if (Cgl == nullptr)
@@ -188,8 +193,8 @@ static void MakeWindowScalable(SDL_Window * Window, CGLContextObj Cgl, int W, in
     }
     const GLint Backing[2] = {W, H};
     // The whole OpenGL/CGL API is marked deprecated on macOS; this port depends on it by
-    // design (see the file header), so the deprecation warning is silenced right here rather
-    // than for the whole file.
+    // design, so the deprecation warning is silenced right here rather than for the whole
+    // file.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     CGLError Err = CGLSetParameter(Cgl, kCGLCPSurfaceBackingSize, Backing);
@@ -233,7 +238,8 @@ static void PublishMouse(PointerState * State, SDL_Window * Window, int BaseW, i
         const SDL_MouseButtonFlags Buttons = SDL_GetMouseState(&WinX, &WinY);
         int WinW = 0, WinH = 0;
         SDL_GetWindowSize(Window, &WinW, &WinH);
-        // Over a full-screen bar the cursor is outside the picture: no zone, neutral stick.
+        // Over a full-screen or maximised bar the cursor is outside the picture: no zone,
+        // neutral stick.
         const bool OverPicture = PointerFitToBase((float)WinW, (float)WinH, (float)BaseW, (float)BaseH,
                                                   WinX, WinY, &S.X, &S.Y);
         S.Inside = SDL_GetMouseFocus() == Window && OverPicture;

@@ -46,8 +46,12 @@ enum FaceStatus : uint32_t
 #define POINTER_LABEL_SIZE 3    // up to two characters plus NUL
 #define POINTER_GESTURE_COUNT 11
 
-// What the frontend samples on its main thread. X,Y in window pixels from the top left;
-// Inside is "cursor over this window and the window has mouse focus".
+// What the frontend samples on its main thread. X,Y in launch-size pixels from the top
+// left -- the size the window was created at; PointerFitToBase (PointerLayout.h) maps a
+// resized or full-screen window's real cursor back into them. Inside is "the window has
+// mouse focus and the cursor is over the picture": a cursor over a full-screen or
+// maximised bar is not inside. Grid tiles and injected samples never resize, so their
+// launch size is just the window size.
 struct PointerSample
 {
     float X, Y;

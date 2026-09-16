@@ -290,9 +290,9 @@ Only the `Aarch64` backend directory survives.
   says `window stays fixed-size`.
 - **Window coordinates are not layout coordinates.** Anything that reads the cursor must
   use the published `PointerSample`, which is in launch-size pixels, never
-  `SDL_GetWindowSize` or `SDL_GetMouseState` directly: in a resized or full-screen window
-  those are scaled and offset by the bars, and the panel's pixel constants would land on
-  the wrong slot.
+  `SDL_GetWindowSize` or `SDL_GetMouseState` directly, outside `PublishMouse` — the one
+  place that maps them: in a resized or full-screen window those are scaled and offset by
+  the bars, and the panel's pixel constants would land on the wrong slot.
 
 ## Design docs
 

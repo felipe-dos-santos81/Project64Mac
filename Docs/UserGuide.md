@@ -347,6 +347,10 @@ every launch, whatever you set.
 **A nod, tilt or wink reads backwards.** That is a sign fixed in the tracker's code, not in
 your layout. Do not swap gesture names to compensate.
 
+**The window won't resize.** stderr shows a line starting `window stays fixed-size: …`.
+macOS refused to pin the picture's size, so the window stays at its starting size; the
+game is unaffected. Grid tiles never resize (section 4).
+
 ## 11. Reference
 
 Environment variables. Unset means the default.

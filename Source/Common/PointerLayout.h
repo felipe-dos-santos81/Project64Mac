@@ -15,7 +15,7 @@ enum
     POINTER_ZONE_GAME = 13,
 };
 
-#define POINTER_PANEL_HEIGHT 160   // rows below the game image, in window pixels
+#define POINTER_PANEL_HEIGHT 160   // rows below the game image, in launch-size pixels
 #define POINTER_FLICK_PX 24.0f     // cursor travel per poll above which the stick holds
 
 // Zone order: the left cross, the right cross, the five middle slots, then the game image.
@@ -86,10 +86,11 @@ struct PointerEval
     int8_t StickX, StickY;
 };
 
-// X,Y in window pixels from the top left. Inside false means "not over this window",
-// which reads as no zone and a neutral stick. Anywhere in the game image is the zone
-// "game" with the stick from the offset to its centre; the panel gives its slot and a
-// neutral stick; gaps in the panel give no zone.
+// X,Y in launch-size pixels from the top left (see PointerFitToBase below for how a
+// resized or full-screen window's cursor maps into them). Inside false means "not over
+// the picture", which reads as no zone and a neutral stick. Anywhere in the game image is
+// the zone "game" with the stick from the offset to its centre; the panel gives its slot
+// and a neutral stick; gaps in the panel give no zone.
 inline PointerEval PointerLayoutEvaluate(float X, float Y, int W, int H, bool Inside)
 {
     PointerEval E = { POINTER_ZONE_NONE, 0, 0 };
