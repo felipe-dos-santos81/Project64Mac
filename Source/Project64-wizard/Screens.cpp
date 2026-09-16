@@ -100,15 +100,15 @@ static void Colour(SDL_Renderer * Renderer, bool Highlight)
 // lands here, so the screen's own instruction arrives with it rather than being spelled at
 // each arrival — and so a screen the player leaves never leaves its instruction behind.
 //
-// List is reset for the same reason EnterControlScreen resets it, and here it is the one
-// that bites: mode 5 (or the stick-form picker) can leave List as high as 10, and this
+// Row is reset for the same reason EnterControlScreen resets it, and here it is the one
+// that bites: mode 5 (or the stick-form picker) can leave Row as high as 10, and this
 // screen has 7 rows. Unreset, ChooseBase would take a shipped-layout branch with an
 // out-of-range index and a load that silently fails.
 static void EnterBaseScreen(WizardUi * Ui)
 {
     Ui->Screen = WIZARD_BASE;
     Ui->Mode = WIZARD_MODE_NONE;
-    Ui->List = 0;
+    Ui->Row = 0;
     snprintf(Ui->Message, sizeof(Ui->Message), "Up and Down to move, Enter to choose.");
 }
 
@@ -136,7 +136,7 @@ static void BasePath(int Row, char * Out, size_t Size)
     snprintf(Out, Size, "%s%s", Dir != nullptr ? Dir : "", WizardBaseFile(Row - 1));
 }
 
-// Every path onto the control screen lands here, so List (whatever list the base screen
+// Every path onto the control screen lands here, so Row (whatever list the base screen
 // left highlighted) and Mode never leak across the transition. Five later tasks add lists
 // of their own to the same field, which is why this is the one place that resets it. The
 // review screen's Backspace is the one caller that wants a control other than 0 — it lands
@@ -146,18 +146,18 @@ static void EnterControlScreen(WizardUi * Ui, int Control)
     Ui->Screen = WIZARD_CONTROL;
     Ui->Control = Control;
     Ui->Mode = WIZARD_MODE_NONE;
-    Ui->List = 0;
+    Ui->Row = 0;
     snprintf(Ui->Message, sizeof(Ui->Message), "1-5 to bind, Enter to keep, Delete to inherit.");
 }
 
 static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
 {
-    if (Ui->List == 0)
+    if (Ui->Row == 0)
     {
         Draft->LoadDefaults();
         snprintf(Ui->Base, sizeof(Ui->Base), "the built-in bindings");
     }
-    else if (Ui->List == BaseRowCount() - 1)
+    else if (Ui->Row == BaseRowCount() - 1)
     {
         Ui->Typing = true;
         Ui->Typed[0] = '\0';
@@ -167,7 +167,7 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
     else
     {
         char Path[512];
-        BasePath(Ui->List, Path, sizeof(Path));
+        BasePath(Ui->Row, Path, sizeof(Path));
         if (!Draft->LoadBase(Path))
         {
             snprintf(Ui->Message, sizeof(Ui->Message), "%s", Draft->Error());
@@ -179,7 +179,7 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
             fprintf(stderr, "wizard: base %s: %s\n", Path, Draft->Error());
             return;
         }
-        snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->List - 1));
+        snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->Row - 1));
     }
     EnterControlScreen(Ui, 0);
 }
@@ -231,10 +231,10 @@ static void HandleBase(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->List > 0) Ui->List--;
+        if (Ui->Row > 0) Ui->Row--;
         break;
     case SDL_SCANCODE_DOWN:
-        if (Ui->List < BaseRowCount() - 1) Ui->List++;
+        if (Ui->Row < BaseRowCount() - 1) Ui->Row++;
         break;
     case SDL_SCANCODE_RETURN:
         // One-shot, unlike Up/Down above: ChooseBase can move Ui->Screen to WIZARD_CONTROL,
@@ -274,7 +274,7 @@ static void Advance(WizardUi * Ui, WizardDraft * Draft)
     {
         Ui->Control++;
         Ui->Mode = WIZARD_MODE_NONE;
-        Ui->List = 0;
+        Ui->Row = 0;
     }
     else
     {
@@ -282,7 +282,12 @@ static void Advance(WizardUi * Ui, WizardDraft * Draft)
     }
 }
 
-static void Bound(WizardUi * Ui, const WizardDraft & Draft)
+// Reports what the control is now bound to, and leaves whatever capture mode was armed. The
+// second half is not incidental: every capture function relies on the mode going back to NONE
+// inside the call that consumed the keydown, which is what puts the repeats of that same held
+// key in front of HandleControl's repeat guard instead of back into the capture. Cancelled
+// below is the same exit for the other outcome.
+static void ShowBindingAndLeaveMode(WizardUi * Ui, const WizardDraft & Draft)
 {
     snprintf(Ui->Message, sizeof(Ui->Message), "%s is %s",
              WizardControlName(CurrentControl(*Ui)),
@@ -321,7 +326,7 @@ static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         {
             Draft->SetStickKeys(Ui->Keys[0], Ui->Keys[1], Ui->Keys[2], Ui->Keys[3]);
             Ui->KeyStep = 0;
-            Bound(Ui, *Draft);
+            ShowBindingAndLeaveMode(Ui, *Draft);
         }
         else
         {
@@ -336,7 +341,7 @@ static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         return true;
     }
     Draft->SetKey(CurrentControl(*Ui), Event.key.scancode);
-    Bound(Ui, *Draft);
+    ShowBindingAndLeaveMode(Ui, *Draft);
     return true;
 }
 
@@ -351,7 +356,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     if (Ui->Mode == WIZARD_MODE_BUTTON && Event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
         Draft->SetButton(CurrentControl(*Ui), (SDL_GamepadButton)Event.gbutton.button);
-        Bound(Ui, *Draft);
+        ShowBindingAndLeaveMode(Ui, *Draft);
         return true;
     }
     if (Ui->Mode == WIZARD_MODE_AXIS && Event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
@@ -360,7 +365,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         {
             Draft->SetAxis(CurrentControl(*Ui), (SDL_GamepadAxis)Event.gaxis.axis,
                            Event.gaxis.value > 0);
-            Bound(Ui, *Draft);
+            ShowBindingAndLeaveMode(Ui, *Draft);
         }
         return true;
     }
@@ -369,7 +374,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
 
 static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
 {
-    switch (Ui->List)
+    switch (Ui->Row)
     {
     case 0: Draft->SetStickWhole(false); break;
     case 1: Draft->SetStickWhole(true); break;
@@ -382,7 +387,7 @@ static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
         snprintf(Ui->Message, sizeof(Ui->Message), "Press the key for up.");
         return;
     }
-    Bound(Ui, *Draft);
+    ShowBindingAndLeaveMode(Ui, *Draft);
 }
 
 static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
@@ -391,7 +396,7 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
     // gamepad stick)". Pushing a stick is the obvious way to say which stick you mean, and
     // until now the list could only be driven by the arrow keys. A decisive push moves the
     // highlight onto that stick's row and takes it, exactly as if the player had arrowed there
-    // and pressed Enter — hence going through Ui->List and ChooseStickForm rather than calling
+    // and pressed Enter — hence going through Ui->Row and ChooseStickForm rather than calling
     // SetStickWhole directly, so a row and its setter still have one place that pairs them.
     if (Event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
     {
@@ -412,7 +417,7 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
         {
             return true;
         }
-        Ui->List = LeftStick ? 0 : 1;
+        Ui->Row = LeftStick ? 0 : 1;
         ChooseStickForm(Ui, Draft);
         return true;
     }
@@ -420,10 +425,10 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->List > 0) Ui->List--;
+        if (Ui->Row > 0) Ui->Row--;
         return true;
     case SDL_SCANCODE_DOWN:
-        if (Ui->List < WizardStickFormCount() - 1) Ui->List++;
+        if (Ui->Row < WizardStickFormCount() - 1) Ui->Row++;
         return true;
     case SDL_SCANCODE_RETURN:
         // No repeat guard needed: ChooseStickForm always moves Ui->Mode away from STICK
@@ -521,7 +526,7 @@ static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dr
         return true;
     }
     Draft->SetZone(CurrentControl(*Ui), Zone);
-    Bound(Ui, *Draft);
+    ShowBindingAndLeaveMode(Ui, *Draft);
     return true;
 }
 
@@ -532,18 +537,18 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->List > 0) Ui->List--;
+        if (Ui->Row > 0) Ui->Row--;
         return true;
     case SDL_SCANCODE_DOWN:
-        if (Ui->List < POINTER_GESTURE_COUNT - 1) Ui->List++;
+        if (Ui->Row < POINTER_GESTURE_COUNT - 1) Ui->Row++;
         return true;
     case SDL_SCANCODE_RETURN:
-        // No repeat guard needed: Bound() below sets Ui->Mode to NONE before this call
-        // returns, so the mode dispatch in HandleControl never routes a repeat of this same
-        // held Enter back to this case — it falls through to HandleControl's own switch
-        // instead, which is where that repeat is actually filtered.
-        Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->List);
-        Bound(Ui, *Draft);
+        // No repeat guard needed: ShowBindingAndLeaveMode() below sets Ui->Mode to NONE
+        // before this call returns, so the mode dispatch in HandleControl never routes a
+        // repeat of this same held Enter back to this case — it falls through to
+        // HandleControl's own switch instead, which is where that repeat is actually filtered.
+        Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->Row);
+        ShowBindingAndLeaveMode(Ui, *Draft);
         return true;
     case SDL_SCANCODE_SPACE:
     {
@@ -552,8 +557,9 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         // untouched. So a held Space, unlike a held Enter or Escape, genuinely can be
         // re-dispatched to this case while still repeating; filtered so it re-evaluates which
         // gesture is firing once per press rather than once per repeat. (When exactly one
-        // gesture is firing, Bound() below exits GESTURE mode before any repeat could arrive,
-        // same as Enter — this guard matters only for the ambiguous/nothing-firing branch.)
+        // gesture is firing, ShowBindingAndLeaveMode() below exits GESTURE mode before any
+        // repeat could arrive, same as Enter — this guard matters only for the
+        // ambiguous/nothing-firing branch.)
         if (Event.key.repeat) return true;
         // Only when exactly one gesture is firing: two at once is ambiguous, and taking
         // the lower bit would silently pick for the player.
@@ -565,7 +571,7 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         if (Count == 1)
         {
             Draft->SetGesture(CurrentControl(*Ui), 1u << Lit);
-            Bound(Ui, *Draft);
+            ShowBindingAndLeaveMode(Ui, *Draft);
         }
         else
         {
@@ -608,8 +614,8 @@ static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t 
     {
         const float Y = 140.0f + kLine * (float)Row;
         const bool Firing = (Gestures & (1u << Row)) != 0;
-        Colour(Renderer, Row == Ui.List || Firing);
-        WizardText(Renderer, 40.0f, Y, kBody, Row == Ui.List ? ">" : " ");
+        Colour(Renderer, Row == Ui.Row || Firing);
+        WizardText(Renderer, 40.0f, Y, kBody, Row == Ui.Row ? ">" : " ");
         WizardText(Renderer, 64.0f, Y, kBody, PointerGestureTag(Row));
         WizardText(Renderer, 112.0f, Y, kBody, PointerGestureName(Row));
         if (Firing) WizardText(Renderer, 320.0f, Y, kBody, "<- now");
@@ -680,7 +686,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_1:
-        if (IsStick) { Ui->Mode = WIZARD_MODE_STICK; Ui->List = 0;
+        if (IsStick) { Ui->Mode = WIZARD_MODE_STICK; Ui->Row = 0;
                        // With a pad open, CaptureStickForm also takes a stick push as the
                        // choice, so the instruction says so — an undiscoverable shortcut is
                        // not the one the design asked for. Both strings fit 48 glyphs whole.
@@ -706,7 +712,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
     case SDL_SCANCODE_5:
         if (IsStick) break;
         Ui->Mode = WIZARD_MODE_GESTURE;
-        Ui->List = 0;
+        Ui->Row = 0;
         Ui->WantCamera = true;
         // The message line is the only instruction visible in mode 5 (its takeover drops
         // the Enter/Delete help line), and it renders through WizardTextFit at 48 glyphs
@@ -725,7 +731,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
             // Whatever list the mode that was open left highlighted must not follow the
             // player onto the control they just stepped back to — the same reset, and the
             // same reason, as EnterControlScreen's.
-            Ui->List = 0;
+            Ui->Row = 0;
         }
         else
         {
@@ -741,7 +747,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case SDL_SCANCODE_DELETE:
         Draft->Clear(CurrentControl(*Ui));
-        Bound(Ui, *Draft);
+        ShowBindingAndLeaveMode(Ui, *Draft);
         break;
     case SDL_SCANCODE_ESCAPE:
         EnterReview(Ui, Draft);
@@ -757,7 +763,7 @@ static void EnterReview(WizardUi * Ui, WizardDraft * Draft)
 {
     Ui->Screen = WIZARD_REVIEW;
     Ui->Mode = WIZARD_MODE_NONE;
-    Ui->List = 0;
+    Ui->Row = 0;
     if (Draft->Validate(Ui->Base))
     {
         snprintf(Ui->Message, sizeof(Ui->Message), "S to save, Backspace to go back.");
@@ -792,7 +798,7 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui)
     case SDL_SCANCODE_S:
         Ui->Screen = WIZARD_SAVE;
         Ui->SaveChoice = 0;
-        Ui->ConfirmClobber = false;
+        Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
         break;
@@ -911,12 +917,13 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
     snprintf(Out, Size, "%s", Ui.Typed);
 }
 
-// make deletes and recopies both of these on every build, so a file saved there is gone
-// after the next one. Matched both with a leading slash (an absolute path, or anywhere
-// nested under one) and as a bare prefix (a path typed as "Config/mouse/mine.yaml" after
-// cd-ing into Bin/macOS, where the binary lives) — the leading-slash form alone misses that
-// second, entirely plausible case.
-static bool IsClobbered(const char * Path)
+// Under Config/mouse/ or Config/face/, which make deletes and recopies on every build — so
+// the question this answers is "will the next build take this file away?", not whether
+// anything is being overwritten right now. Matched both with a leading slash (an absolute
+// path, or anywhere nested under one) and as a bare prefix (a path typed as
+// "Config/mouse/mine.yaml" after cd-ing into Bin/macOS, where the binary lives) — the
+// leading-slash form alone misses that second, entirely plausible case.
+static bool IsOverwrittenByMake(const char * Path)
 {
     if (strstr(Path, "/Config/mouse/") != nullptr || strstr(Path, "/Config/face/") != nullptr) return true;
     return strncmp(Path, "Config/mouse/", strlen("Config/mouse/")) == 0 ||
@@ -926,7 +933,7 @@ static bool IsClobbered(const char * Path)
 // The default mapping, which AGENTS.md's traps require to stay keyboard-active. Matched as
 // a suffix, both of an absolute path (SavePath's choice 1 builds SDL_GetBasePath() plus
 // "Config/input.yaml") and of a path typed bare from Bin/macOS, the same two shapes
-// IsClobbered above matches. Suffix, not substring: "Config/input.yaml.bak" and
+// IsOverwrittenByMake above matches. Suffix, not substring: "Config/input.yaml.bak" and
 // "Config/mouse/input.yaml" are other files and must not warn.
 static bool IsDefaultInput(const char * Path)
 {
@@ -977,9 +984,9 @@ static void DoSave(WizardUi * Ui, WizardDraft * Draft)
         snprintf(Ui->Message, sizeof(Ui->Message), "Type a path first.");
         return;
     }
-    if (IsClobbered(Path) && !Ui->ConfirmClobber)
+    if (IsOverwrittenByMake(Path) && !Ui->ConfirmOverwrite)
     {
-        Ui->ConfirmClobber = true;
+        Ui->ConfirmOverwrite = true;
         // Message is drawn through WizardTextFit at 48 glyphs from x=24 (see the bottom of
         // WizardDrawScreen): this has to fit whole, or the "Enter again" instruction that
         // matters most would be the part cut off.
@@ -1030,13 +1037,13 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     {
     case SDL_SCANCODE_1:
         Ui->SaveChoice = 0;
-        Ui->ConfirmClobber = false;
+        Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         break;
     case SDL_SCANCODE_2:
     case SDL_SCANCODE_3:
         Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? 1 : 2;
-        Ui->ConfirmClobber = false;
+        Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         Ui->Typing = true;
         Ui->Typed[0] = '\0';
@@ -1139,8 +1146,8 @@ static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
     for (int Row = 0; Row < BaseRowCount(); Row++)
     {
         const float Y = 96.0f + kLine * (float)Row;
-        Colour(Renderer, Row == Ui.List);
-        WizardText(Renderer, 40.0f, Y, kBody, Row == Ui.List ? ">" : " ");
+        Colour(Renderer, Row == Ui.Row);
+        WizardText(Renderer, 40.0f, Y, kBody, Row == Ui.Row ? ">" : " ");
         WizardText(Renderer, 64.0f, Y, kBody, BaseRowLabel(Row));
     }
     if (Ui.Typing)
@@ -1178,9 +1185,9 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
     {
         for (int Row = 0; Row < WizardStickFormCount(); Row++)
         {
-            Colour(Renderer, Row == Ui.List);
+            Colour(Renderer, Row == Ui.Row);
             WizardText(Renderer, 40.0f, 140.0f + kLine * (float)Row, kBody,
-                       Row == Ui.List ? ">" : " ");
+                       Row == Ui.Row ? ">" : " ");
             WizardTextFit(Renderer, 64.0f, 140.0f + kLine * (float)Row, kBody,
                           WizardStickFormLabel(Row), kWindowWidth - 64.0f);
         }

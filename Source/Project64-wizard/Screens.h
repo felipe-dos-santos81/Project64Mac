@@ -34,18 +34,18 @@ struct WizardUi
     WizardScreen Screen;
     int Control;             // 0..14 while Screen is WIZARD_CONTROL
     WizardMode Mode;
-    int List;                // highlighted row of whatever list is on screen
+    int Row;                 // highlighted row of whatever list is on screen
     int KeyStep;             // 0..3 while Mode is WIZARD_MODE_STICK_KEYS
     SDL_Scancode Keys[4];    // collected so far in that mode
     char Base[256];          // the base's name, for the emitted header
     char Typed[256];         // the path being typed, when Typing
     bool Typing;
     int SaveChoice;          // 0 default file, 1 beside a ROM, 2 a typed path
-    bool ConfirmClobber;     // a second Enter is needed for Config/mouse or Config/face
+    bool ConfirmOverwrite;   // a second Enter is needed for Config/mouse or Config/face
     // A second, independent Enter, needed when a draft holding a mouse-panel, face-gesture,
-    // pointer or head binding is aimed at Config/input.yaml. Separate from ConfirmClobber on
-    // purpose: the two warnings are about different things, they can both apply to one path,
-    // and one Enter must never be allowed to satisfy the other.
+    // pointer or head binding is aimed at Config/input.yaml. Separate from ConfirmOverwrite
+    // on purpose: the two warnings are about different things, they can both apply to one
+    // path, and one Enter must never be allowed to satisfy the other.
     bool ConfirmDefault;
     char Message[256];       // the line under the screen
     bool WantCamera;         // set the first time gesture mode is entered
