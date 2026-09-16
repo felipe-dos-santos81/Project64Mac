@@ -169,9 +169,18 @@ static void HandleBase(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         if (Ui->List < BaseRowCount() - 1) Ui->List++;
         break;
     case SDL_SCANCODE_RETURN:
+        // One-shot, unlike Up/Down above: ChooseBase can move Ui->Screen to WIZARD_CONTROL,
+        // and once it does, this switch is no longer what routes this key at all — a repeat
+        // of the same held Enter, processed as the next event, goes to HandleControl instead
+        // and reads there as a fresh Enter, advancing straight past the first control.
+        // Filtering the repeat here stops a held Enter from choosing a base more than once.
+        if (Event.key.repeat) break;
         ChooseBase(Ui, Draft);
         break;
     case SDL_SCANCODE_ESCAPE:
+        // Quit is idempotent, but there is no reason a held Escape should act more than the
+        // one press the player made.
+        if (Event.key.repeat) break;
         Ui->Quit = true;
         break;
     default:
@@ -295,15 +304,16 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
         if (Ui->List < WizardStickFormCount() - 1) Ui->List++;
         return true;
     case SDL_SCANCODE_RETURN:
-        // Filtered here, not ahead of the switch: Up/Down must keep responding to a held
-        // key so the list scrolls, but an unfiltered held Enter would take the highlighted
-        // form once and then let the repeat fall through to the outer switch's
-        // SDL_SCANCODE_RETURN and skip a control.
-        if (Event.key.repeat) return true;
+        // No repeat guard needed: ChooseStickForm always moves Ui->Mode away from STICK
+        // before this call returns (to NONE, or to STICK_KEYS for the "type it" row), so the
+        // mode dispatch in HandleControl never routes a repeat of this same held Enter back
+        // to this case — it falls through to HandleControl's own switch instead, which is
+        // where that repeat is actually filtered.
         ChooseStickForm(Ui, Draft);
         return true;
     case SDL_SCANCODE_ESCAPE:
-        if (Event.key.repeat) return true;
+        // Same reasoning as Enter above: this sets Ui->Mode to NONE directly, so a repeat of
+        // this held key is never routed back here either.
         Ui->Mode = WIZARD_MODE_NONE;
         snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
         return true;
@@ -410,18 +420,22 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         if (Ui->List < POINTER_GESTURE_COUNT - 1) Ui->List++;
         return true;
     case SDL_SCANCODE_RETURN:
-        // Filtered here, not ahead of the switch: Up/Down must keep responding to a held
-        // key so the list scrolls, but an unfiltered held Enter would bind the gesture once
-        // and then let the repeat fall through to the outer switch's SDL_SCANCODE_RETURN
-        // and skip a control.
-        if (Event.key.repeat) return true;
+        // No repeat guard needed: Bound() below sets Ui->Mode to NONE before this call
+        // returns, so the mode dispatch in HandleControl never routes a repeat of this same
+        // held Enter back to this case — it falls through to HandleControl's own switch
+        // instead, which is where that repeat is actually filtered.
         Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->List);
         Bound(Ui, *Draft);
         return true;
     case SDL_SCANCODE_SPACE:
     {
-        // Filtered for the same reason as Enter: a held Space should pick the firing
-        // gesture (or complain) once, not once per repeat.
+        // Unlike Enter and Escape in this function, Space does not always leave GESTURE mode
+        // — see the "else" branch below, which only updates the message and leaves Ui->Mode
+        // untouched. So a held Space, unlike a held Enter or Escape, genuinely can be
+        // re-dispatched to this case while still repeating; filtered so it re-evaluates which
+        // gesture is firing once per press rather than once per repeat. (When exactly one
+        // gesture is firing, Bound() below exits GESTURE mode before any repeat could arrive,
+        // same as Enter — this guard matters only for the ambiguous/nothing-firing branch.)
         if (Event.key.repeat) return true;
         // Only when exactly one gesture is firing: two at once is ambiguous, and taking
         // the lower bit would silently pick for the player.
@@ -446,9 +460,8 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         return true;
     }
     case SDL_SCANCODE_ESCAPE:
-        // A held Escape must cancel once, not cancel and then, on the repeat, fall through
-        // to the outer switch's own SDL_SCANCODE_ESCAPE and jump straight to the review.
-        if (Event.key.repeat) return true;
+        // No repeat guard needed, for the same reason as Enter above: this sets Ui->Mode to
+        // NONE directly, so a repeat of this same held key is never routed back here.
         Ui->Mode = WIZARD_MODE_NONE;
         snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
         return true;
@@ -517,6 +530,18 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     }
     if (Ui->Mode != WIZARD_MODE_NONE || Event.type != SDL_EVENT_KEY_DOWN) return;
+    // Every key this switch handles (1..5, Enter, Backspace, Delete, Escape) is one-shot, so
+    // one guard ahead of it is enough — unlike HandleBase above, nothing here needs a held
+    // key to repeat. This is also where the real fix for the capture-function repeat hazard
+    // lives: a capture function (CaptureGesture, CaptureStickForm, CapturePad, CaptureZone)
+    // that finishes or cancels sets Ui->Mode to NONE inside the same call that handles the
+    // first, non-repeat keydown, so the mode dispatch above never re-enters that function for
+    // the repeat that follows — it falls through to here instead. Two earlier rounds put the
+    // repeat filter inside those capture functions, where it could never see the repeat it
+    // was meant to catch; filtering it here, ahead of the switch those repeats actually reach,
+    // is what stops a held Enter from also calling Advance() or a held Escape from also
+    // jumping to the review, right after a capture already consumed the first press.
+    if (Event.key.repeat) return;
 
     const bool IsStick = CurrentControl(*Ui) == N64Control::Stick;
     switch (Event.key.scancode)
