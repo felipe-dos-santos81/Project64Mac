@@ -167,6 +167,16 @@ static int8_t AxisToN64(int16_t value)
     return (int8_t)((value * N64_AXIS_MAX) / 32767);
 }
 
+// Clamps a published head-stick coordinate to the N64 axis range before the narrowing cast
+// to int8_t, so a value outside -80..80 (the producers already clamp, but the consumer
+// should not take that on faith) cannot wrap into the opposite direction.
+static int8_t ClampToN64Axis(int32_t value)
+{
+    if (value > N64_AXIS_MAX) return (int8_t)N64_AXIS_MAX;
+    if (value < -N64_AXIS_MAX) return (int8_t)-N64_AXIS_MAX;
+    return (int8_t)value;
+}
+
 EXPORT void CALL GetDllInfo(PLUGIN_INFO * PluginInfo)
 {
     PluginInfo->Version = CONTROLLER_SPECS_VERSION;
@@ -312,8 +322,8 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
                 {
                     // The tracker publishes the stick already scaled; head-digital snaps it
                     // by the quadrant rule the mouse guide uses (vertical wins ties).
-                    int8_t X = (int8_t)g_Pointer->HeadX.load(std::memory_order_relaxed);
-                    int8_t Y = (int8_t)g_Pointer->HeadY.load(std::memory_order_relaxed);
+                    int8_t X = ClampToN64Axis(g_Pointer->HeadX.load(std::memory_order_relaxed));
+                    int8_t Y = ClampToN64Axis(g_Pointer->HeadY.load(std::memory_order_relaxed));
                     const int Q = PointerQuadrant(X, Y);
                     if (B.code == 1)
                     {

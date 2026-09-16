@@ -137,26 +137,28 @@ static bool ParsePointerInject(PointerSample * Out)
 
 // PJ64_FACE_INJECT=<gesture>[,<x>,<y>] publishes that gesture's bit and that head stick
 // instead of running the tracker, so the face path can be proven without a camera
-// (Scripts/face_selftest.sh). With it set the camera is never opened, whatever PJ64_FACE says.
+// (Scripts/face_selftest.sh). Presence and validity are separate: the variable being set at
+// all, valid or not, is what keeps the camera off on every route (main() below never calls
+// ParseFaceInject to decide that); a malformed spec only fails ParseFaceInject, which logs
+// one line and injects nothing, the same way a bad input YAML falls back to defaults rather
+// than aborting.
 struct FaceInject { uint32_t Bits; int X, Y; };
 
-static bool ParseFaceInject(FaceInject * Out)
+static bool ParseFaceInject(const char * Env, FaceInject * Out)
 {
-    const char * Env = getenv("PJ64_FACE_INJECT");
-    if (Env == nullptr)
-    {
-        return false;
-    }
     char Name[32] = { 0 };
-    Out->X = 0;
-    Out->Y = 0;
-    const int N = sscanf(Env, "%31[^,],%d,%d", Name, &Out->X, &Out->Y);
-    Out->Bits = N >= 1 ? PointerGestureFromName(Name) : 0;
-    if (Out->Bits == 0 || N == 2 || Out->X < -80 || Out->X > 80 || Out->Y < -80 || Out->Y > 80)
+    int X = 0, Y = 0;
+    const int N = sscanf(Env, "%31[^,],%d,%d", Name, &X, &Y);
+    const bool HasComma = strchr(Env, ',') != nullptr;
+    const uint32_t Bits = N >= 1 ? PointerGestureFromName(Name) : 0;
+    if (Bits == 0 || (HasComma && N != 3) || X < -80 || X > 80 || Y < -80 || Y > 80)
     {
         fprintf(stderr, "bad PJ64_FACE_INJECT: %s (want gesture[,x,y] with x,y in -80..80)\n", Env);
         return false;
     }
+    Out->Bits = Bits;
+    Out->X = X;
+    Out->Y = Y;
     return true;
 }
 
@@ -375,10 +377,14 @@ int main(int argc, char ** argv)
     SDL_GL_MakeCurrent(window, nullptr);
 
     PointerState * pointer = CreatePointerState();
-    FaceInject faceInject;
-    const bool faceInjecting = ParseFaceInject(&faceInject);
-    bool FaceStarted = faceInjecting; // an injected face stands in for the tracker
-    if (Face == FaceMode::On && pointer != nullptr && !TileMode && !faceInjecting)
+    const char * FaceInjectEnv = getenv("PJ64_FACE_INJECT");
+    const bool faceInjectPresent = FaceInjectEnv != nullptr;
+    FaceInject faceInject = {};
+    const bool faceInjectValid = faceInjectPresent && ParseFaceInject(FaceInjectEnv, &faceInject);
+    // The camera gate keys on presence, not validity: a malformed spec still means "do not
+    // start the tracker", it just publishes nothing (ParseFaceInject already logged why).
+    bool FaceStarted = faceInjectPresent;
+    if (Face == FaceMode::On && pointer != nullptr && !TileMode && !faceInjectPresent)
     {
         FaceTrackerStart(pointer);
         FaceStarted = true;
@@ -424,7 +430,7 @@ int main(int argc, char ** argv)
         if (pointer != nullptr)
         {
             PublishMouse(pointer, window, injecting ? &inject : nullptr);
-            if (faceInjecting)
+            if (faceInjectValid)
             {
                 PublishFaceInject(pointer, faceInject);
             }
