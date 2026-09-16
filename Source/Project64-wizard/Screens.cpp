@@ -391,7 +391,88 @@ static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dr
     return true;
 }
 
-static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft,
+                           uint32_t LitGestures)
+{
+    if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    switch (Event.key.scancode)
+    {
+    case SDL_SCANCODE_UP:
+        if (Ui->List > 0) Ui->List--;
+        return true;
+    case SDL_SCANCODE_DOWN:
+        if (Ui->List < POINTER_GESTURE_COUNT - 1) Ui->List++;
+        return true;
+    case SDL_SCANCODE_RETURN:
+        Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->List);
+        Bound(Ui, *Draft);
+        return true;
+    case SDL_SCANCODE_SPACE:
+    {
+        // Only when exactly one gesture is firing: two at once is ambiguous, and taking
+        // the lower bit would silently pick for the player.
+        int Lit = -1, Count = 0;
+        for (int i = 0; i < POINTER_GESTURE_COUNT; i++)
+        {
+            if ((LitGestures & (1u << i)) != 0) { Lit = i; Count++; }
+        }
+        if (Count == 1)
+        {
+            Draft->SetGesture(CurrentControl(*Ui), 1u << Lit);
+            Bound(Ui, *Draft);
+        }
+        else
+        {
+            snprintf(Ui->Message, sizeof(Ui->Message),
+                     Count == 0 ? "Nothing is firing. Hold the expression, or pick a row."
+                                : "More than one is firing. Pick a row with Enter.");
+        }
+        return true;
+    }
+    case SDL_SCANCODE_ESCAPE:
+        Ui->Mode = WIZARD_MODE_NONE;
+        snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
+        return true;
+    default:
+        return true;
+    }
+}
+
+static const char * FaceStatusText(uint32_t Face)
+{
+    switch (Face)
+    {
+    case FACE_OFF: return "camera off: the list still works, unlit";
+    case FACE_STARTING: return "camera starting";
+    case FACE_TRACKING: return "tracking";
+    case FACE_NO_FACE: return "no face found";
+    case FACE_DENIED: return "camera denied in System Settings > Privacy & Security";
+    default: return "camera unavailable";
+    }
+}
+
+static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t Gestures,
+                         uint32_t Face)
+{
+    for (int Row = 0; Row < POINTER_GESTURE_COUNT; Row++)
+    {
+        const float Y = 140.0f + kLine * (float)Row;
+        const bool Firing = (Gestures & (1u << Row)) != 0;
+        Colour(Renderer, Row == Ui.List || Firing);
+        WizardText(Renderer, 40.0f, Y, kBody, Row == Ui.List ? ">" : " ");
+        WizardText(Renderer, 64.0f, Y, kBody, PointerGestureTag(Row));
+        WizardText(Renderer, 112.0f, Y, kBody, PointerGestureName(Row));
+        if (Firing) WizardText(Renderer, 320.0f, Y, kBody, "<- now");
+    }
+    Colour(Renderer, false);
+    // FACE_DENIED's text alone is 53 characters; at x=40 that is 888px unbounded, past the
+    // 800px window, so this line needs the same Fit truncation as any other variable text.
+    WizardTextFit(Renderer, 40.0f, 140.0f + kLine * (float)POINTER_GESTURE_COUNT + 12.0f, kBody,
+                  FaceStatusText(Face), kWindowWidth - 40.0f);
+}
+
+static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft,
+                          uint32_t LitGestures)
 {
     switch (Ui->Mode)
     {
@@ -408,6 +489,9 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case WIZARD_MODE_ZONE:
         if (CaptureZone(Event, Ui, Draft)) return;
+        break;
+    case WIZARD_MODE_GESTURE:
+        if (CaptureGesture(Event, Ui, Draft, LitGestures)) return;
         break;
     default:
         break;
@@ -448,6 +532,14 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         Ui->Mode = WIZARD_MODE_ZONE;
         snprintf(Ui->Message, sizeof(Ui->Message), "Click a slot or the game image. Escape cancels.");
         break;
+    case SDL_SCANCODE_5:
+        if (IsStick) break;
+        Ui->Mode = WIZARD_MODE_GESTURE;
+        Ui->List = 0;
+        Ui->WantCamera = true;
+        snprintf(Ui->Message, sizeof(Ui->Message),
+                 "Arrows and Enter, or Space for the one that is firing.");
+        break;
     case SDL_SCANCODE_RETURN:
         Advance(Ui);
         break;
@@ -472,10 +564,9 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
 
 void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft, uint32_t LitGestures)
 {
-    (void)LitGestures;
     if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
     if (Ui->Screen == WIZARD_BASE) HandleBase(Event, Ui, Draft);
-    else if (Ui->Screen == WIZARD_CONTROL) HandleControl(Event, Ui, Draft);
+    else if (Ui->Screen == WIZARD_CONTROL) HandleControl(Event, Ui, Draft, LitGestures);
 }
 
 static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
@@ -499,7 +590,8 @@ static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
     }
 }
 
-static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft,
+                        uint32_t Gestures, uint32_t Face)
 {
     const N64Control C = (N64Control)Ui.Control;
     char Line[320];
@@ -525,6 +617,16 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
             WizardTextFit(Renderer, 64.0f, 140.0f + kLine * (float)Row, kBody,
                           WizardStickFormLabel(Row), kWindowWidth - 64.0f);
         }
+        return;
+    }
+
+    // Mode 5 takes the whole lower half the way the stick-form picker does above: its
+    // eleven rows start at the same y=140 the "1".."5" menu and the Enter/Delete lines
+    // occupy, so drawing both would overlap pixel-for-pixel rather than sit side by side
+    // the way DrawPanel (which starts below, at y=300) does.
+    if (Ui.Mode == WIZARD_MODE_GESTURE)
+    {
+        DrawGestures(Renderer, Ui, Gestures, Face);
         return;
     }
 
@@ -556,10 +658,8 @@ void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui
                       const WizardDraft & Draft, uint32_t Gestures, uint32_t Face)
 {
     (void)W;
-    (void)Gestures;
-    (void)Face;
     if (Ui.Screen == WIZARD_BASE) DrawBase(Renderer, Ui);
-    else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft);
+    else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft, Gestures, Face);
 
     Colour(Renderer, false);
     WizardTextFit(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message, kWindowWidth - 24.0f);

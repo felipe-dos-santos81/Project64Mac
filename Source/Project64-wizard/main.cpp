@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // SDL3 delivers SDL_EVENT_GAMEPAD_BUTTON_DOWN and SDL_EVENT_GAMEPAD_AXIS_MOTION only for a
@@ -105,6 +106,23 @@ int main(int argc, char ** argv)
             if (Event.type == SDL_EVENT_QUIT) { Ui.Quit = true; break; }
             WizardHandleEvent(Event, &Ui, &Draft,
                               State.Gestures.load(std::memory_order_relaxed));
+        }
+
+        // The camera starts the first time a gesture list asks for one, and never before:
+        // opening the wizard is not consent to be filmed. PJ64_FACE=0 keeps it shut.
+        if (Ui.WantCamera && !CameraStarted)
+        {
+            const char * Off = getenv("PJ64_FACE");
+            if (Off != NULL && strcmp(Off, "0") == 0)
+            {
+                State.Face.store(FACE_OFF, std::memory_order_relaxed);
+                Ui.WantCamera = false;
+            }
+            else
+            {
+                CameraStarted = FaceTrackerStart(&State);
+                Ui.WantCamera = false;
+            }
         }
 
         if (Ui.Typing != WasTyping)

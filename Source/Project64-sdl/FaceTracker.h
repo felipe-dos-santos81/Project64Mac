@@ -1,6 +1,7 @@
 // Project64 - A Nintendo 64 emulator
 // Webcam face gestures through AVFoundation and Vision. Frontend only; the plugin reads
-// the three bits this writes into PointerState. Frames never leave memory.
+// the eleven gesture bits and the head stick this writes into PointerState. Frames never
+// leave memory.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #pragma once
 
