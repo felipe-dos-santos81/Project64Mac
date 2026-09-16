@@ -188,3 +188,34 @@ inline void PointerGateStick(PointerGate * G, PointerEval * E, float X, float Y,
     G->PrevStickX = E->StickX;
     G->PrevStickY = E->StickY;
 }
+
+// The single-game window can be resized or taken full screen, but the GL surface stays at
+// the launch size and the window server scales it to fit, centred, keeping its shape: bars
+// appear on the two long sides when the window's shape differs, as in full screen. Everything
+// above works in launch-size pixels, so the frontend maps the cursor back through this.
+//
+// Maps (X, Y) in a WinW x WinH window onto the BaseW x BaseH picture. Writes the position
+// in base coordinates and returns true when the cursor is over the picture, edges included.
+// Over a bar it returns false and writes the position clamped to the picture's edge, so a
+// cursor leaving through a bar does not jump. A size that is not positive returns false and
+// writes (X, Y) unchanged.
+inline bool PointerFitToBase(float WinW, float WinH, float BaseW, float BaseH,
+                             float X, float Y, float * OutX, float * OutY)
+{
+    if (WinW <= 0.0f || WinH <= 0.0f || BaseW <= 0.0f || BaseH <= 0.0f)
+    {
+        *OutX = X;
+        *OutY = Y;
+        return false;
+    }
+    const float ScaleX = WinW / BaseW, ScaleY = WinH / BaseH;
+    const float Scale = ScaleX < ScaleY ? ScaleX : ScaleY;
+    const float OriginX = (WinW - BaseW * Scale) * 0.5f;
+    const float OriginY = (WinH - BaseH * Scale) * 0.5f;
+    const float Bx = (X - OriginX) / Scale;
+    const float By = (Y - OriginY) / Scale;
+    const bool Over = Bx >= 0.0f && Bx <= BaseW && By >= 0.0f && By <= BaseH;
+    *OutX = Bx < 0.0f ? 0.0f : (Bx > BaseW ? BaseW : Bx);
+    *OutY = By < 0.0f ? 0.0f : (By > BaseH ? BaseH : By);
+    return Over;
+}

@@ -197,6 +197,49 @@ int main()
     PointerGateStick(&Off, &E, 320, 440, 0.0f);
     CHECK(E.StickY == -80);
 
+    // A window resized or taken full screen shows the launch-size picture scaled to fit,
+    // centred, keeping its shape; PointerFitToBase maps the cursor back into that picture.
+    {
+        float Bx = -1.0f, By = -1.0f;
+
+        // Same size: the identity, inside.
+        CHECK(PointerFitToBase(640, 640, 640, 640, 123.0f, 456.0f, &Bx, &By));
+        CHECK(Bx == 123.0f && By == 456.0f);
+
+        // Twice the size.
+        CHECK(PointerFitToBase(1280, 1280, 640, 640, 640.0f, 1000.0f, &Bx, &By));
+        CHECK(Bx == 320.0f && By == 500.0f);
+
+        // Half the size, the minimum.
+        CHECK(PointerFitToBase(320, 320, 640, 640, 160.0f, 250.0f, &Bx, &By));
+        CHECK(Bx == 320.0f && By == 500.0f);
+
+        // Full screen 1920x1080 over 640x640: scale 1.6875, a 1080-wide picture, bars of 420
+        // on each side. The picture's corners are inside, edges included.
+        CHECK(PointerFitToBase(1920, 1080, 640, 640, 420.0f, 0.0f, &Bx, &By));
+        CHECK(Bx == 0.0f && By == 0.0f);
+        CHECK(PointerFitToBase(1920, 1080, 640, 640, 1500.0f, 1080.0f, &Bx, &By));
+        CHECK(Bx == 640.0f && By == 640.0f);
+
+        // On the left bar: outside, and clamped to the picture's left edge.
+        CHECK(!PointerFitToBase(1920, 1080, 640, 640, 100.0f, 540.0f, &Bx, &By));
+        CHECK(Bx == 0.0f && By == 320.0f);
+
+        // On the right bar: outside, clamped to the right edge.
+        CHECK(!PointerFitToBase(1920, 1080, 640, 640, 1800.0f, 540.0f, &Bx, &By));
+        CHECK(Bx == 640.0f && By == 320.0f);
+
+        // A 640x480 game-only picture in a 1920x1080 screen: scale 2.25, bars of 240.
+        CHECK(PointerFitToBase(1920, 1080, 640, 480, 960.0f, 540.0f, &Bx, &By));
+        CHECK(Bx == 320.0f && By == 240.0f);
+
+        // Sizes that are not positive map nothing.
+        CHECK(!PointerFitToBase(0, 640, 640, 640, 10.0f, 10.0f, &Bx, &By));
+        CHECK(!PointerFitToBase(640, -1, 640, 640, 10.0f, 10.0f, &Bx, &By));
+        CHECK(!PointerFitToBase(640, 640, 0, 640, 10.0f, 10.0f, &Bx, &By));
+        CHECK(!PointerFitToBase(640, 640, 640, -5, 10.0f, 10.0f, &Bx, &By));
+    }
+
     // Gesture names.
     CHECK(PointerGestureFromName("eyebrows") == POINTER_GESTURE_EYEBROWS);
     CHECK(PointerGestureFromName("head-left") == POINTER_GESTURE_HEAD_LEFT);
