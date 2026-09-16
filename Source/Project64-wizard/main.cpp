@@ -46,6 +46,13 @@ static void CloseGamepad(void)
     }
 }
 
+// File-scope rather than a local in main(): FaceTrackerStart can return before the OS
+// permission prompt is answered, and its completion block later calls StartSession on
+// whatever queue answers it. If the player quits while the prompt is still up and answers
+// it during SDL teardown, that late write needs somewhere valid to land; a stack frame
+// that has already returned is not that place, but a static, which outlives main(), is.
+static PointerState g_State;
+
 int main(int argc, char ** argv)
 {
     if (argc >= 2 && strcmp(argv[1], "--version") == 0)
@@ -77,8 +84,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    PointerState State;
-    memset(&State, 0, sizeof(State));
+    memset(&g_State, 0, sizeof(g_State));
 
     WizardDraft Draft;
     WizardUi Ui;
@@ -105,7 +111,7 @@ int main(int argc, char ** argv)
         {
             if (Event.type == SDL_EVENT_QUIT) { Ui.Quit = true; break; }
             WizardHandleEvent(Event, &Ui, &Draft,
-                              State.Gestures.load(std::memory_order_relaxed));
+                              g_State.Gestures.load(std::memory_order_relaxed));
         }
 
         // The camera starts the first time a gesture list asks for one, and never before:
@@ -115,12 +121,12 @@ int main(int argc, char ** argv)
             const char * Off = getenv("PJ64_FACE");
             if (Off != NULL && strcmp(Off, "0") == 0)
             {
-                State.Face.store(FACE_OFF, std::memory_order_relaxed);
+                g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
                 Ui.WantCamera = false;
             }
             else
             {
-                CameraStarted = FaceTrackerStart(&State);
+                CameraStarted = FaceTrackerStart(&g_State);
                 Ui.WantCamera = false;
             }
         }
@@ -137,8 +143,8 @@ int main(int argc, char ** argv)
         SDL_SetRenderDrawColor(Renderer, 16, 16, 20, 255);
         SDL_RenderClear(Renderer);
         WizardDrawScreen(Renderer, W, H, Ui, Draft,
-                         State.Gestures.load(std::memory_order_relaxed),
-                         State.Face.load(std::memory_order_relaxed));
+                         g_State.Gestures.load(std::memory_order_relaxed),
+                         g_State.Face.load(std::memory_order_relaxed));
         SDL_RenderPresent(Renderer);
         SDL_Delay(16);
     }

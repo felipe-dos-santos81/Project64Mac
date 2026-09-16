@@ -286,6 +286,11 @@ static void ChooseStickForm(WizardUi * Ui, WizardDraft * Draft)
 static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    // Same repeat hazard CaptureKey and CaptureGesture guard against: an unfiltered held
+    // Enter would take the highlighted form and then let the repeat fall through to the
+    // outer switch's SDL_SCANCODE_RETURN and skip a control. Arrow-key repeat for list
+    // navigation stays intact; only this early return is gated on it.
+    if (Event.key.repeat) return true;
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
@@ -395,6 +400,12 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
                            uint32_t LitGestures)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    // SDL3 resends SDL_EVENT_KEY_DOWN for OS key repeat; unfiltered, a held Enter would
+    // bind the gesture and then let the repeat fall through to the outer switch's
+    // SDL_SCANCODE_RETURN and skip a control (a held Escape would similarly cancel and
+    // then jump to the review). Arrow-key repeat for list navigation stays intact: only
+    // this early return is gated on it, not the individual cases below.
+    if (Event.key.repeat) return true;
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
@@ -423,8 +434,10 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         }
         else
         {
+            // Ui->Message renders through WizardTextFit at x=24 in a 776px budget: 48
+            // glyphs at kBody. Both branches must fit whole, not truncate mid-word.
             snprintf(Ui->Message, sizeof(Ui->Message),
-                     Count == 0 ? "Nothing is firing. Hold the expression, or pick a row."
+                     Count == 0 ? "Nothing is firing. Hold it, or pick a row."
                                 : "More than one is firing. Pick a row with Enter.");
         }
         return true;
@@ -446,7 +459,7 @@ static const char * FaceStatusText(uint32_t Face)
     case FACE_STARTING: return "camera starting";
     case FACE_TRACKING: return "tracking";
     case FACE_NO_FACE: return "no face found";
-    case FACE_DENIED: return "camera denied in System Settings > Privacy & Security";
+    case FACE_DENIED: return "camera denied in Settings > Privacy & Security";
     default: return "camera unavailable";
     }
 }
@@ -465,8 +478,9 @@ static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t 
         if (Firing) WizardText(Renderer, 320.0f, Y, kBody, "<- now");
     }
     Colour(Renderer, false);
-    // FACE_DENIED's text alone is 53 characters; at x=40 that is 888px unbounded, past the
-    // 800px window, so this line needs the same Fit truncation as any other variable text.
+    // Every FaceStatusText string fits x=40's budget whole (kWindowWidth - 40.0f), but
+    // this is variable text like any other status line, so it gets the same Fit
+    // truncation as a defence against a future string that doesn't.
     WizardTextFit(Renderer, 40.0f, 140.0f + kLine * (float)POINTER_GESTURE_COUNT + 12.0f, kBody,
                   FaceStatusText(Face), kWindowWidth - 40.0f);
 }
@@ -537,8 +551,11 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         Ui->Mode = WIZARD_MODE_GESTURE;
         Ui->List = 0;
         Ui->WantCamera = true;
+        // The message line is the only instruction visible in mode 5 (its takeover drops
+        // the Enter/Delete help line), and it renders through WizardTextFit at 48 glyphs
+        // wide, so this has to fit whole rather than truncate mid-word.
         snprintf(Ui->Message, sizeof(Ui->Message),
-                 "Arrows and Enter, or Space for the one that is firing.");
+                 "Arrows and Enter, or Space for what is firing.");
         break;
     case SDL_SCANCODE_RETURN:
         Advance(Ui);
@@ -547,6 +564,10 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         if (Ui->Control > 0) Ui->Control--;
         else Ui->Screen = WIZARD_BASE;
         Ui->Mode = WIZARD_MODE_NONE;
+        // Mode 5 (or the stick-form picker) can leave List as high as 10; unreset, it
+        // would land on the base screen (7 rows) out of range, sending ChooseBase into a
+        // shipped-layout branch with an out-of-range index and a load that silently fails.
+        Ui->List = 0;
         break;
     case SDL_SCANCODE_DELETE:
         Draft->Clear(CurrentControl(*Ui));
