@@ -34,10 +34,18 @@ float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const cha
     return (float)strlen(Text) * (float)SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * S;
 }
 
-float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+// How many glyphs of Scale-scaled debug text fit in MaxWidth pixels. The debug font is fixed
+// pitch, so this is the whole of the font geometry any of the three fitting sites below needs
+// — the head fit, the tail fit, and DrawReview's split of a reader message across two lines.
+static int FitChars(int Scale, float MaxWidth)
 {
     const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * Scale;
-    const int MaxChars = GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+    return GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+}
+
+float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+{
+    const int MaxChars = FitChars(Scale, MaxWidth);
     if ((int)strlen(Text) <= MaxChars)
     {
         return WizardText(Renderer, X, Y, Scale, Text);
@@ -61,8 +69,7 @@ float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const 
 // typed path, the caret that has to stay visible for the player to see what they are doing.
 static float WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
 {
-    const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * Scale;
-    const int MaxChars = GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+    const int MaxChars = FitChars(Scale, MaxWidth);
     const int Len = (int)strlen(Text);
     if (Len <= MaxChars)
     {
@@ -817,8 +824,7 @@ static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const Wizar
     if (Err[0] != '\0')
     {
         Colour(Renderer, true);
-        const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * kBody;
-        const int MaxChars = GlyphWidth > 0 ? (int)((kWindowWidth - 24.0f) / (float)GlyphWidth) : 0;
+        const int MaxChars = FitChars(kBody, kWindowWidth - 24.0f);
         const int ErrLen = (int)strlen(Err);
         const int FirstLen = ErrLen < MaxChars ? ErrLen : MaxChars;
         char First[64];
