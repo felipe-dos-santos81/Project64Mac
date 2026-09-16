@@ -8,10 +8,15 @@
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
 
+#include <yaml-cpp/yaml.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+// Defined below Emit; forward-declared here so LoadBase can use it.
+static bool LoadCapturingStderr(const char * Path, std::string * Message);
 
 const char * WizardControlName(N64Control Control)
 {
@@ -23,6 +28,32 @@ const char * WizardControlName(N64Control Control)
     };
     const int i = (int)Control;
     return (i >= 0 && i < (int)N64Control::Count) ? kNames[i] : "";
+}
+
+namespace
+{
+struct BaseEntry { const char * Label; const char * File; };
+
+const BaseEntry kBases[] = {
+    { "Mouse: Super Mario 64", "Config/mouse/super_mario_64_usa.yaml" },
+    { "Mouse: GoldenEye 007", "Config/mouse/goldeneye_007_u.yaml" },
+    { "Mouse: Mario Kart 64", "Config/mouse/mario_kart_64_u.yaml" },
+    { "Face: Super Mario 64", "Config/face/super_mario_64_usa.yaml" },
+    { "Face: Mario Kart 64", "Config/face/mario_kart_64_u.yaml" },
+};
+const int kBaseCount = (int)(sizeof(kBases) / sizeof(kBases[0]));
+}
+
+int WizardBaseCount() { return kBaseCount; }
+
+const char * WizardBaseLabel(int Index)
+{
+    return (Index >= 0 && Index < kBaseCount) ? kBases[Index].Label : "";
+}
+
+const char * WizardBaseFile(int Index)
+{
+    return (Index >= 0 && Index < kBaseCount) ? kBases[Index].File : "";
 }
 
 // A YAML scalar that needs no quoting is plain; anything else is double quoted. SDL spells
@@ -98,6 +129,47 @@ void WizardDraft::LoadDefaults()
         m_Explicit[i] = false;
     }
     m_Error.clear();
+}
+
+bool WizardDraft::LoadBase(const char * Path)
+{
+    m_Error.clear();
+
+    // The key set first. InputConfig merges a file over the built-in bindings and cannot
+    // say which controls the file named, and only those may be written back out: a
+    // built-in binding can be a pair, which one input per control cannot express.
+    std::vector<std::string> Named;
+    try
+    {
+        YAML::Node Root = YAML::LoadFile(Path);
+        const YAML::Node Bindings = Root["bindings"];
+        if (Bindings && Bindings.IsMap())
+        {
+            for (YAML::const_iterator It = Bindings.begin(); It != Bindings.end(); ++It)
+            {
+                Named.push_back(It->first.as<std::string>());
+            }
+        }
+    }
+    catch (const std::exception & E)
+    {
+        m_Error = E.what();
+        return false;
+    }
+
+    if (!LoadCapturingStderr(Path, &m_Error)) return false;
+
+    InputConfig & C = InputConfig::Get();
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        m_Bindings[i] = C.Bindings((N64Control)i);
+        m_Explicit[i] = false;
+        for (size_t n = 0; n < Named.size(); n++)
+        {
+            if (Named[n] == WizardControlName((N64Control)i)) { m_Explicit[i] = true; break; }
+        }
+    }
+    return true;
 }
 
 void WizardDraft::Replace(N64Control Control, const Binding & Value)

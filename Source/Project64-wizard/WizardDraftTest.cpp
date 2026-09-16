@@ -99,6 +99,70 @@ int main()
         CHECK(strcmp(D.Error(), "") == 0);
     }
 
+    // The five shipped layouts are offered as bases, by label and by path.
+    CHECK(WizardBaseCount() == 5);
+    CHECK(strcmp(WizardBaseFile(0), "Config/mouse/super_mario_64_usa.yaml") == 0);
+    CHECK(strcmp(WizardBaseFile(4), "Config/face/mario_kart_64_u.yaml") == 0);
+    CHECK(strcmp(WizardBaseLabel(0), "Mouse: Super Mario 64") == 0);
+    CHECK(strcmp(WizardBaseFile(-1), "") == 0);
+    CHECK(strcmp(WizardBaseFile(5), "") == 0);
+
+    // A base marks exactly the controls it named, and re-emits to something the reader
+    // still accepts. The SM64 face layout names eight controls and inherits the rest.
+    {
+        WizardDraft D;
+        CHECK(D.LoadBase("Config/face/super_mario_64_usa.yaml"));
+        CHECK(D.Explicit(N64Control::Stick));
+        CHECK(D.Explicit(N64Control::A));
+        CHECK(D.Explicit(N64Control::CRight));
+        CHECK(!D.Explicit(N64Control::DPadUp));      // not named: inherited
+        CHECK(D.Bindings(N64Control::A)[0].kind == Binding::Kind::Face);
+        CHECK(D.Bindings(N64Control::A)[0].code == (int)POINTER_GESTURE_MOUTH_OPEN);
+        const std::string Text = D.Emit("Config/face/super_mario_64_usa.yaml");
+        CHECK(Has(Text, "Stick:     {stick: head}"));
+        CHECK(Has(Text, "A:         {face: mouth-open}"));
+        CHECK(!Has(Text, "\n  DPadUp:"));
+        CHECK(D.Validate("Config/face/super_mario_64_usa.yaml"));
+    }
+
+    // Every shipped layout survives the same round trip.
+    for (int i = 0; i < WizardBaseCount(); i++)
+    {
+        WizardDraft D;
+        CHECK(D.LoadBase(WizardBaseFile(i)));
+        CHECK(D.Validate(WizardBaseFile(i)));
+        if (!D.Validate(WizardBaseFile(i))) fprintf(stderr, "  base %s: %s\n", WizardBaseFile(i), D.Error());
+    }
+
+    // A mouse layout's zones come back as zones.
+    {
+        WizardDraft D;
+        CHECK(D.LoadBase("Config/mouse/super_mario_64_usa.yaml"));
+        CHECK(D.Explicit(N64Control::Stick));
+        CHECK(D.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
+        CHECK(Has(D.Emit("x"), "{stick: pointer}"));
+    }
+
+    // A base that does not exist, or that the reader rejects, leaves the draft alone and
+    // reports why.
+    {
+        WizardDraft D;
+        D.SetKey(N64Control::A, SDL_SCANCODE_X);
+        CHECK(!D.LoadBase("/tmp/pj64-wizard-no-such-file.yaml"));
+        CHECK(strcmp(D.Error(), "") != 0);
+        CHECK(D.Explicit(N64Control::A));                       // untouched
+        CHECK(D.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
+    }
+
+    // The head-direction rule belongs to the reader, and the wizard surfaces its words.
+    {
+        WizardDraft D;
+        CHECK(D.LoadBase("Config/face/super_mario_64_usa.yaml"));
+        D.SetGesture(N64Control::DPadUp, POINTER_GESTURE_HEAD_UP);
+        CHECK(!D.Validate("x"));
+        CHECK(strstr(D.Error(), "head-up cannot be bound while Stick is head") != NULL);
+    }
+
     if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
     printf("ok: wizard draft\n");
     return 0;

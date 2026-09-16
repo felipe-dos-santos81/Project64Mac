@@ -14,6 +14,11 @@
 // The reader's own spelling of a control: "A", "CUp", "DPadLeft", "Stick". "" out of range.
 const char * WizardControlName(N64Control Control);
 
+// The shipped layouts offered as starting points, in the order the base screen lists them.
+int WizardBaseCount();
+const char * WizardBaseLabel(int Index);   // "Mouse: Super Mario 64"; "" out of range
+const char * WizardBaseFile(int Index);    // "Config/mouse/super_mario_64_usa.yaml"; "" out of range
+
 class WizardDraft
 {
 public:
@@ -21,6 +26,10 @@ public:
     WizardDraft();
 
     void LoadDefaults();
+
+    // Replaces the draft with Path's bindings; the controls Path names become explicit.
+    // False leaves the draft untouched and puts the reason in Error().
+    bool LoadBase(const char * Path);
 
     // One input replaces whatever the control had, and marks it explicit.
     void SetKey(N64Control Control, SDL_Scancode Code);
