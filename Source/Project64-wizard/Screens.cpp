@@ -1,7 +1,7 @@
 // Project64 - A Nintendo 64 emulator
 // See Screens.h. Text is SDL's debug font: eight pixels square, ASCII only, scaled by the
 // renderer. It is a utility font for a utility screen, and it spells a scancode name,
-// which the emulator's twenty-glyph overlay font cannot.
+// which the emulator's twenty-one-glyph overlay font cannot.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "Screens.h"
 
@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE is 8; a scale of 2 reads comfortably at 720x640.
+// SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE is 8; a scale of 2 reads comfortably at 800x640.
 static const int kBody = 2;
 static const int kHead = 3;
 static const float kLine = 22.0f;
@@ -258,6 +258,11 @@ static void Bound(WizardUi * Ui, const WizardDraft & Draft)
     Ui->Mode = WIZARD_MODE_NONE;
 }
 
+// The four steps of WIZARD_MODE_STICK_KEYS, in the order ChooseStickForm starts them and
+// SetStickKeys below takes them (Up, Down, Left, Right) — index by Ui->KeyStep *after* it
+// has advanced, to name the direction still wanted.
+static const char * const kStickKeyDirections[4] = { "up", "down", "left", "right" };
+
 // Mode 1: the next keydown is the binding, whatever it is. There is no cancel, because
 // every key is a legal answer — Escape and the arrows included.
 static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
@@ -275,6 +280,16 @@ static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
             Draft->SetStickKeys(Ui->Keys[0], Ui->Keys[1], Ui->Keys[2], Ui->Keys[3]);
             Ui->KeyStep = 0;
             Bound(Ui, *Draft);
+        }
+        else
+        {
+            // Without this, "now: <Describe>" does not change until all four keys are in,
+            // and the message line still reads "Press the key for up." after up was already
+            // taken — indistinguishable from the keypress not registering at all. Fits the
+            // 48-glyph budget at x=24 whole: the longest case, "Press the key for right.", is
+            // 24 characters.
+            snprintf(Ui->Message, sizeof(Ui->Message), "Press the key for %s.",
+                     kStickKeyDirections[Ui->KeyStep]);
         }
         return true;
     }
@@ -629,8 +644,22 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         Advance(Ui, Draft);
         break;
     case SDL_SCANCODE_BACKSPACE:
-        if (Ui->Control > 0) Ui->Control--;
-        else Ui->Screen = WIZARD_BASE;
+        if (Ui->Control > 0)
+        {
+            Ui->Control--;
+        }
+        else
+        {
+            // Task 8's ddab7f0 fixed this same defect in the other direction, routing the
+            // review screen's Backspace through EnterControlScreen so it picks up the control
+            // screen's own message rather than leaving its predecessor's behind (see the
+            // comment on HandleReview's Backspace case). This is the half of that edge going
+            // the other way: without setting the base screen's own message here, it would
+            // keep reading "1-5 to bind, Enter to keep, Delete to inherit." — an instruction
+            // for a screen the player just left.
+            Ui->Screen = WIZARD_BASE;
+            snprintf(Ui->Message, sizeof(Ui->Message), "Up and Down to move, Enter to choose.");
+        }
         Ui->Mode = WIZARD_MODE_NONE;
         // Mode 5 (or the stick-form picker) can leave List as high as 10; unreset, it
         // would land on the base screen (7 rows) out of range, sending ChooseBase into a
@@ -827,10 +856,15 @@ static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
 }
 
 // make deletes and recopies both of these on every build, so a file saved there is gone
-// after the next one.
+// after the next one. Matched both with a leading slash (an absolute path, or anywhere
+// nested under one) and as a bare prefix (a path typed as "Config/mouse/mine.yaml" after
+// cd-ing into Bin/macOS, where the binary lives) — the leading-slash form alone misses that
+// second, entirely plausible case.
 static bool IsClobbered(const char * Path)
 {
-    return strstr(Path, "/Config/mouse/") != NULL || strstr(Path, "/Config/face/") != NULL;
+    if (strstr(Path, "/Config/mouse/") != NULL || strstr(Path, "/Config/face/") != NULL) return true;
+    return strncmp(Path, "Config/mouse/", strlen("Config/mouse/")) == 0 ||
+           strncmp(Path, "Config/face/", strlen("Config/face/")) == 0;
 }
 
 static void DoSave(WizardUi * Ui, WizardDraft * Draft)
@@ -974,7 +1008,12 @@ static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
         Colour(Renderer, true);
         char Line[300];
         snprintf(Line, sizeof(Line), "path: %s_", Ui.Typed);
-        WizardText(Renderer, 40.0f, 96.0f + kLine * (float)BaseRowCount() + 16.0f, kBody, Line);
+        // Tail-fitted for the same reason as DrawSave's "path:" line: Ui.Typed is 256 bytes
+        // and a real absolute path runs well past this window's width, which would otherwise
+        // push the trailing "_" caret — the player's only on-screen feedback for what they
+        // are typing — off the right edge.
+        WizardTextFitTail(Renderer, 40.0f, 96.0f + kLine * (float)BaseRowCount() + 16.0f, kBody,
+                          Line, kWindowWidth - 40.0f);
     }
 }
 

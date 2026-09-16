@@ -90,6 +90,21 @@ static SDL_Event ClickEvent(float X, float Y)
     return E;
 }
 
+// HandleTyping (Screens.cpp) fills Ui.Typed from SDL_EVENT_TEXT_INPUT events, reading only
+// Event.text.text, and appends whatever string that event carries. SDL itself may deliver a
+// typed path one character (or one IME composition) at a time, but HandleTyping just appends
+// each event's string in turn, so one event carrying the whole path is equivalent to many
+// carrying one character each. Text is not copied into the event: the caller must keep it
+// alive for the call.
+static SDL_Event TextEvent(const char * Text)
+{
+    SDL_Event E;
+    memset(&E, 0, sizeof(E));
+    E.type = SDL_EVENT_TEXT_INPUT;
+    E.text.text = Text;
+    return E;
+}
+
 // Walks the real screens with a canned sequence and writes the result to Path. No window,
 // no renderer, no camera: this is the end-to-end proof that runs anywhere.
 static int Selftest(const char * Path)
@@ -155,25 +170,52 @@ static int Selftest(const char * Path)
     int Guard = 0;
     while (Ui.Screen == WIZARD_CONTROL && (N64Control)Ui.Control != N64Control::Stick)
     {
-        if (Guard++ >= (int)N64Control::Count)
+        if (Guard >= (int)N64Control::Count)
         {
+            // Guard here is the count of RETURN events actually dispatched by this loop so
+            // far (checked before the increment below, printed after none more are sent) —
+            // deliberately not the post-increment value, which would print one more than
+            // this loop ever sent.
             fprintf(stderr,
                     "wizard-selftest: stuck after %d Enters on screen %d, control %d, mode %d\n",
                     Guard, (int)Ui.Screen, Ui.Control, (int)Ui.Mode);
             return 1;
         }
+        Guard++;
         WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
     }
 
-    // Stick: the fifth form, a digital head stick.
+    // Stick: the fifth form, a digital head stick. The second Enter here is Advance() from
+    // the last control (Stick), which lands on the review screen.
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
     for (int i = 0; i < 4; i++) WizardHandleEvent(KeyEvent(SDL_SCANCODE_DOWN), &Ui, &Draft, 0);
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
 
-    if (!Draft.Save(Path, Ui.Base))
+    if (Ui.Screen != WIZARD_REVIEW)
     {
-        fprintf(stderr, "wizard-selftest: %s\n", Draft.Error());
+        fprintf(stderr, "wizard-selftest: expected the review screen, got %d\n", (int)Ui.Screen);
+        return 1;
+    }
+
+    // Save, driven through the real screens rather than calling Draft.Save directly: this is
+    // the only file-writing surface on the branch (HandleReview, HandleSave, HandleTyping,
+    // SavePath, DoSave), and until now nothing here exercised any of it.
+    //
+    // The typed-path destination (3), not the default (choice 1): SavePath's default calls
+    // SDL_GetBasePath, which returns garbage before SDL_Init, which --selftest never calls.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_S), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_3), &Ui, &Draft, 0);
+    WizardHandleEvent(TextEvent(Path), &Ui, &Draft, 0);
+    // The first Enter only ends typing: HandleTyping's RETURN case, off the base screen,
+    // clears Ui.Typing and asks for a second Enter rather than saving immediately. The second
+    // Enter is what HandleSave turns into the actual DoSave call.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    if (strncmp(Ui.Message, "Saved.", 6) != 0)
+    {
+        fprintf(stderr, "wizard-selftest: save failed: %s\n", Ui.Message);
         return 1;
     }
     printf("wizard-selftest wrote %s\n", Path);

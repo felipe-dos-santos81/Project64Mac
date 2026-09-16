@@ -203,3 +203,16 @@ plugin reads "the three bits this writes", which the eleven-gesture work made st
 - A gamepad axis capture takes the first axis past the threshold, which on a noisy or
   drifting stick may not be the axis the player meant. The player sees what was recorded
   and can redo it, but the wizard does not debounce beyond the plugin's own threshold.
+
+## Changed during implementation
+
+This section records where the shipped code diverged from the text above. The text above
+is left as originally written; this is appended, not a correction of it.
+
+- The window is 800x640, not 720x640 as Part 1 above says. It was widened during the
+  Task 5 line-overflow fixes, once real control names and descriptions were laid out on
+  screen and 720 wasn't wide enough to hold them without truncation.
+- The overlay font has twenty-one glyphs, not twenty as mentioned above. Twenty was this
+  document's original count; counting `Overlay.cpp`'s actual glyph table during Task 10
+  found twenty-one, and `AGENTS.md` was corrected to match at the time. This document was
+  missed until the final branch review.

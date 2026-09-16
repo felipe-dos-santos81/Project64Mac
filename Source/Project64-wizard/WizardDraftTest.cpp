@@ -155,12 +155,16 @@ int main()
     }
 
     // The head-direction rule belongs to the reader, and the wizard surfaces its words.
+    // Validate rejects through its own temp file (WizardDraft.cpp:461-473 strips that
+    // file's own path back out of the reader's message before returning it) — asserted here
+    // since the substring check above passes whether or not the stripping actually happened.
     {
         WizardDraft D;
         CHECK(D.LoadBase("Config/face/super_mario_64_usa.yaml"));
         D.SetGesture(N64Control::DPadUp, POINTER_GESTURE_HEAD_UP);
         CHECK(!D.Validate("x"));
         CHECK(strstr(D.Error(), "head-up cannot be bound while Stick is head") != NULL);
+        CHECK(strstr(D.Error(), "/tmp/pj64-wizard") == NULL);
     }
 
     // Each Stick form emits its own syntax and survives the reader.
@@ -194,6 +198,21 @@ int main()
         D.SetGesture(N64Control::A, POINTER_GESTURE_HEAD_LEFT);
         CHECK(!D.Validate("x"));
         CHECK(strstr(D.Error(), "head-left cannot be bound while Stick is head") != NULL);
+        CHECK(strstr(D.Error(), "/tmp/pj64-wizard") == NULL);
+    }
+
+    // Save's own errors (a destination the reader never sees, because they happen after
+    // Validate already accepted the draft) never go through Validate's temp-path stripping
+    // at all, and so must come back exactly as Save set them.
+    {
+        WizardDraft D;
+        D.SetKey(N64Control::A, SDL_SCANCODE_X);
+        const char * const kNoSuchDir = "/pj64-wizard-test-no-such-directory-3f7a91/out.yaml";
+        CHECK(!D.Save(kNoSuchDir, "x"));
+        std::string Expected = "could not write ";
+        Expected += kNoSuchDir;
+        CHECK(D.Error() == Expected);
+        CHECK(strstr(D.Error(), "/tmp/pj64-wizard") == NULL);
     }
 
     // Descriptions read as English, and an inherited control says so.
