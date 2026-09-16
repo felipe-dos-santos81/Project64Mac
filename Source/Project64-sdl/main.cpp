@@ -170,13 +170,52 @@ static void PublishFaceInject(PointerState * State, const FaceInject & F)
     State->Face.store(FACE_TRACKING, std::memory_order_relaxed);
 }
 
-// Main thread only: SDL3 documents SDL_GetMouseState as main-thread only.
-static void PublishMouse(PointerState * State, SDL_Window * Window, const PointerSample * Inject)
+// Main thread only, once, right after the GL context is created. Lets the user resize the
+// window, maximise it or take it full screen without the renderer ever learning: the GL
+// surface is pinned at the launch size (W x H) and the window server scales it to fit,
+// centred, keeping its shape. The video plugin, the overlay and the frame dump therefore
+// keep working in launch-size pixels, and PublishMouse maps the cursor back into them.
+// Nothing here or anywhere reacts to a resize event, and nothing may: resizing the drawable
+// or calling the plugin's ChangeSize from the main thread is the deadlock described at
+// CSdlRenderWindow::GfxThreadInit. If either CGL call is refused the window stays fixed,
+// because a resizable window over an unpinned surface would show a stale picture.
+static void MakeWindowScalable(SDL_Window * Window, CGLContextObj Cgl, int W, int H)
 {
+    if (Cgl == nullptr)
+    {
+        fprintf(stderr, "window stays fixed-size: no CGL context to pin\n");
+        return;
+    }
+    const GLint Backing[2] = {W, H};
+    CGLError Err = CGLSetParameter(Cgl, kCGLCPSurfaceBackingSize, Backing);
+    if (Err != kCGLNoError)
+    {
+        fprintf(stderr, "window stays fixed-size: CGLSetParameter(kCGLCPSurfaceBackingSize): %s\n", CGLErrorString(Err));
+        return;
+    }
+    Err = CGLEnable(Cgl, kCGLCESurfaceBackingSize);
+    if (Err != kCGLNoError)
+    {
+        fprintf(stderr, "window stays fixed-size: CGLEnable(kCGLCESurfaceBackingSize): %s\n", CGLErrorString(Err));
+        return;
+    }
+    const float Aspect = (float)W / (float)H;
+    SDL_SetWindowAspectRatio(Window, Aspect, Aspect);
+    SDL_SetWindowMinimumSize(Window, W / 2, H / 2);
+    SDL_SetWindowResizable(Window, true);
+}
+
+// Main thread only: SDL3 documents SDL_GetMouseState as main-thread only.
+static void PublishMouse(PointerState * State, SDL_Window * Window, int BaseW, int BaseH, const PointerSample * Inject)
+{
+    // Everything downstream works in launch-size pixels (see MakeWindowScalable), so the
+    // sample always carries the launch size, never the window's current one.
     PointerSample S;
-    SDL_GetWindowSize(Window, &S.W, &S.H);
+    S.W = BaseW;
+    S.H = BaseH;
     if (Inject != nullptr)
     {
+        // PJ64_POINTER_INJECT coordinates are already in launch-size pixels.
         S.X = Inject->X;
         S.Y = Inject->Y;
         S.Inside = true;
@@ -184,8 +223,14 @@ static void PublishMouse(PointerState * State, SDL_Window * Window, const Pointe
     }
     else
     {
-        const SDL_MouseButtonFlags Buttons = SDL_GetMouseState(&S.X, &S.Y);
-        S.Inside = SDL_GetMouseFocus() == Window;
+        float WinX = 0.0f, WinY = 0.0f;
+        const SDL_MouseButtonFlags Buttons = SDL_GetMouseState(&WinX, &WinY);
+        int WinW = 0, WinH = 0;
+        SDL_GetWindowSize(Window, &WinW, &WinH);
+        // Over a full-screen bar the cursor is outside the picture: no zone, neutral stick.
+        const bool OverPicture = PointerFitToBase((float)WinW, (float)WinH, (float)BaseW, (float)BaseH,
+                                                  WinX, WinY, &S.X, &S.Y);
+        S.Inside = SDL_GetMouseFocus() == Window && OverPicture;
         S.Button = (Buttons & SDL_BUTTON_LMASK) != 0;
     }
     PointerPublish(State, S);
@@ -374,6 +419,11 @@ int main(int argc, char ** argv)
     // Capture the underlying CGL context while it is current here on the main thread;
     // the emulation thread binds it directly rather than going through SDL.
     CGLContextObj cglContext = CGLGetCurrentContext();
+    // Grid tiles are laid out by the grid host and stay fixed; a single game's window scales.
+    if (!TileMode)
+    {
+        MakeWindowScalable(window, cglContext, TileRect.w, TileRect.h);
+    }
     SDL_GL_MakeCurrent(window, nullptr);
 
     PointerState * pointer = CreatePointerState();
@@ -429,7 +479,7 @@ int main(int argc, char ** argv)
         }
         if (pointer != nullptr)
         {
-            PublishMouse(pointer, window, injecting ? &inject : nullptr);
+            PublishMouse(pointer, window, TileRect.w, TileRect.h, injecting ? &inject : nullptr);
             if (faceInjectValid)
             {
                 PublishFaceInject(pointer, faceInject);
