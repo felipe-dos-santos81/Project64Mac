@@ -3,6 +3,7 @@
 // never starts the camera until a gesture list asks for one.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "Screens.h"
+#include "Screenshots.h"
 #include "SyntheticEvents.h"
 #include "WizardDraft.h"
 
@@ -237,6 +238,16 @@ int main(int argc, char ** argv)
             return 1;
         }
         return Selftest(argv[2]);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "--screenshots") == 0)
+    {
+        if (argc < 3)
+        {
+            fprintf(stderr, "usage: %s --screenshots <existing dir>\n", argv[0]);
+            return 1;
+        }
+        return WizardScreenshots(argv[2]);
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
