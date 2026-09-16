@@ -53,12 +53,105 @@ static void CloseGamepad(void)
 // that has already returned is not that place, but a static, which outlives main(), is.
 static PointerState g_State;
 
+// A keydown as the handlers see it. The wizard's screens only ever read `type` and
+// `key.scancode`, so a synthetic event needs nothing else.
+static SDL_Event KeyEvent(SDL_Scancode Code)
+{
+    SDL_Event E;
+    memset(&E, 0, sizeof(E));
+    E.type = SDL_EVENT_KEY_DOWN;
+    E.key.scancode = Code;
+    return E;
+}
+
+static SDL_Event ClickEvent(float X, float Y)
+{
+    SDL_Event E;
+    memset(&E, 0, sizeof(E));
+    E.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    E.button.x = X;
+    E.button.y = Y;
+    // CaptureZone (Screens.cpp) requires Event.button.button == SDL_BUTTON_LEFT before it
+    // will look at the click at all; a zeroed button field reads as no button and the
+    // click is silently ignored.
+    E.button.button = SDL_BUTTON_LEFT;
+    return E;
+}
+
+// Walks the real screens with a canned sequence and writes the result to Path. No window,
+// no renderer, no camera: this is the end-to-end proof that runs anywhere.
+static int Selftest(const char * Path)
+{
+    WizardDraft Draft;
+    WizardUi Ui;
+    WizardUiInit(&Ui);
+    // No real gamepad is opened in this path (no SDL_Init, no device polling), but the B
+    // step below exercises the gamepad-button capture mode, which HandleControl (Screens.cpp)
+    // gates on Ui.HasGamepad. main.cpp normally sets this from whether a pad is actually
+    // open; here there is no device loop to do that, so it is set directly.
+    Ui.HasGamepad = true;
+
+    // Base screen: the built-in bindings, the first row.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // A: a keyboard key.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_X), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // B: a gamepad button.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_2), &Ui, &Draft, 0);
+    SDL_Event Pad;
+    memset(&Pad, 0, sizeof(Pad));
+    Pad.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    Pad.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    WizardHandleEvent(Pad, &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // Z: the panel slot mid1, clicked at its centre. PointerZoneRect puts mid1 at
+    // x 164..220, y 488..536 in a 640x640 window; the wizard draws that at half scale
+    // from (24, 300), so its centre is (24 + 192*0.5, 300 + 512*0.5) = (120, 556).
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_4), &Ui, &Draft, 0);
+    WizardHandleEvent(ClickEvent(120.0f, 556.0f), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // Start: the gesture that is firing, with mouth-open held.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_5), &Ui, &Draft, POINTER_GESTURE_MOUTH_OPEN);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_SPACE), &Ui, &Draft, POINTER_GESTURE_MOUTH_OPEN);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // Everything up to Stick keeps what it has.
+    while (Ui.Screen == WIZARD_CONTROL && (N64Control)Ui.Control != N64Control::Stick)
+    {
+        WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+    }
+
+    // Stick: the fifth form, a digital head stick.
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
+    for (int i = 0; i < 4; i++) WizardHandleEvent(KeyEvent(SDL_SCANCODE_DOWN), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    if (!Draft.Save(Path, Ui.Base))
+    {
+        fprintf(stderr, "wizard-selftest: %s\n", Draft.Error());
+        return 1;
+    }
+    printf("wizard-selftest wrote %s\n", Path);
+    return 0;
+}
+
 int main(int argc, char ** argv)
 {
     if (argc >= 2 && strcmp(argv[1], "--version") == 0)
     {
         printf("Project64 binding wizard\n");
         return 0;
+    }
+
+    if (argc >= 3 && strcmp(argv[1], "--selftest") == 0)
+    {
+        return Selftest(argv[2]);
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))

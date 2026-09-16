@@ -345,7 +345,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) 
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid rom-test grid-selftest pointer-selftest face-selftest wizard-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -490,6 +490,9 @@ pointer-selftest: ## Prove the injected-pointer path maps a game click to A and 
 face-selftest: ## Prove the injected-face path maps mouth-open to A and the head stick to the X axis, with no camera (usage: make face-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make face-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/face_selftest.sh "$(rom)"
+
+wizard-selftest: ## Prove the wizard's screens write the mapping they show, with no window and no camera
+	Scripts/wizard_selftest.sh
 
 input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
 	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)
