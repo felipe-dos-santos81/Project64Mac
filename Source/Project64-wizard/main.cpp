@@ -180,7 +180,7 @@ static int Selftest(const char * Path)
     // fbfd419 and f2e6139 chased) would make every iteration here a no-op, hanging this
     // binary, and the make target that runs it, forever instead of failing.
     int Guard = 0;
-    while (Ui.Screen == WIZARD_CONTROL && (N64Control)Ui.Control != N64Control::Stick)
+    while (Ui.Screen == WIZARD_CONTROL && Ui.Control != N64Control::Stick)
     {
         if (Guard >= (int)N64Control::Count)
         {
@@ -190,7 +190,7 @@ static int Selftest(const char * Path)
             // this loop ever sent.
             fprintf(stderr,
                     "wizard-selftest: stuck after %d Enters on screen %d, control %d, mode %d\n",
-                    Guard, (int)Ui.Screen, Ui.Control, (int)Ui.Mode);
+                    Guard, (int)Ui.Screen, (int)Ui.Control, (int)Ui.Mode);
             return 1;
         }
         Guard++;

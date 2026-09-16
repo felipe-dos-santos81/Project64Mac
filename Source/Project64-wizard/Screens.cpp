@@ -141,7 +141,7 @@ static void BasePath(int Row, char * Out, size_t Size)
 // of their own to the same field, which is why this is the one place that resets it. The
 // review screen's Backspace is the one caller that wants a control other than 0 — it lands
 // on the last control rather than the first — hence the parameter.
-static void EnterControlScreen(WizardUi * Ui, int Control)
+static void EnterControlScreen(WizardUi * Ui, N64Control Control)
 {
     Ui->Screen = WIZARD_CONTROL;
     Ui->Control = Control;
@@ -181,7 +181,7 @@ static void ChooseBase(WizardUi * Ui, WizardDraft * Draft)
         }
         snprintf(Ui->Base, sizeof(Ui->Base), "%s", WizardBaseFile(Ui->Row - 1));
     }
-    EnterControlScreen(Ui, 0);
+    EnterControlScreen(Ui, N64Control::A);
 }
 
 static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
@@ -196,7 +196,7 @@ static void TypedBase(WizardUi * Ui, WizardDraft * Draft)
         return;
     }
     snprintf(Ui->Base, sizeof(Ui->Base), "%s", Ui->Typed);
-    EnterControlScreen(Ui, 0);
+    EnterControlScreen(Ui, N64Control::A);
 }
 
 static void HandleTyping(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
@@ -259,20 +259,20 @@ static void HandleBase(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
 // The plugin's own gate for "this axis is pushed", so the wizard and the game agree.
 static const int kStickThreshold = 16000;
 
-static N64Control CurrentControl(const WizardUi & Ui)
-{
-    return (N64Control)Ui.Control;
-}
-
 // Defined further down, alongside HandleReview and DrawReview, but Advance (and
 // HandleControl's Escape case below) need to call it before that point in the file.
 static void EnterReview(WizardUi * Ui, WizardDraft * Draft);
 
+// N64Control is an enum class, so the three places that step through the fifteen controls —
+// here, HandleControl's Backspace and HandleReview's — spell the cast rather than every read
+// of Ui->Control spelling one.
+static N64Control ControlAt(int Index) { return (N64Control)Index; }
+
 static void Advance(WizardUi * Ui, WizardDraft * Draft)
 {
-    if (Ui->Control + 1 < (int)N64Control::Count)
+    if ((int)Ui->Control + 1 < (int)N64Control::Count)
     {
-        Ui->Control++;
+        Ui->Control = ControlAt((int)Ui->Control + 1);
         Ui->Mode = WIZARD_MODE_NONE;
         Ui->Row = 0;
     }
@@ -290,8 +290,8 @@ static void Advance(WizardUi * Ui, WizardDraft * Draft)
 static void ShowBindingAndLeaveMode(WizardUi * Ui, const WizardDraft & Draft)
 {
     snprintf(Ui->Message, sizeof(Ui->Message), "%s is %s",
-             WizardControlName(CurrentControl(*Ui)),
-             Draft.Describe(CurrentControl(*Ui)).c_str());
+             WizardControlName(Ui->Control),
+             Draft.Describe(Ui->Control).c_str());
     Ui->Mode = WIZARD_MODE_NONE;
 }
 
@@ -340,7 +340,7 @@ static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
         }
         return true;
     }
-    Draft->SetKey(CurrentControl(*Ui), Event.key.scancode);
+    Draft->SetKey(Ui->Control, Event.key.scancode);
     ShowBindingAndLeaveMode(Ui, *Draft);
     return true;
 }
@@ -355,7 +355,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     }
     if (Ui->Mode == WIZARD_MODE_BUTTON && Event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
-        Draft->SetButton(CurrentControl(*Ui), (SDL_GamepadButton)Event.gbutton.button);
+        Draft->SetButton(Ui->Control, (SDL_GamepadButton)Event.gbutton.button);
         ShowBindingAndLeaveMode(Ui, *Draft);
         return true;
     }
@@ -363,7 +363,7 @@ static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     {
         if (Event.gaxis.value > kStickThreshold || Event.gaxis.value < -kStickThreshold)
         {
-            Draft->SetAxis(CurrentControl(*Ui), (SDL_GamepadAxis)Event.gaxis.axis,
+            Draft->SetAxis(Ui->Control, (SDL_GamepadAxis)Event.gaxis.axis,
                            Event.gaxis.value > 0);
             ShowBindingAndLeaveMode(Ui, *Draft);
         }
@@ -525,7 +525,7 @@ static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dr
         snprintf(Ui->Message, sizeof(Ui->Message), "That is a gap. Click a slot or the game image.");
         return true;
     }
-    Draft->SetZone(CurrentControl(*Ui), Zone);
+    Draft->SetZone(Ui->Control, Zone);
     ShowBindingAndLeaveMode(Ui, *Draft);
     return true;
 }
@@ -547,7 +547,7 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         // before this call returns, so the mode dispatch in HandleControl never routes a
         // repeat of this same held Enter back to this case — it falls through to
         // HandleControl's own switch instead, which is where that repeat is actually filtered.
-        Draft->SetGesture(CurrentControl(*Ui), 1u << Ui->Row);
+        Draft->SetGesture(Ui->Control, 1u << Ui->Row);
         ShowBindingAndLeaveMode(Ui, *Draft);
         return true;
     case SDL_SCANCODE_SPACE:
@@ -570,7 +570,7 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
         }
         if (Count == 1)
         {
-            Draft->SetGesture(CurrentControl(*Ui), 1u << Lit);
+            Draft->SetGesture(Ui->Control, 1u << Lit);
             ShowBindingAndLeaveMode(Ui, *Draft);
         }
         else
@@ -682,7 +682,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
     // jumping to the review, right after a capture already consumed the first press.
     if (Event.key.repeat) return;
 
-    const bool IsStick = CurrentControl(*Ui) == N64Control::Stick;
+    const bool IsStick = Ui->Control == N64Control::Stick;
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_1:
@@ -724,9 +724,9 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         Advance(Ui, Draft);
         break;
     case SDL_SCANCODE_BACKSPACE:
-        if (Ui->Control > 0)
+        if ((int)Ui->Control > 0)
         {
-            Ui->Control--;
+            Ui->Control = ControlAt((int)Ui->Control - 1);
             Ui->Mode = WIZARD_MODE_NONE;
             // Whatever list the mode that was open left highlighted must not follow the
             // player onto the control they just stepped back to — the same reset, and the
@@ -746,7 +746,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         }
         break;
     case SDL_SCANCODE_DELETE:
-        Draft->Clear(CurrentControl(*Ui));
+        Draft->Clear(Ui->Control);
         ShowBindingAndLeaveMode(Ui, *Draft);
         break;
     case SDL_SCANCODE_ESCAPE:
@@ -797,7 +797,7 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui)
     {
     case SDL_SCANCODE_S:
         Ui->Screen = WIZARD_SAVE;
-        Ui->SaveChoice = 0;
+        Ui->SaveChoice = WIZARD_SAVE_DEFAULT;
         Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
@@ -807,7 +807,7 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui)
         // so the control screen's own message ("1-5 to bind...") replaces this screen's —
         // rather than leaving "S to save, Backspace to go back." on a screen where neither
         // key does anything.
-        EnterControlScreen(Ui, (int)N64Control::Count - 1);
+        EnterControlScreen(Ui, ControlAt((int)N64Control::Count - 1));
         break;
     case SDL_SCANCODE_ESCAPE:
         Ui->Quit = true;
@@ -879,13 +879,13 @@ static void DrawReview(SDL_Renderer * Renderer, const WizardDraft & Draft)
 // Where the three destinations put the file.
 static void SavePath(const WizardUi & Ui, char * Out, size_t Size)
 {
-    if (Ui.SaveChoice == 0)
+    if (Ui.SaveChoice == WIZARD_SAVE_DEFAULT)
     {
         const char * Dir = SDL_GetBasePath();
         snprintf(Out, Size, "%sConfig/input.yaml", Dir != nullptr ? Dir : "");
         return;
     }
-    if (Ui.SaveChoice == 1)
+    if (Ui.SaveChoice == WIZARD_SAVE_ROM)
     {
         if (Ui.Typed[0] == '\0')
         {
@@ -1036,20 +1036,21 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_1:
-        Ui->SaveChoice = 0;
+        Ui->SaveChoice = WIZARD_SAVE_DEFAULT;
         Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         break;
     case SDL_SCANCODE_2:
     case SDL_SCANCODE_3:
-        Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? 1 : 2;
+        Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? WIZARD_SAVE_ROM
+                                                              : WIZARD_SAVE_TYPED;
         Ui->ConfirmOverwrite = false;
         Ui->ConfirmDefault = false;
         Ui->Typing = true;
         Ui->Typed[0] = '\0';
         snprintf(Ui->Message, sizeof(Ui->Message),
-                 Ui->SaveChoice == 1 ? "Type the ROM's path, then Enter."
-                                     : "Type where to save, then Enter.");
+                 Ui->SaveChoice == WIZARD_SAVE_ROM ? "Type the ROM's path, then Enter."
+                                                   : "Type where to save, then Enter.");
         break;
     case SDL_SCANCODE_RETURN:
         DoSave(Ui, Draft);
@@ -1082,7 +1083,7 @@ static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui)
     };
     for (int Row = 0; Row < 3; Row++)
     {
-        Colour(Renderer, Row == Ui.SaveChoice);
+        Colour(Renderer, Row == (int)Ui.SaveChoice);
         WizardText(Renderer, 24.0f, 72.0f + kLine * (float)Row, kBody, kRows[Row]);
     }
     char Path[512];
@@ -1167,11 +1168,11 @@ static void DrawBase(SDL_Renderer * Renderer, const WizardUi & Ui)
 static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft,
                         uint32_t Gestures, uint32_t Face)
 {
-    const N64Control C = (N64Control)Ui.Control;
+    const N64Control C = Ui.Control;
     char Line[320];
 
     Colour(Renderer, false);
-    snprintf(Line, sizeof(Line), "Control %d of %d", Ui.Control + 1, (int)N64Control::Count);
+    snprintf(Line, sizeof(Line), "Control %d of %d", (int)C + 1, (int)N64Control::Count);
     WizardText(Renderer, 24.0f, 24.0f, kBody, Line);
 
     Colour(Renderer, true);

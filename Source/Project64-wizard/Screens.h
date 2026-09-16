@@ -29,10 +29,19 @@ enum WizardMode
     WIZARD_MODE_STICK_KEYS,  // capturing up, down, left, right in turn
 };
 
+// Where the save screen puts the file. The values are the order the screen lists them, and
+// one less than the digit that picks each: row 0 is "1", row 1 is "2", row 2 is "3".
+enum WizardSaveChoice
+{
+    WIZARD_SAVE_DEFAULT = 0,  // Config/input.yaml beside the executable
+    WIZARD_SAVE_ROM,          // beside a typed ROM path, named after it
+    WIZARD_SAVE_TYPED,        // the typed path, as typed
+};
+
 struct WizardUi
 {
     WizardScreen Screen;
-    int Control;             // 0..14 while Screen is WIZARD_CONTROL
+    N64Control Control;      // the control being bound, while Screen is WIZARD_CONTROL
     WizardMode Mode;
     int Row;                 // highlighted row of whatever list is on screen
     int KeyStep;             // 0..3 while Mode is WIZARD_MODE_STICK_KEYS
@@ -40,7 +49,7 @@ struct WizardUi
     char Base[256];          // the base's name, for the emitted header
     char Typed[256];         // the path being typed, when Typing
     bool Typing;
-    int SaveChoice;          // 0 default file, 1 beside a ROM, 2 a typed path
+    WizardSaveChoice SaveChoice;
     bool ConfirmOverwrite;   // a second Enter is needed for Config/mouse or Config/face
     // A second, independent Enter, needed when a draft holding a mouse-panel, face-gesture,
     // pointer or head binding is aimed at Config/input.yaml. Separate from ConfirmOverwrite
