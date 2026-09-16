@@ -44,6 +44,7 @@ struct WizardUi
     bool ConfirmClobber;     // a second Enter is needed for Config/mouse or Config/face
     char Message[256];       // the line under the screen
     bool WantCamera;         // set the first time gesture mode is entered
+    bool HasGamepad;         // set by main.cpp each frame: a gamepad is currently open
     bool Quit;
 };
 
@@ -59,3 +60,8 @@ void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui
 // One line of text at window pixels X,Y in the current draw colour. Returns the width the
 // line occupied, so a caller can put something after it.
 float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text);
+
+// Like WizardText, but truncates Text (ending in "...") so it never draws past MaxWidth
+// pixels from X. MaxWidth is pixels, not characters, so a caller doesn't have to redo the
+// glyph-width arithmetic for its own window position.
+float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth);

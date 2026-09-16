@@ -14,19 +14,35 @@
 #include <string.h>
 
 // SDL3 delivers SDL_EVENT_GAMEPAD_BUTTON_DOWN and SDL_EVENT_GAMEPAD_AXIS_MOTION only for a
-// gamepad that has been opened, so mode 2 and 3 capture would otherwise see nothing. Follows
-// the pattern at Source/Project64-sdl/PluginInput.cpp:134-159.
-static SDL_Gamepad * OpenFirstGamepad(void)
+// gamepad that has been opened, so mode 2 and 3 capture would otherwise see nothing.
+// Screens.cpp makes no SDL device calls of its own; it only reads WizardUi::HasGamepad,
+// which this file sets from g_Gamepad each frame.
+//
+// Follows Source/Project64-sdl/PluginInput.cpp:134-159 (OpenFirstGamepad/CloseGamepad) and
+// its per-call use at :342: OpenFirstGamepad is idempotent and safe to call every frame, so
+// a still-attached second pad is picked up automatically the frame after the first
+// disconnects, with no need to special-case SDL_EVENT_GAMEPAD_ADDED/REMOVED here.
+static SDL_Gamepad * g_Gamepad = nullptr;
+
+static void OpenFirstGamepad(void)
 {
-    SDL_Gamepad * Pad = nullptr;
+    if (g_Gamepad != nullptr) return;
     int Count = 0;
     SDL_JoystickID * Ids = SDL_GetGamepads(&Count);
     if (Ids != nullptr)
     {
-        if (Count > 0) Pad = SDL_OpenGamepad(Ids[0]);
+        if (Count > 0) g_Gamepad = SDL_OpenGamepad(Ids[0]);
         SDL_free(Ids);
     }
-    return Pad;
+}
+
+static void CloseGamepad(void)
+{
+    if (g_Gamepad != nullptr)
+    {
+        SDL_CloseGamepad(g_Gamepad);
+        g_Gamepad = nullptr;
+    }
 }
 
 int main(int argc, char ** argv)
@@ -42,8 +58,6 @@ int main(int argc, char ** argv)
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
-
-    SDL_Gamepad * Gamepad = OpenFirstGamepad();
 
     SDL_Window * Window = SDL_CreateWindow("Project64 binding wizard", 800, 640,
                                            SDL_WINDOW_RESIZABLE);
@@ -76,20 +90,19 @@ int main(int argc, char ** argv)
     bool WasTyping = false;
     while (!Ui.Quit)
     {
+        // Reopens on the frame after a disconnect (or picks up a pad connected mid-session),
+        // exactly as PluginInput.cpp does before every GetKeys call.
+        OpenFirstGamepad();
+        if (g_Gamepad != nullptr && !SDL_GamepadConnected(g_Gamepad))
+        {
+            CloseGamepad();
+        }
+        Ui.HasGamepad = (g_Gamepad != nullptr);
+
         SDL_Event Event;
         while (SDL_PollEvent(&Event))
         {
             if (Event.type == SDL_EVENT_QUIT) { Ui.Quit = true; break; }
-            if (Event.type == SDL_EVENT_GAMEPAD_ADDED && Gamepad == nullptr)
-            {
-                Gamepad = SDL_OpenGamepad(Event.gdevice.which);
-            }
-            else if (Event.type == SDL_EVENT_GAMEPAD_REMOVED && Gamepad != nullptr &&
-                     Event.gdevice.which == SDL_GetGamepadID(Gamepad))
-            {
-                SDL_CloseGamepad(Gamepad);
-                Gamepad = nullptr;
-            }
             WizardHandleEvent(Event, &Ui, &Draft,
                               State.Gestures.load(std::memory_order_relaxed));
         }
@@ -114,7 +127,7 @@ int main(int argc, char ** argv)
 
     if (WasTyping) SDL_StopTextInput(Window);
     if (CameraStarted) FaceTrackerStop();
-    if (Gamepad != nullptr) SDL_CloseGamepad(Gamepad);
+    CloseGamepad();
     SDL_DestroyRenderer(Renderer);
     SDL_DestroyWindow(Window);
     SDL_Quit();

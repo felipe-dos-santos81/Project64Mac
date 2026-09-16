@@ -15,6 +15,9 @@
 static const int kBody = 2;
 static const int kHead = 3;
 static const float kLine = 22.0f;
+// The window is 800x640 (see main.cpp); screens are laid out for this fixed size rather
+// than the live, resizable window size.
+static const float kWindowWidth = 800.0f;
 
 float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text)
 {
@@ -23,6 +26,26 @@ float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const cha
     SDL_RenderDebugText(Renderer, X / S, Y / S, Text);
     SDL_SetRenderScale(Renderer, 1.0f, 1.0f);
     return (float)strlen(Text) * (float)SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * S;
+}
+
+float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+{
+    const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * Scale;
+    const int MaxChars = GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+    if ((int)strlen(Text) <= MaxChars)
+    {
+        return WizardText(Renderer, X, Y, Scale, Text);
+    }
+    char Buffer[256];
+    if (MaxChars > 3)
+    {
+        snprintf(Buffer, sizeof(Buffer), "%.*s...", MaxChars - 3, Text);
+    }
+    else
+    {
+        snprintf(Buffer, sizeof(Buffer), "%.*s", MaxChars > 0 ? MaxChars : 0, Text);
+    }
+    return WizardText(Renderer, X, Y, Scale, Buffer);
 }
 
 static void Colour(SDL_Renderer * Renderer, bool Highlight)
@@ -194,6 +217,10 @@ static void Bound(WizardUi * Ui, const WizardDraft & Draft)
 static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return false;
+    // SDL3 resends SDL_EVENT_KEY_DOWN for OS key repeat. Every keydown here is literal, so
+    // an unfiltered repeat would keep re-binding (or, in WIZARD_MODE_STICK_KEYS, silently
+    // finish the whole four-key sequence from one held key). Consumed but ignored.
+    if (Event.key.repeat) return true;
     if (Ui->Mode == WIZARD_MODE_STICK_KEYS)
     {
         Ui->Keys[Ui->KeyStep] = Event.key.scancode;
@@ -310,7 +337,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case SDL_SCANCODE_2:
         if (IsStick) break;
-        if (!SDL_HasGamepad())
+        if (!Ui->HasGamepad)
         {
             snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
             break;
@@ -320,7 +347,7 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         break;
     case SDL_SCANCODE_3:
         if (IsStick) break;
-        if (!SDL_HasGamepad())
+        if (!Ui->HasGamepad)
         {
             snprintf(Ui->Message, sizeof(Ui->Message), "No gamepad connected.");
             break;
@@ -393,7 +420,7 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
 
     Colour(Renderer, false);
     snprintf(Line, sizeof(Line), "now: %s", Draft.Describe(C).c_str());
-    WizardText(Renderer, 24.0f, 96.0f, kBody, Line);
+    WizardTextFit(Renderer, 24.0f, 96.0f, kBody, Line, kWindowWidth - 24.0f);
 
     if (C == N64Control::Stick && Ui.Mode == WIZARD_MODE_STICK)
     {
@@ -402,8 +429,8 @@ static void DrawControl(SDL_Renderer * Renderer, const WizardUi & Ui, const Wiza
             Colour(Renderer, Row == Ui.List);
             WizardText(Renderer, 40.0f, 140.0f + kLine * (float)Row, kBody,
                        Row == Ui.List ? ">" : " ");
-            WizardText(Renderer, 64.0f, 140.0f + kLine * (float)Row, kBody,
-                       WizardStickFormLabel(Row));
+            WizardTextFit(Renderer, 64.0f, 140.0f + kLine * (float)Row, kBody,
+                          WizardStickFormLabel(Row), kWindowWidth - 64.0f);
         }
         return;
     }
@@ -437,5 +464,5 @@ void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui
     else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft);
 
     Colour(Renderer, false);
-    WizardText(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message);
+    WizardTextFit(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message, kWindowWidth - 24.0f);
 }
