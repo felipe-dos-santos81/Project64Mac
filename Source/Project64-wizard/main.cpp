@@ -342,6 +342,11 @@ int main(int argc, char ** argv)
     // no window at all), so text input is started and stopped here, from the transitions of
     // Ui.Typing, rather than inside the handler.
     bool WasTyping = false;
+    // Queried once rather than every frame: the window above was created at a fixed 800x640
+    // and is not resizable (SDL_WINDOW_RESIZABLE is deliberately absent), so its size cannot
+    // change for the life of this loop.
+    int W = 0, H = 0;
+    SDL_GetWindowSize(Window, &W, &H);
     while (!Ui.Quit)
     {
         // Reopens on the frame after a disconnect (or picks up a pad connected mid-session),
@@ -385,8 +390,6 @@ int main(int argc, char ** argv)
             WasTyping = Ui.Typing;
         }
 
-        int W = 0, H = 0;
-        SDL_GetWindowSize(Window, &W, &H);
         SDL_SetRenderDrawColor(Renderer, 16, 16, 20, 255);
         SDL_RenderClear(Renderer);
         WizardDrawScreen(Renderer, W, H, Ui, Draft,

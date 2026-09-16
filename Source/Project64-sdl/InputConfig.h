@@ -44,11 +44,20 @@ public:
     // Apply a file over the built-in defaults. On any error returns false, logs one
     // line unless Quiet, and leaves the instance exactly as it was. The frontend loads
     // the same file quietly to size its window; the plugin's load reports the error.
-    bool Load(const char * Path, bool Quiet = false);
+    // SeenOut, if given, gets one bool per control (true where the file named it) on
+    // success — the same table Load already builds to reject a repeated key, handed back
+    // so a caller like the wizard's LoadBase can learn which controls were explicit
+    // without parsing the file a second time.
+    bool Load(const char * Path, bool Quiet = false, bool * SeenOut = nullptr);
 
     // Restore the built-in bindings, discarding whatever a file applied. The wizard starts
     // a draft from these; the plugin and the frontend never call it.
     void Reset();
+
+    // One control's built-in binding(s), independent of whatever Load or Reset most
+    // recently put in the live table. The wizard's Clear uses this to restore a single
+    // control without resetting the other fourteen.
+    static std::vector<Binding> DefaultBinding(N64Control Control);
 
     const std::vector<Binding> & Bindings(N64Control Control) const;
 

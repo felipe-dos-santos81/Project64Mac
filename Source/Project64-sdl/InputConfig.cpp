@@ -20,6 +20,13 @@ void InputConfig::Reset()
     DefaultBindings(m_Bindings);
 }
 
+std::vector<Binding> InputConfig::DefaultBinding(N64Control Control)
+{
+    std::vector<Binding> Defaults[(int)N64Control::Count];
+    DefaultBindings(Defaults);
+    return Defaults[(int)Control];
+}
+
 InputConfig & InputConfig::Get()
 {
     static InputConfig Instance;
@@ -358,7 +365,7 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     }
 }
 
-bool InputConfig::Load(const char * Path, bool Quiet)
+bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
 {
     QuietScope Scope(Quiet);
     YAML::Node Root;
@@ -422,6 +429,10 @@ bool InputConfig::Load(const char * Path, bool Quiet)
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         m_Bindings[i] = Next[i];
+    }
+    if (SeenOut != nullptr)
+    {
+        for (int i = 0; i < (int)N64Control::Count; i++) SeenOut[i] = Seen[i];
     }
     return true;
 }

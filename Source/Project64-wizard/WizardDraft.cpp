@@ -8,15 +8,14 @@
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
 
-#include <yaml-cpp/yaml.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-// Defined below Emit; forward-declared here so LoadBase can use it.
-static bool LoadCapturingStderr(const char * Path, std::string * Message);
+// Defined below Emit; forward-declared here so LoadBase can use it. SeenOut, when given,
+// gets InputConfig::Load's own Seen[] table: one bool per control, true where Path named it.
+static bool LoadCapturingStderr(const char * Path, std::string * Message, bool * SeenOut = nullptr);
 
 const char * WizardControlName(N64Control Control)
 {
@@ -235,39 +234,18 @@ bool WizardDraft::LoadBase(const char * Path)
 {
     m_Error.clear();
 
-    // The key set first. InputConfig merges a file over the built-in bindings and cannot
-    // say which controls the file named, and only those may be written back out: a
+    // Which controls Path named, straight from InputConfig::Load's own Seen[] table — it
+    // already builds this to reject a repeated key, so LoadBase does not need a second parse
+    // of its own to learn the same thing. Only a named control may be written back out: a
     // built-in binding can be a pair, which one input per control cannot express.
-    std::vector<std::string> Named;
-    try
-    {
-        YAML::Node Root = YAML::LoadFile(Path);
-        const YAML::Node Bindings = Root["bindings"];
-        if (Bindings && Bindings.IsMap())
-        {
-            for (YAML::const_iterator It = Bindings.begin(); It != Bindings.end(); ++It)
-            {
-                Named.push_back(It->first.as<std::string>());
-            }
-        }
-    }
-    catch (const std::exception & E)
-    {
-        m_Error = E.what();
-        return false;
-    }
-
-    if (!LoadCapturingStderr(Path, &m_Error)) return false;
+    bool Named[(int)N64Control::Count] = { false };
+    if (!LoadCapturingStderr(Path, &m_Error, Named)) return false;
 
     InputConfig & C = InputConfig::Get();
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         m_Bindings[i] = C.Bindings((N64Control)i);
-        m_Explicit[i] = false;
-        for (size_t n = 0; n < Named.size(); n++)
-        {
-            if (Named[n] == WizardControlName((N64Control)i)) { m_Explicit[i] = true; break; }
-        }
+        m_Explicit[i] = Named[i];
     }
     return true;
 }
@@ -357,11 +335,8 @@ void WizardDraft::SetStickKeys(SDL_Scancode Up, SDL_Scancode Down, SDL_Scancode 
 
 void WizardDraft::Clear(N64Control Control)
 {
-    const int i = (int)Control;
-    InputConfig & C = InputConfig::Get();
-    C.Reset();
-    m_Bindings[i] = C.Bindings(Control);
-    m_Explicit[i] = false;
+    m_Bindings[(int)Control] = InputConfig::DefaultBinding(Control);
+    m_Explicit[(int)Control] = false;
 }
 
 bool WizardDraft::Explicit(N64Control Control) const
@@ -499,7 +474,7 @@ static int OpenScratchFile(const char * Template, char * Path, size_t Size, std:
 // reader's own words. Redirects the fd underneath stderr with dup2, not freopen: freopen
 // would reassociate the stderr FILE object with a regular file and leave it fully buffered
 // even after the fd is restored, reordering every later fprintf(stderr, ...).
-static bool LoadCapturingStderr(const char * Path, std::string * Message)
+static bool LoadCapturingStderr(const char * Path, std::string * Message, bool * SeenOut)
 {
     char ScratchPath[64];
     const int Fd = OpenScratchFile("/tmp/pj64-wizard-err-XXXXXX", ScratchPath,
@@ -511,7 +486,7 @@ static bool LoadCapturingStderr(const char * Path, std::string * Message)
     dup2(Fd, fileno(stderr));
     close(Fd);
 
-    const bool Ok = InputConfig::Get().Load(Path, false);
+    const bool Ok = InputConfig::Get().Load(Path, false, SeenOut);
 
     fflush(stderr);
     dup2(SavedStderr, fileno(stderr));
@@ -544,8 +519,8 @@ bool WizardDraft::Validate(const char * BaseName)
     char Path[64];
     const int Fd = OpenScratchFile("/tmp/pj64-wizard-XXXXXX", Path, sizeof(Path), &m_Error);
     if (Fd < 0) return false;
-    const std::string Text = Emit(BaseName);
-    const bool Wrote = write(Fd, Text.data(), Text.size()) == (ssize_t)Text.size();
+    m_LastEmit = Emit(BaseName);
+    const bool Wrote = write(Fd, m_LastEmit.data(), m_LastEmit.size()) == (ssize_t)m_LastEmit.size();
     close(Fd);
     bool Ok = false;
     if (Wrote)
@@ -583,8 +558,9 @@ bool WizardDraft::Save(const char * Path, const char * BaseName)
         m_Error += Path;
         return false;
     }
-    const std::string Text = Emit(BaseName);
-    const bool Ok = fwrite(Text.data(), 1, Text.size(), F) == Text.size();
+    // Validate above just emitted this same text (for the round-trip check) and left it in
+    // m_LastEmit, so the draft is not re-rendered to a second string for the real write.
+    const bool Ok = fwrite(m_LastEmit.data(), 1, m_LastEmit.size(), F) == m_LastEmit.size();
     fclose(F);
     if (!Ok)
     {

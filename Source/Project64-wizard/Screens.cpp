@@ -90,6 +90,14 @@ static void WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Sca
     WizardText(Renderer, X, Y, Scale, Buffer);
 }
 
+// Up/Down within a Count-row list. HandleBase, CaptureStickForm and CaptureGesture each clamp
+// Ui->Row the same way against their own row count; this is the one place that does it.
+static void MoveRow(WizardUi * Ui, int Delta, int Count)
+{
+    const int Next = Ui->Row + Delta;
+    if (Next >= 0 && Next < Count) Ui->Row = Next;
+}
+
 static void Colour(SDL_Renderer * Renderer, bool Highlight)
 {
     if (Highlight) SDL_SetRenderDrawColor(Renderer, 255, 220, 120, 255);
@@ -231,10 +239,10 @@ static void HandleBase(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->Row > 0) Ui->Row--;
+        MoveRow(Ui, -1, BaseRowCount());
         break;
     case SDL_SCANCODE_DOWN:
-        if (Ui->Row < BaseRowCount() - 1) Ui->Row++;
+        MoveRow(Ui, 1, BaseRowCount());
         break;
     case SDL_SCANCODE_RETURN:
         // One-shot, unlike Up/Down above: ChooseBase can move Ui->Screen to WIZARD_CONTROL,
@@ -305,6 +313,14 @@ static void Cancelled(WizardUi * Ui)
     snprintf(Ui->Message, sizeof(Ui->Message), "Cancelled.");
 }
 
+// Both save-screen warnings reset together: entering the save screen, picking a fresh
+// destination there, and a completed save all start (or leave) with neither pending.
+static void ClearConfirmations(WizardUi * Ui)
+{
+    Ui->ConfirmOverwrite = false;
+    Ui->ConfirmDefault = false;
+}
+
 // The four steps of WIZARD_MODE_STICK_KEYS, in the order ChooseStickForm starts them and
 // SetStickKeys below takes them (Up, Down, Left, Right) — index by Ui->KeyStep *after* it
 // has advanced, to name the direction still wanted.
@@ -345,14 +361,19 @@ static bool CaptureKey(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     return true;
 }
 
+// Shared by CapturePad and CaptureZone below, the two capture modes Escape can leave without
+// otherwise consuming a key: true (and Cancelled) on an Escape keydown, false for anything else.
+static bool CaptureEscape(const SDL_Event & Event, WizardUi * Ui)
+{
+    if (Event.type != SDL_EVENT_KEY_DOWN || Event.key.scancode != SDL_SCANCODE_ESCAPE) return false;
+    Cancelled(Ui);
+    return true;
+}
+
 // Modes 2 and 3 do not consume keys, so Escape leaves them.
 static bool CapturePad(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
-    if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
-    {
-        Cancelled(Ui);
-        return true;
-    }
+    if (CaptureEscape(Event, Ui)) return true;
     if (Ui->Mode == WIZARD_MODE_BUTTON && Event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
     {
         Draft->SetButton(Ui->Control, (SDL_GamepadButton)Event.gbutton.button);
@@ -425,10 +446,10 @@ static bool CaptureStickForm(const SDL_Event & Event, WizardUi * Ui, WizardDraft
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->Row > 0) Ui->Row--;
+        MoveRow(Ui, -1, WizardStickFormCount());
         return true;
     case SDL_SCANCODE_DOWN:
-        if (Ui->Row < WizardStickFormCount() - 1) Ui->Row++;
+        MoveRow(Ui, 1, WizardStickFormCount());
         return true;
     case SDL_SCANCODE_RETURN:
         // No repeat guard needed: ChooseStickForm always moves Ui->Mode away from STICK
@@ -513,11 +534,7 @@ static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
 
 static bool CaptureZone(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
 {
-    if (Event.type == SDL_EVENT_KEY_DOWN && Event.key.scancode == SDL_SCANCODE_ESCAPE)
-    {
-        Cancelled(Ui);
-        return true;
-    }
+    if (CaptureEscape(Event, Ui)) return true;
     if (Event.type != SDL_EVENT_MOUSE_BUTTON_DOWN || Event.button.button != SDL_BUTTON_LEFT) return false;
     const int Zone = ZoneAtPoint(Event.button.x, Event.button.y);
     if (Zone == POINTER_ZONE_NONE)
@@ -537,10 +554,10 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
     switch (Event.key.scancode)
     {
     case SDL_SCANCODE_UP:
-        if (Ui->Row > 0) Ui->Row--;
+        MoveRow(Ui, -1, POINTER_GESTURE_COUNT);
         return true;
     case SDL_SCANCODE_DOWN:
-        if (Ui->Row < POINTER_GESTURE_COUNT - 1) Ui->Row++;
+        MoveRow(Ui, 1, POINTER_GESTURE_COUNT);
         return true;
     case SDL_SCANCODE_RETURN:
         // No repeat guard needed: ShowBindingAndLeaveMode() below sets Ui->Mode to NONE
@@ -798,8 +815,7 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui)
     case SDL_SCANCODE_S:
         Ui->Screen = WIZARD_SAVE;
         Ui->SaveChoice = WIZARD_SAVE_DEFAULT;
-        Ui->ConfirmOverwrite = false;
-        Ui->ConfirmDefault = false;
+        ClearConfirmations(Ui);
         snprintf(Ui->Message, sizeof(Ui->Message), "1, 2 or 3, then Enter.");
         break;
     case SDL_SCANCODE_BACKSPACE:
@@ -1021,8 +1037,7 @@ static void DoSave(WizardUi * Ui, WizardDraft * Draft)
     // Both confirmations are for a save that has not happened yet; once it has, DrawSave must
     // stop drawing the ConfirmDefault why-block (and must not re-arm ConfirmOverwrite) under
     // "Saved. Escape to quit.", or a further Enter would silently re-save the same file.
-    Ui->ConfirmOverwrite = false;
-    Ui->ConfirmDefault = false;
+    ClearConfirmations(Ui);
 }
 
 static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
@@ -1042,15 +1057,13 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     {
     case SDL_SCANCODE_1:
         Ui->SaveChoice = WIZARD_SAVE_DEFAULT;
-        Ui->ConfirmOverwrite = false;
-        Ui->ConfirmDefault = false;
+        ClearConfirmations(Ui);
         break;
     case SDL_SCANCODE_2:
     case SDL_SCANCODE_3:
         Ui->SaveChoice = Event.key.scancode == SDL_SCANCODE_2 ? WIZARD_SAVE_ROM
                                                               : WIZARD_SAVE_TYPED;
-        Ui->ConfirmOverwrite = false;
-        Ui->ConfirmDefault = false;
+        ClearConfirmations(Ui);
         Ui->Typing = true;
         Ui->Typed[0] = '\0';
         snprintf(Ui->Message, sizeof(Ui->Message),

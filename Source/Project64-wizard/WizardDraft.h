@@ -96,4 +96,5 @@ private:
     std::vector<Binding> m_Bindings[(int)N64Control::Count];
     bool m_Explicit[(int)N64Control::Count];
     std::string m_Error;
+    std::string m_LastEmit;   // set by Validate; Save reuses it rather than calling Emit twice
 };
