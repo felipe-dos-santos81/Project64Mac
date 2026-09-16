@@ -20,11 +20,13 @@ Prerequisites: Xcode command line tools plus Homebrew SDL3 and yaml-cpp
 ```sh
 make all                  # core, four plugins, frontend, and the ROM database beside the binary
 make test                 # smoke test: version string and plugin exports
+make unit-test            # every headless unit test below
 make input-config-test    # parser tests for the YAML input mapping
 make pointer-layout-test  # geometry tests for the mouse panel and stick
 make face-gesture-test    # classifier tests for the face gestures
 make wizard-draft-test    # tests for the wizard's draft and the YAML it writes
 make wizard-selftest      # drives the wizard's screens and checks the file they produce
+make run-wizard           # launch the binding wizard window
 make face-selftest rom=Roms/a.z64   # end-to-end face path, no camera
 make game-config-test     # lookup tests for the per-game YAML
 ```

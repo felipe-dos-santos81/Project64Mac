@@ -19,6 +19,7 @@ pulled back in by accident.
 ```sh
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
+make unit-test                           # every headless unit test below
 make input-config-test                   # parser tests for the YAML input mapping
 make pointer-layout-test                 # geometry tests for the mouse panel and stick
 make face-gesture-test                   # classifier tests for the face gestures
@@ -27,13 +28,14 @@ make wizard-draft-test                   # tests for the wizard's draft and the 
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
 make wizard-selftest                     # the wizard's screens, driven by synthetic events
+make run-wizard                          # launch the binding wizard window
 make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
 make rom-test                            # sweep a ROM pack, screenshot each game (see --help)
 make clean                               # removes build/macos, Bin/macOS, generated Version.h files
-make help                                # every target with its stage number
+make help                                # user-facing targets; build stages are hidden
 ```
 
 `make test` is the smoke suite: the frontend must run `--version`, and each of the four

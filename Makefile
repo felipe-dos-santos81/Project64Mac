@@ -345,7 +345,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) 
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid rom-test grid-selftest pointer-selftest face-selftest wizard-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest unit-test input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -358,21 +358,21 @@ help: ## Print this help message (default)
 		END {for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m %s\n", w, name[i], desc[i]}'
 .DEFAULT_GOAL := help
 
-deps: ## [STEP 0] Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
+deps: # Verify clang, make, pkg-config and Homebrew SDL3 and yaml-cpp are present
 	@command -v $(CXX) >/dev/null || { echo "clang++ not found: xcode-select --install"; exit 1; }
 	@command -v pkg-config >/dev/null || { echo "pkg-config not found: brew install pkg-config"; exit 1; }
 	@pkg-config --exists sdl3 || { echo "SDL3 not found: brew install sdl3"; exit 1; }
 	@pkg-config --exists yaml-cpp || { echo "yaml-cpp not found: brew install yaml-cpp"; exit 1; }
 	@echo "deps ok: SDL3 $$(pkg-config --modversion sdl3), yaml-cpp $$(pkg-config --modversion yaml-cpp), $$($(CXX) --version | head -1)"
 
-version: $(VERSION_HEADERS) ## Generate Version.h from Version.h.in for core, video, audio, rsp-core
+version: $(VERSION_HEADERS) # Generate Version.h from Version.h.in for core, video, audio, rsp-core
 
 $(SRC)/%/Version.h: $(SRC)/%/Version.h.in
 	cp $< $@
 
 # ── Stage 1 · Common libraries ───────────────────────────────────────────────
 
-common: $(LIBDIR)/libCommon.a $(LIBDIR)/libSettings.a $(LIBDIR)/libzlib.a $(LIBDIR)/libpng.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libsoftfloat.a ## [STEP 1] Build Common, Settings, zlib, png, asmjit, softfloat static libs
+common: $(LIBDIR)/libCommon.a $(LIBDIR)/libSettings.a $(LIBDIR)/libzlib.a $(LIBDIR)/libpng.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libsoftfloat.a # Build Common, Settings, zlib, png, asmjit, softfloat static libs
 
 # One recipe for every static library; each rule below only names its objects.
 # 'rm -f' first so a source dropped from a list does not leave a stale member behind.
@@ -390,39 +390,39 @@ $(LIBDIR)/libsoftfloat.a: $(SOFTFLOAT_OBJS)
 $(LIBDIR)/libasmjit.a: $(ASMJIT_OBJS)
 # ── Stage 2 · Emulator core ──────────────────────────────────────────────────
 
-core: $(LIBDIR)/libProject64-core.a ## [STEP 2] Build the Project64 core static library
+core: $(LIBDIR)/libProject64-core.a # Build the Project64 core static library
 
 $(CORE_OBJS): $(SRC)/Project64-core/Version.h
 $(LIBDIR)/libProject64-core.a: $(CORE_OBJS)
 
 # ── Stages 3–6 · Plugins ─────────────────────────────────────────────────────
 
-rsp: $(PLUGINS)/RSP/Project64-rsp.dylib ## [STEP 3] Build the RSP plugin (rsp-core + entry point)
+rsp: $(PLUGINS)/RSP/Project64-rsp.dylib # Build the RSP plugin (rsp-core + entry point)
 $(RSP_OBJS): $(SRC)/Project64-rsp-core/Version.h
 $(PLUGINS)/RSP/Project64-rsp.dylib: $(RSP_OBJS) $(LIBDIR)/libSettings.a $(LIBDIR)/libzlib.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^
 
-video: $(PLUGINS)/GFX/Project64-video.dylib ## [STEP 4] Build the video plugin (Glide64 on desktop OpenGL)
+video: $(PLUGINS)/GFX/Project64-video.dylib # Build the video plugin (Glide64 on desktop OpenGL)
 $(VIDEO_OBJS): $(SRC)/Project64-video/Version.h
 $(PLUGINS)/GFX/Project64-video.dylib: $(VIDEO_OBJS) $(LIBDIR)/libpng.a $(LIBDIR)/libzlib.a $(LIBDIR)/libSettings.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^ -framework OpenGL
 
-audio: $(PLUGINS)/Audio/Project64-audio.dylib ## [STEP 5] Build the audio plugin (SDL3 audio stream driver)
+audio: $(PLUGINS)/Audio/Project64-audio.dylib # Build the audio plugin (SDL3 audio stream driver)
 $(AUDIO_OBJS): $(SRC)/Project64-audio/Version.h
 $(PLUGINS)/Audio/Project64-audio.dylib: $(AUDIO_OBJS) $(LIBDIR)/libSettings.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^ $(SDL_LIBS)
 
-input: $(PLUGINS)/Input/Project64-input-sdl.dylib ## [STEP 6] Build the SDL3 keyboard/gamepad input plugin
+input: $(PLUGINS)/Input/Project64-input-sdl.dylib # Build the SDL3 keyboard/gamepad input plugin
 $(PLUGINS)/Input/Project64-input-sdl.dylib: $(INPUT_OBJS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -dynamiclib -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
 # ── Stage 7 · Frontend ───────────────────────────────────────────────────────
 
-frontend: $(BIN)/Project64 ## [STEP 7] Build the SDL3 frontend executable
+frontend: $(BIN)/Project64 # Build the SDL3 frontend executable
 $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-core.a $(LIBDIR)/libasmjit.a $(LIBDIR)/libzlib.a $(LIBDIR)/libsoftfloat.a $(LIBDIR)/libCommon.a
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework OpenGL -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
@@ -431,7 +431,7 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-co
 
 # A second binary, with no ROM and no OpenGL: SDL_Renderer and SDL's debug font. It shares
 # the frontend's InputConfig, FaceGestures and FaceTracker objects rather than its own.
-wizard: $(BIN)/Project64-wizard ## [STEP 7c] Build the binding wizard
+wizard: $(BIN)/Project64-wizard # Build the binding wizard
 $(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(BUILD)/Project64-sdl/FaceGestures.o $(BUILD)/Project64-sdl/FaceTracker.o
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
@@ -443,7 +443,7 @@ $(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(B
 # to defaults, which is why the RSP reports "uCode crc not found in INI" and never runs the
 # graphics task. Copy the shipped data next to the binary. Project64.cfg is a user file and
 # is never overwritten.
-config: ## [STEP 7b] Install ROM database, enhancements, input mappings and language files beside the binary (refreshes Config/mouse and Config/face)
+config: # Install ROM database, enhancements, input mappings and language files beside the binary (refreshes Config/mouse and Config/face)
 	@mkdir -p $(BIN)/Config $(BIN)/Lang
 	@cp -f Config/Project64.rdb Config/Project64.rdx Config/Audio.rdb Config/Video.rdb $(BIN)/Config/
 	@# -n, not -f: cheats and enhancement settings are user data once installed.
@@ -464,17 +464,20 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mappings and lang
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend wizard config ## Build everything
+all: deps common core rsp video audio input frontend wizard config ## [STEP 0-7c] deps, common, core, rsp, video, audio, input, frontend, wizard, config: build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
-run: all ## [STEP 8] Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/super_mario_64_usa.yaml] [face=1|face=0])
+run: all ## Run a ROM in a window (usage: make run rom=/path/to/game.z64 [input=Config/mouse/super_mario_64_usa.yaml] [face=1|face=0])
 	@test -n "$(rom)" || { echo "usage: make run rom=/path/to/game.z64 [input=<yaml>] [face=1|face=0]"; exit 1; }
 	$(if $(input),PJ64_INPUT_YAML="$(input)") $(if $(face),PJ64_FACE=$(face)) ./$(BIN)/Project64 "$(rom)"
 
-grid: all ## [STEP 8] Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
+grid: all ## Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
 	@test -n "$(roms)" || { echo 'usage: make grid roms="a.z64 b.z64"'; exit 1; }
 	./$(BIN)/Project64 --grid $(roms)
+
+run-wizard: wizard ## Launch the binding wizard (writes a YAML next to the ROM or under Config/)
+	./$(BIN)/Project64-wizard
 
 rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
 	python3 Scripts/run_rom_pack.py
@@ -494,25 +497,29 @@ face-selftest: ## Prove the injected-face path maps mouth-open to A and the head
 wizard-selftest: wizard ## Prove the wizard's screens write the mapping they show, with no window and no camera
 	Scripts/wizard_selftest.sh
 
-input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests
-	$(CXX) $(LDFLAGS) -o $(BUILD)/input-config-test $^ $(SDL_LIBS) $(YAML_LIBS)
-	@$(BUILD)/input-config-test
+# ── Unit tests ───────────────────────────────────────────────────────────────
+# Five headless binaries, one recipe. Each is a Test.o plus the object(s) under test;
+# all five link SDL3 and yaml-cpp, and the linker drops libraries nothing references,
+# so a new test needs no link flags of its own. The per-test names AGENTS.md documents
+# stay as aliases; `make unit-test` builds and runs all five.
+UNIT_TESTS = input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test
 
-pointer-layout-test: $(BUILD)/Project64-sdl/PointerLayoutTest.o ## Run the PointerLayout geometry tests
-	$(CXX) $(LDFLAGS) -o $(BUILD)/pointer-layout-test $^
-	@$(BUILD)/pointer-layout-test
+$(BUILD)/input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o
+$(BUILD)/pointer-layout-test: $(BUILD)/Project64-sdl/PointerLayoutTest.o
+$(BUILD)/face-gesture-test: $(BUILD)/Project64-sdl/FaceGesturesTest.o $(BUILD)/Project64-sdl/FaceGestures.o
+$(BUILD)/game-config-test: $(BUILD)/Project64-sdl/GameConfigTest.o $(BUILD)/Project64-sdl/GameConfig.o
+$(BUILD)/wizard-draft-test: $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/WizardDraft.o $(BUILD)/Project64-sdl/InputConfig.o
 
-face-gesture-test: $(BUILD)/Project64-sdl/FaceGesturesTest.o $(BUILD)/Project64-sdl/FaceGestures.o ## Run the GestureClassifier tests
-	$(CXX) $(LDFLAGS) -o $(BUILD)/face-gesture-test $^
-	@$(BUILD)/face-gesture-test
+$(BUILD)/%-test:
+	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
-game-config-test: $(BUILD)/Project64-sdl/GameConfigTest.o $(BUILD)/Project64-sdl/GameConfig.o ## Run the GameConfigPath lookup tests
-	$(CXX) $(LDFLAGS) -o $(BUILD)/game-config-test $^
-	@$(BUILD)/game-config-test
+unit-test: $(addprefix $(BUILD)/, $(UNIT_TESTS)) ## Build and run all five headless unit tests
+	@set -e; for t in $(UNIT_TESTS); do $(BUILD)/$$t; done
+	@echo "ok: unit tests"
 
-wizard-draft-test: $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/WizardDraft.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the WizardDraft tests
-	$(CXX) $(LDFLAGS) -o $(BUILD)/wizard-draft-test $^ $(SDL_LIBS) $(YAML_LIBS)
-	@$(BUILD)/wizard-draft-test
+# One documented name per binary: `make face-gesture-test` builds then runs it.
+$(UNIT_TESTS): %: $(BUILD)/%
+	@$(BUILD)/$*
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
