@@ -294,9 +294,7 @@ INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
-# The wizard's own sources. main.cpp and Screens.cpp join this list in Task 4; until then
-# the draft is the only part that exists, and only its test builds.
-WIZARD_SRC = Project64-wizard/WizardDraft.cpp
+WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
@@ -347,7 +345,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) 
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid rom-test grid-selftest pointer-selftest face-selftest input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -429,6 +427,15 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-co
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework OpenGL -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
 
+# ── Stage 7c · Binding wizard ─────────────────────────────────────────────────
+
+# A second binary, with no ROM and no OpenGL: SDL_Renderer and SDL's debug font. It shares
+# the frontend's InputConfig, FaceGestures and FaceTracker objects rather than its own.
+wizard: $(BIN)/Project64-wizard ## [STEP 7c] Build the binding wizard
+$(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(BUILD)/Project64-sdl/FaceGestures.o $(BUILD)/Project64-sdl/FaceTracker.o
+	@mkdir -p $(dir $@)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
+
 # ── Stage 7b · Data files ─────────────────────────────────────────────────────
 
 # The core reads its ROM database, enhancement and language data from the base directory
@@ -457,7 +464,7 @@ config: ## [STEP 7b] Install ROM database, enhancements, input mappings and lang
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend config ## Build everything
+all: deps common core rsp video audio input frontend wizard config ## Build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
