@@ -23,6 +23,7 @@ make test                 # smoke test: version string and plugin exports
 make input-config-test    # parser tests for the YAML input mapping
 make pointer-layout-test  # geometry tests for the mouse panel and stick
 make face-gesture-test    # classifier tests for the face gestures
+make face-selftest rom=Roms/a.z64   # end-to-end face path, no camera
 make game-config-test     # lookup tests for the per-game YAML
 ```
 
@@ -125,16 +126,51 @@ beats both, and the frontend prints `input layout: <path>` when it picks one. Gr
 ignore per-game files. `make all` replaces the installed layouts on every build, so keep
 your own beside the ROM rather than editing the shipped copy.
 
-`make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, the same way
-`make grid-selftest` proves the grid's key broadcast.
+`make pointer-selftest rom=Roms/a.z64` proves the mouse path end to end, and
+`make face-selftest rom=Roms/a.z64` the face path, the same way `make grid-selftest`
+proves the grid's key broadcast. Neither opens the camera.
+
+## Playing with your face
+
+A layout can bind every button to a facial gesture and the stick to your head, so the
+webcam is the whole controller. Two ship under `Config/face/`, chosen explicitly (they are
+never picked up by ROM name):
+
+```sh
+make run rom=Roms/sm64.z64 input=Config/face/super_mario_64_usa.yaml
+make run rom=Roms/mk64.z64 input=Config/face/mario_kart_64_u.yaml
+```
+
+The camera starts by itself for these layouts, with the same permission prompt and privacy
+rules as above. Controls a layout leaves out keep their keyboard keys.
+
+- **Your head is the stick.** `Stick: {stick: head}` turns yaw into X and pitch into Y:
+  full tilt at 15° of turn or 10° of nod from your resting pose, with a dead zone at a fifth
+  of that. `{stick: head-digital}` snaps the same motion to one of four full tilts. The
+  resting pose is learned over a few seconds and holds while you are tilted, so sit still
+  for a moment to recentre. `PJ64_FACE_STICK_YAW` and `PJ64_FACE_STICK_PITCH` set the
+  full-tilt angles in radians.
+- **Eleven gestures**, each `{face: <name>}` on any button: `eyebrows`, `head-left`,
+  `head-right`, `head-up`, `head-down`, `tilt-left`, `tilt-right`, `mouth-open`, `smile`,
+  `wink-left`, `wink-right`. Left and right are yours. A blink is not a wink. A file with a
+  head stick cannot also bind the four `head-*` turns, since they are the stick.
+- **The panel lists what is bound.** Beside the tracker dot, each bound gesture shows as
+  its tag and its button (`Mo=A`, `W<=C<`), lit while held. Tags: `Br` brows, `H<` `H>`
+  `H^` `Hv` head, `T<` `T>` tilt, `Mo` mouth, `Sm` smile, `W<` `W>` winks.
+
+Thresholds are per measure, each with an override: `PJ64_FACE_BROW` (0.035),
+`PJ64_FACE_YAW` (0.25), `PJ64_FACE_PITCH` (0.20), `PJ64_FACE_ROLL` (0.25),
+`PJ64_FACE_MOUTH` (0.06), `PJ64_FACE_SMILE` (0.05), `PJ64_FACE_EYE` (0.12); angles in
+radians, the rest in Vision's face-box units. `PJ64_FACE_DEBUG=1` prints all eight measures
+against their baselines once a second, which is how to tune them to your face and camera.
 
 ## What works
 
 Super Mario 64 renders, plays audio and runs at full speed, with keyboard input through
-SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`, and a
-one-button mouse with optional face gestures works with a layout from `Config/mouse/` (see
-"Playing with a mouse"). The window is 640x480, or 640x640 with a mouse layout, and the
-mouse cursor is never captured.
+SDL3; a gamepad works after swapping in the commented block in `Config/input.yaml`, a
+one-button mouse with optional face gestures works with a layout from `Config/mouse/`,
+and the face alone with one from `Config/face/` (see the two sections above). The window
+is 640x480, or 640x640 with a mouse layout, and the mouse cursor is never captured.
 
 Two limits worth knowing: the interpreter is the only CPU core, because Apple Silicon
 refuses the writable-and-executable memory the dynamic recompiler needs; and there is

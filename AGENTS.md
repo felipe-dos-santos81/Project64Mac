@@ -24,6 +24,7 @@ make pointer-layout-test                 # geometry tests for the mouse panel an
 make face-gesture-test                   # classifier tests for the face gestures
 make game-config-test                    # lookup tests for the per-game YAML
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
+make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
 make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
@@ -116,14 +117,21 @@ the panel owns the rows below.
 *Then each frame.* The frontend's main loop samples the mouse (SDL3's mouse state
 functions are main-thread only) and publishes it, and polls `FaceWanted` to start the
 camera when `PJ64_FACE` is unset (`0` never, anything else at once).
-`Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a private queue and
-writes three gesture bits through `FaceGestures.{h,cpp}`. The plugin's `GetKeys` evaluates
-slots, the flick gate, gestures and the pointer stick using the pure geometry in
-`Source/Common/PointerLayout.h`, then writes the labels, the latched zone and the lit
-quadrant back for `Overlay.cpp`, which reads the GL viewport to find the game rectangle
-and paints the panel below it in `CSdlRenderWindow::SwapWindow` before the flush.
+`Source/Project64-sdl/FaceTracker.mm` runs AVFoundation and Vision on a private queue,
+derives eight measures from the landmark regions (brow height, yaw, pitch, roll, inner-lip
+gap, outer-lip width, each eye's aperture) and feeds them to the pure classifier in
+`FaceGestures.{h,cpp}`: one rest baseline per measure, one hysteresis-and-debounce channel
+per gesture bit (eleven, in `PointerState.h`'s order), and the head stick from the yaw and
+pitch baselines. The tracker writes the bits and the stick (`HeadX`, `HeadY`) into the
+struct. The plugin's `GetKeys` evaluates slots, the flick gate, gestures, the pointer stick
+and the head stick (`{stick: head}` copies, `head-digital` snaps by quadrant) using the
+pure geometry in `Source/Common/PointerLayout.h`, then writes the labels, the latched zone
+and the lit quadrant back for `Overlay.cpp`, which reads the GL viewport to find the game
+rectangle and paints the panel below it in `CSdlRenderWindow::SwapWindow` before the flush.
 
-Layouts are the `{zone:}`, `{face:}` and `{stick: pointer}` YAML forms in `Config/mouse/`.
+Layouts are the `{zone:}`, `{face:}`, `{stick: pointer}` and `{stick: head|head-digital}`
+YAML forms, in `Config/mouse/` and `Config/face/`. `PJ64_FACE_INJECT=<gesture>[,<x>,<y>]`
+stands in for the tracker so `Scripts/face_selftest.sh` proves the path without a camera.
 
 **GL belongs to the emulation thread.** `CSdlRenderWindow` binds the context with
 `CGLSetCurrentContext` and presents with `CGLFlushDrawable`. The SDL equivalents are
@@ -193,6 +201,22 @@ Only the `Aarch64` backend directory survives.
   leave the old name behind for the per-ROM lookup to find and the reader to reject. Put a
   player's own layout beside the ROM as `<rom>.yaml`, never there. `Config/input.yaml` is
   still copied once.
+- **`Config/face/` is outside the per-ROM lookup on purpose.** `GameConfigPath` searches
+  beside the ROM and then `Config/mouse/` only, so a face layout is never picked by ROM
+  name and cannot shadow the mouse layout of the same base name; select it with `input=`.
+  `make config` replaces the installed copies like the mouse ones.
+- **Pitch and roll signs are fixed in code, not YAML.** `kPitchSign` and `kRollSign` in
+  `FaceTracker.mm` are the one place each is flipped, decided by the first manual run of
+  a face layout the way the yaw negation was. A tilt or nod that reads backwards is a code
+  fix there; never swap gesture names in a layout to compensate.
+- **The yaw baseline freezes differently once a head stick is bound.** With
+  `{stick: head}` the classifier holds the yaw and pitch baselines whenever the stick is
+  outside its dead zone, not only past the head-turn threshold; the plugin publishes
+  `HeadStickWanted` so a mouse layout keeps the old behaviour. Read
+  `FaceGesturesTest.cpp`'s two freeze cases before touching `Track`.
+- **Vision's `leftEye`/`rightEye` may be named for the observer, not the player.** The
+  two winks can come out mirrored; the fix is the two `EyeAperture` calls in
+  `FaceTracker.mm`, and only a manual run of a face layout decides whether to swap them.
 
 ## Design docs
 
