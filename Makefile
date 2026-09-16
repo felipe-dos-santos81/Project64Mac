@@ -491,7 +491,7 @@ face-selftest: ## Prove the injected-face path maps mouth-open to A and the head
 	@test -n "$(rom)" || { echo "usage: make face-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/face_selftest.sh "$(rom)"
 
-wizard-selftest: ## Prove the wizard's screens write the mapping they show, with no window and no camera
+wizard-selftest: wizard ## Prove the wizard's screens write the mapping they show, with no window and no camera
 	Scripts/wizard_selftest.sh
 
 input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o ## Run the InputConfig parser tests

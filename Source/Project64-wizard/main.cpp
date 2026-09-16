@@ -64,6 +64,18 @@ static SDL_Event KeyEvent(SDL_Scancode Code)
     return E;
 }
 
+// Same as KeyEvent, but with the OS-repeat flag SDL sets on a resent keydown for a key
+// still held. HandleControl's repeat guard (Screens.cpp) and its five siblings are the one
+// thing standing between a held key and it firing its action twice — four fix rounds across
+// Tasks 5-7 went into getting that right — and KeyEvent alone can never exercise the
+// direction that matters, since every event it builds always has repeat == false.
+static SDL_Event KeyEventRepeat(SDL_Scancode Code)
+{
+    SDL_Event E = KeyEvent(Code);
+    E.key.repeat = true;
+    return E;
+}
+
 static SDL_Event ClickEvent(float X, float Y)
 {
     SDL_Event E;
@@ -94,6 +106,12 @@ static int Selftest(const char * Path)
     // Base screen: the built-in bindings, the first row.
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
 
+    // A held Enter resends as a repeat. HandleControl must swallow it here, on the control
+    // screen this first Enter just landed on, rather than calling Advance() a second time —
+    // if it doesn't, every step below binds the wrong control and the emitted block comes
+    // out misaligned (a row missing, or a row bound that shouldn't be).
+    WizardHandleEvent(KeyEventRepeat(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
     // A: a keyboard key.
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_1), &Ui, &Draft, 0);
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_X), &Ui, &Draft, 0);
@@ -120,9 +138,30 @@ static int Selftest(const char * Path)
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_SPACE), &Ui, &Draft, POINTER_GESTURE_MOUTH_OPEN);
     WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
 
-    // Everything up to Stick keeps what it has.
+    // L, with no gamepad: HandleControl's mode-2/3 gate (Screens.cpp) must refuse to arm
+    // axis capture, the one HandleControl branch the B step above cannot reach, since B
+    // needed HasGamepad true to test the button side of the same gate. L stays inherited
+    // (absent from the emitted block) either way, so what this actually proves is that
+    // pressing 3 here did not silently arm WIZARD_MODE_AXIS and consume the events after it.
+    Ui.HasGamepad = false;
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_3), &Ui, &Draft, 0);
+    WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
+
+    // Everything up to Stick keeps what it has. Capped at N64Control::Count iterations: a
+    // regression that leaves Ui.Mode non-NONE on a control screen (a capture function
+    // consuming Enter without clearing the mode back to NONE — the exact bug class commits
+    // fbfd419 and f2e6139 chased) would make every iteration here a no-op, hanging this
+    // binary, and the make target that runs it, forever instead of failing.
+    int Guard = 0;
     while (Ui.Screen == WIZARD_CONTROL && (N64Control)Ui.Control != N64Control::Stick)
     {
+        if (Guard++ >= (int)N64Control::Count)
+        {
+            fprintf(stderr,
+                    "wizard-selftest: stuck after %d Enters on screen %d, control %d, mode %d\n",
+                    Guard, (int)Ui.Screen, Ui.Control, (int)Ui.Mode);
+            return 1;
+        }
         WizardHandleEvent(KeyEvent(SDL_SCANCODE_RETURN), &Ui, &Draft, 0);
     }
 
@@ -149,8 +188,13 @@ int main(int argc, char ** argv)
         return 0;
     }
 
-    if (argc >= 3 && strcmp(argv[1], "--selftest") == 0)
+    if (argc >= 2 && strcmp(argv[1], "--selftest") == 0)
     {
+        if (argc < 3)
+        {
+            fprintf(stderr, "usage: %s --selftest <path>\n", argv[0]);
+            return 1;
+        }
         return Selftest(argv[2]);
     }
 

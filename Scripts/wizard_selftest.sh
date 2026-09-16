@@ -3,7 +3,8 @@
 # No window, no ROM and no camera: --selftest never starts the tracker.
 set -eu
 
-BIN=Bin/macOS/Project64-wizard
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BIN="$ROOT/Bin/macOS/Project64-wizard"
 OUT=$(mktemp /tmp/pj64-wizard-selftest-XXXXXX)
 trap 'rm -f "$OUT" "$OUT.expected" "$OUT.got"' EXIT
 
