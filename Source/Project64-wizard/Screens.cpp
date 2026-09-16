@@ -95,13 +95,27 @@ static void Colour(SDL_Renderer * Renderer, bool Highlight)
     else SDL_SetRenderDrawColor(Renderer, 220, 220, 220, 255);
 }
 
+// The mirror of EnterControlScreen and EnterReview below: every path onto the base screen
+// lands here, so the screen's own instruction arrives with it rather than being spelled at
+// each arrival — and so a screen the player leaves never leaves its instruction behind.
+//
+// List is reset for the same reason EnterControlScreen resets it, and here it is the one
+// that bites: mode 5 (or the stick-form picker) can leave List as high as 10, and this
+// screen has 7 rows. Unreset, ChooseBase would take a shipped-layout branch with an
+// out-of-range index and a load that silently fails.
+static void EnterBaseScreen(WizardUi * Ui)
+{
+    Ui->Screen = WIZARD_BASE;
+    Ui->Mode = WIZARD_MODE_NONE;
+    Ui->List = 0;
+    snprintf(Ui->Message, sizeof(Ui->Message), "Up and Down to move, Enter to choose.");
+}
+
 void WizardUiInit(WizardUi * Ui)
 {
     memset(Ui, 0, sizeof(*Ui));
-    Ui->Screen = WIZARD_BASE;
-    Ui->Mode = WIZARD_MODE_NONE;
     snprintf(Ui->Base, sizeof(Ui->Base), "the built-in bindings");
-    snprintf(Ui->Message, sizeof(Ui->Message), "Up and Down to move, Enter to choose.");
+    EnterBaseScreen(Ui);
 }
 
 // Rows of the base screen: the built-in bindings, the shipped layouts, then a typed path.
@@ -706,6 +720,11 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
         if (Ui->Control > 0)
         {
             Ui->Control--;
+            Ui->Mode = WIZARD_MODE_NONE;
+            // Whatever list the mode that was open left highlighted must not follow the
+            // player onto the control they just stepped back to — the same reset, and the
+            // same reason, as EnterControlScreen's.
+            Ui->List = 0;
         }
         else
         {
@@ -713,17 +732,11 @@ static void HandleControl(const SDL_Event & Event, WizardUi * Ui, WizardDraft * 
             // review screen's Backspace through EnterControlScreen so it picks up the control
             // screen's own message rather than leaving its predecessor's behind (see the
             // comment on HandleReview's Backspace case). This is the half of that edge going
-            // the other way: without setting the base screen's own message here, it would
-            // keep reading "1-5 to bind, Enter to keep, Delete to inherit." — an instruction
-            // for a screen the player just left.
-            Ui->Screen = WIZARD_BASE;
-            snprintf(Ui->Message, sizeof(Ui->Message), "Up and Down to move, Enter to choose.");
+            // the other way: without the base screen's own message here, it would keep
+            // reading "1-5 to bind, Enter to keep, Delete to inherit." — an instruction for a
+            // screen the player just left.
+            EnterBaseScreen(Ui);
         }
-        Ui->Mode = WIZARD_MODE_NONE;
-        // Mode 5 (or the stick-form picker) can leave List as high as 10; unreset, it
-        // would land on the base screen (7 rows) out of range, sending ChooseBase into a
-        // shipped-layout branch with an out-of-range index and a load that silently fails.
-        Ui->List = 0;
         break;
     case SDL_SCANCODE_DELETE:
         Draft->Clear(CurrentControl(*Ui));
