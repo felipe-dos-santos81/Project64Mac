@@ -62,11 +62,12 @@ void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
 void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui,
                       const WizardDraft & Draft, uint32_t Gestures, uint32_t Face);
 
-// One line of text at window pixels X,Y in the current draw colour. Returns the width the
-// line occupied, so a caller can put something after it.
-float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text);
+// One line of text at window pixels X,Y in the current draw colour. Every screen in this
+// wizard puts its next line at a y it already knows, so nothing is returned: the width this
+// used to hand back was never read by any caller.
+void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text);
 
 // Like WizardText, but truncates Text (ending in "...") so it never draws past MaxWidth
 // pixels from X. MaxWidth is pixels, not characters, so a caller doesn't have to redo the
 // glyph-width arithmetic for its own window position.
-float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth);
+void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth);

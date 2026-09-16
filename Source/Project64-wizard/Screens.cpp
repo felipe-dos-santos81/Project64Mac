@@ -25,13 +25,12 @@ static const float kWindowHeight = 640.0f;
 // kWindowWidth already is — use this rather than repeat the literal.
 static const float kMessageY = kWindowHeight - 32.0f;
 
-float WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text)
+void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text)
 {
     const float S = (float)Scale;
     SDL_SetRenderScale(Renderer, S, S);
     SDL_RenderDebugText(Renderer, X / S, Y / S, Text);
     SDL_SetRenderScale(Renderer, 1.0f, 1.0f);
-    return (float)strlen(Text) * (float)SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * S;
 }
 
 // How many glyphs of Scale-scaled debug text fit in MaxWidth pixels. The debug font is fixed
@@ -43,12 +42,13 @@ static int FitChars(int Scale, float MaxWidth)
     return GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
 }
 
-float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
 {
     const int MaxChars = FitChars(Scale, MaxWidth);
     if ((int)strlen(Text) <= MaxChars)
     {
-        return WizardText(Renderer, X, Y, Scale, Text);
+        WizardText(Renderer, X, Y, Scale, Text);
+        return;
     }
     char Buffer[256];
     if (MaxChars > 3)
@@ -59,7 +59,7 @@ float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const 
     {
         snprintf(Buffer, sizeof(Buffer), "%.*s", MaxChars > 0 ? MaxChars : 0, Text);
     }
-    return WizardText(Renderer, X, Y, Scale, Buffer);
+    WizardText(Renderer, X, Y, Scale, Buffer);
 }
 
 // Like WizardTextFit, but keeps the *tail* of Text — a leading "..." then as many trailing
@@ -67,13 +67,14 @@ float WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const 
 // carries the meaning, but wrong for a path: the start is a prefix the player already knows
 // or cannot act on ("/Users/.../"), while the end is the filename, or in an in-progress
 // typed path, the caret that has to stay visible for the player to see what they are doing.
-static float WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
+static void WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
 {
     const int MaxChars = FitChars(Scale, MaxWidth);
     const int Len = (int)strlen(Text);
     if (Len <= MaxChars)
     {
-        return WizardText(Renderer, X, Y, Scale, Text);
+        WizardText(Renderer, X, Y, Scale, Text);
+        return;
     }
     char Buffer[256];
     const int Tail = MaxChars > 3 ? MaxChars - 3 : (MaxChars > 0 ? MaxChars : 0);
@@ -86,7 +87,7 @@ static float WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Sc
     {
         snprintf(Buffer, sizeof(Buffer), "%s", From);
     }
-    return WizardText(Renderer, X, Y, Scale, Buffer);
+    WizardText(Renderer, X, Y, Scale, Buffer);
 }
 
 static void Colour(SDL_Renderer * Renderer, bool Highlight)
@@ -776,7 +777,10 @@ static void EnterReview(WizardUi * Ui, WizardDraft * Draft)
     }
 }
 
-static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft)
+// No WizardDraft parameter, unlike its three sibling handlers: nothing this screen's keys do
+// touches the draft. S opens the save screen, Backspace goes back to the last control, and
+// Escape quits. The validate-on-arrival that the review does run belongs to EnterReview.
+static void HandleReview(const SDL_Event & Event, WizardUi * Ui)
 {
     if (Event.type != SDL_EVENT_KEY_DOWN) return;
     // Every key here is one-shot (there is no list to scroll on this screen), so one guard
@@ -805,10 +809,12 @@ static void HandleReview(const SDL_Event & Event, WizardUi * Ui, WizardDraft * D
     default:
         break;
     }
-    (void)Draft;
 }
 
-static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+// No WizardUi parameter, the same as DrawBase takes no WizardDraft: this screen draws the
+// draft and a fixed instruction, and has no highlighted row or typed path of its own. The
+// message line every screen shares is drawn by WizardDrawScreen, which has the Ui.
+static void DrawReview(SDL_Renderer * Renderer, const WizardDraft & Draft)
 {
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, 24.0f, kHead, "Review");
@@ -862,7 +868,6 @@ static void DrawReview(SDL_Renderer * Renderer, const WizardUi & Ui, const Wizar
 
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, kMessageY - kLine, kBody, "Escape quits.");
-    (void)Ui;
 }
 
 // Where the three destinations put the file.
@@ -1056,7 +1061,10 @@ static void HandleSave(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     }
 }
 
-static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardDraft & Draft)
+// No WizardDraft parameter, the same as DrawBase: everything on this screen comes out of the
+// Ui — the three destinations, the path SavePath builds from the typed one, and the pending
+// confirmation. What the draft holds was already shown on the review screen behind it.
+static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui)
 {
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, 24.0f, kHead, "Save");
@@ -1112,7 +1120,6 @@ static void DrawSave(SDL_Renderer * Renderer, const WizardUi & Ui, const WizardD
     }
     Colour(Renderer, false);
     WizardText(Renderer, 24.0f, kMessageY - kLine, kBody, "Escape quits.");
-    (void)Draft;
 }
 
 void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Draft, uint32_t LitGestures)
@@ -1120,7 +1127,7 @@ void WizardHandleEvent(const SDL_Event & Event, WizardUi * Ui, WizardDraft * Dra
     if (Ui->Typing) { HandleTyping(Event, Ui, Draft); return; }
     if (Ui->Screen == WIZARD_BASE) HandleBase(Event, Ui, Draft);
     else if (Ui->Screen == WIZARD_CONTROL) HandleControl(Event, Ui, Draft, LitGestures);
-    else if (Ui->Screen == WIZARD_REVIEW) HandleReview(Event, Ui, Draft);
+    else if (Ui->Screen == WIZARD_REVIEW) HandleReview(Event, Ui);
     else if (Ui->Screen == WIZARD_SAVE) HandleSave(Event, Ui, Draft);
 }
 
@@ -1223,8 +1230,8 @@ void WizardDrawScreen(SDL_Renderer * Renderer, int W, int H, const WizardUi & Ui
     (void)W;
     if (Ui.Screen == WIZARD_BASE) DrawBase(Renderer, Ui);
     else if (Ui.Screen == WIZARD_CONTROL) DrawControl(Renderer, Ui, Draft, Gestures, Face);
-    else if (Ui.Screen == WIZARD_REVIEW) DrawReview(Renderer, Ui, Draft);
-    else if (Ui.Screen == WIZARD_SAVE) DrawSave(Renderer, Ui, Draft);
+    else if (Ui.Screen == WIZARD_REVIEW) DrawReview(Renderer, Draft);
+    else if (Ui.Screen == WIZARD_SAVE) DrawSave(Renderer, Ui);
 
     Colour(Renderer, false);
     WizardTextFit(Renderer, 24.0f, (float)H - 32.0f, kBody, Ui.Message, kWindowWidth - 24.0f);

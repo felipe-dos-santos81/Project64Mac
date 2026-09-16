@@ -90,7 +90,7 @@ public:
     // "" when the last Validate or Save succeeded.
     const char * Error() const { return m_Error.c_str(); }
 
-protected:
+private:
     void Replace(N64Control Control, const Binding & Value);
 
     std::vector<Binding> m_Bindings[(int)N64Control::Count];
