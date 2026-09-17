@@ -134,3 +134,23 @@ equal, where the mapping is the identity.
   rather than broken only if the call reports failure, not if it silently stops scaling.
 - The mapping assumes the window server centres the picture and scales it uniformly.
   The spike's full-screen bars match that; the manual click check is what proves it.
+
+## Result
+
+Shipped on 2026-09-16 in commits c1a91bc (`PointerFitToBase` and its tests), 3128cad and
+acc8c8e (`MakeWindowScalable`, the mapped `PublishMouse`, and a scoped pragma for the
+deprecated CGL calls), e42ddc8 (guide and `AGENTS.md`) and d8a5c32 (comment and guide fixes
+from the final review).
+
+`make test`, `make unit-test`, `make pointer-selftest`, `make face-selftest` and
+`make grid-selftest` pass, and a Super Mario 64 frame dump at frame 400 is still 640x480 at
+90 percent non-black.
+
+The manual check passed on the checks first asked for: with the Super Mario 64 mouse layout
+the lit zone followed the cursor and clicks pressed their slot's button at about twice the
+size, in full screen and at the minimum size, and a game with no layout resized the same
+way. The final review asked for a stricter version afterwards, and these parts of it were
+not separately confirmed: clicking the outermost slots (pad-left, c-right) in full screen,
+the lit zone turning off exactly at a bar's edge, a maximised (Zoom or Window > Fill) window,
+and moving between displays of different density. Those are what would expose a stretched
+rather than fitted picture, so the spec's second open risk is reduced, not closed.
