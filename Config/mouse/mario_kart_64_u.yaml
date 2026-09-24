@@ -1,17 +1,24 @@
-# Mouse-and-face layout for Mario Kart 64.
-# Select with make run rom=... input=Config/mouse/mario_kart_64_u.yaml face=1
-# Hold the click anywhere in the game image to accelerate while steering with the cursor.
-# Slots: pad-* (left cross), c-* (right cross), mid1-mid5; gestures: eyebrows, head-left,
-# head-right.
+# One-button mouse layout for Mario Kart 64: the left button and the cursor are the whole
+# controller, and the camera never starts. Select with
+#   make run rom=... input=Config/mouse/mario_kart_64_u.yaml
+# or keep a copy named after the ROM beside it. See Docs/UserGuide.md section 7, "Playing
+# with a mouse".
+#
+# The game image steers. A is a toggle on the game image: click the picture once to
+# accelerate and keep going, again to coast; steering is only where the cursor is, so no
+# button needs holding. R is a toggle slot: one press hops and holds the drift, the next
+# lets go. mid5 is the stick's hold slot (Ho): press it to keep steering the way you were
+# while you reach for an item or the brake; it lets go on a second press, or once the
+# cursor rests in the game image again.
+# L is left out: the game does not need it, and it keeps its keyboard key.
 
 bindings:
-  Stick:     {stick: pointer}
-  A:         {zone: game}         # accelerate, held
-  R:         {face: eyebrows}     # hop and drift, held
-  Z:         {face: head-left}    # use item
-  B:         {face: head-right}   # brake / reverse
+  Stick:     {stick: pointer, hold: mid5}
+  A:         {zone: game, toggle: true}   # accelerate, on until clicked again
   Start:     {zone: mid1}
-  L:         {zone: mid2}
+  R:         {zone: mid2, toggle: true}   # hop, and drift while on
+  Z:         {zone: mid3}                 # use item
+  B:         {zone: mid4}                 # brake, reverse
   CUp:       {zone: c-up}
   CDown:     {zone: c-down}
   CLeft:     {zone: c-left}

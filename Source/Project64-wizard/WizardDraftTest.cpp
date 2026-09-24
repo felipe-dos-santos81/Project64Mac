@@ -240,13 +240,16 @@ int main()
         if (!D.Validate(WizardBaseFile(i))) fprintf(stderr, "  base %s: %s\n", WizardBaseFile(i), D.Error());
     }
 
-    // A mouse layout's zones come back as zones.
+    // A mouse layout's zones, its toggle and its hold come back as they were.
     {
         WizardDraft D;
         CHECK(D.LoadBase(Layout("Config/mouse/super_mario_64_usa.yaml").c_str()));
         CHECK(D.Explicit(N64Control::Stick));
         CHECK(D.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
-        CHECK(Has(D.Emit("x"), "{stick: pointer}"));
+        const std::string Text = D.Emit("x");
+        CHECK(Has(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
+        CHECK(Has(Text, "Z:         {zone: mid2, toggle: true}\n"));
+        CHECK(!Has(Text, "\n  L:"));                                   // L is left out
     }
 
     // A base that does not exist, or that the reader rejects, leaves the draft alone and

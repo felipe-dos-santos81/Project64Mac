@@ -338,15 +338,19 @@ int main()
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
 
-    CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));   // every shipped mouse layout must parse
-    CHECK(C.UsesPointer());
-    CHECK(C.UsesFace());                              // this layout binds Z, B and R to gestures
+    // Every shipped mouse layout parses, plays with one button, and never starts the camera.
+    CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));
+    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.PointerHoldZone() == 12);                                  // mid5
+    CHECK(C.PointerToggleZones() == (1u << 9));                        // Z on mid2
     CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
-    CHECK(C.UsesPointer());
-    CHECK(C.UsesFace());                              // this layout binds R, CLeft and CRight
+    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.PointerHoldZone() == 12);
+    CHECK(C.PointerToggleZones() == (1u << 11));                       // R on mid4
     CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
-    CHECK(C.UsesPointer());
-    CHECK(C.UsesFace());                              // this layout binds R, Z and B
+    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.PointerHoldZone() == 12);
+    CHECK(C.PointerToggleZones() == ((1u << POINTER_ZONE_GAME) | (1u << 9)));   // A on the picture, R on mid2
 
     CHECK(C.Load("Config/face/super_mario_64_usa.yaml"));   // every shipped face layout must parse
     CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());

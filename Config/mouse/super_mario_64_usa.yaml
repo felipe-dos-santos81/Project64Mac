@@ -1,20 +1,29 @@
-# Mouse-and-face layout for Super Mario 64. Select with
-#   make run rom=... input=Config/mouse/super_mario_64_usa.yaml face=1
-# or PJ64_INPUT_YAML. See Docs/UserGuide.md section 7, "Playing with a mouse".
+# One-button mouse layout for Super Mario 64: the left button and the cursor are the whole
+# controller, and the camera never starts. Select with
+#   make run rom=... input=Config/mouse/super_mario_64_usa.yaml
+# or keep a copy named after the ROM beside it. See Docs/UserGuide.md section 7, "Playing
+# with a mouse".
 #
 # The game image is the stick and the zone "game" (a click anywhere in it). The panel
 # below holds the slots: pad-up, pad-down, pad-left, pad-right (left cross), c-up,
 # c-down, c-left, c-right (right cross) and mid1-mid5. Any control can take any slot.
-# Face gestures: eyebrows, head-left, head-right. Each needs the camera (face=1).
+#
+# Z is a toggle slot: one press holds it, the next lets go, and the button is free in
+# between. mid5 is the stick's hold slot (Ho): press it and the stick keeps the tilt the
+# cursor last rested at while you reach for the panel; it lets go on a second press, or
+# once the cursor rests in the game image again.
+#   Dive:      run, press Ho, press B.
+#   Long jump: run, press Ho, press Z, move up into the game image and click (A); press Z
+#              again to stand.
+# L is left out: the game does not need it, and it keeps its keyboard key.
 
 bindings:
-  Stick:     {stick: pointer}
+  Stick:     {stick: pointer, hold: mid5}
   A:         {zone: game}
-  Z:         {face: eyebrows}     # held: crouch; brows + click while tilted = long jump
-  B:         {face: head-left}    # punch, and dive while running
-  R:         {face: head-right}
   Start:     {zone: mid1}
-  L:         {zone: mid2}
+  Z:         {zone: mid2, toggle: true}   # crouch; with A while moving, long jump
+  B:         {zone: mid3}                 # punch, and dive while running
+  R:         {zone: mid4}                 # camera mode
   CUp:       {zone: c-up}
   CDown:     {zone: c-down}
   CLeft:     {zone: c-left}
