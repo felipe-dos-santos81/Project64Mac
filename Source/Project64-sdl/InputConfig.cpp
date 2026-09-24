@@ -18,6 +18,7 @@ InputConfig::InputConfig()
 void InputConfig::Reset()
 {
     DefaultBindings(m_Bindings);
+    m_Menu.clear();
 }
 
 std::vector<Binding> InputConfig::DefaultBinding(N64Control Control)
@@ -51,6 +52,7 @@ const char * InputConfig::ControlLabel(N64Control Control)
 
 bool InputConfig::UsesPointer() const
 {
+    if (!m_Menu.empty()) return true;
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         for (const Binding & B : m_Bindings[i])
@@ -66,6 +68,7 @@ bool InputConfig::UsesPointer() const
 
 bool InputConfig::UsesFace() const
 {
+    if (MenuGesture() != 0) return true;
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         for (const Binding & B : m_Bindings[i])
@@ -109,6 +112,21 @@ int InputConfig::PointerHoldZone() const
     return StickHoldZone(m_Bindings[(int)N64Control::Stick]);
 }
 
+const std::vector<Binding> & InputConfig::MenuBinding() const
+{
+    return m_Menu;
+}
+
+int InputConfig::MenuZone() const
+{
+    return MenuSlotOf(m_Menu);
+}
+
+uint32_t InputConfig::MenuGesture() const
+{
+    return MenuGestureOf(m_Menu);
+}
+
 void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
                                 char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE]) const
 {
@@ -133,6 +151,15 @@ void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SI
     if (Hold != POINTER_ZONE_NONE)
     {
         snprintf(Labels[Hold], POINTER_LABEL_SIZE, "%s", "Ho");
+    }
+    // The menu presses no control either; its slot and its gesture read "==".
+    if (MenuZone() != POINTER_ZONE_NONE)
+    {
+        snprintf(Labels[MenuZone()], POINTER_LABEL_SIZE, "%s", "==");
+    }
+    if (MenuGesture() != 0)
+    {
+        snprintf(GestureLabels[PointerGestureIndex(MenuGesture())], POINTER_LABEL_SIZE, "%s", "==");
     }
 }
 
@@ -426,10 +453,19 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
 // zone. Run over the resolved table after every control is read, so the order the file
 // names them in does not matter; controls are compared in enum order, which fixes which one
 // an error names. Nodes[i] is the file's value for control i (null for an unnamed one,
-// which is never a zone).
-static bool CheckSlots(const char * Path, const std::vector<Binding> * Next, const YAML::Node * Nodes)
+// which is never a zone). The menu's slot is no control's and not the hold slot, and its
+// gesture is no control's.
+static bool CheckSlots(const char * Path, const std::vector<Binding> * Next, const YAML::Node * Nodes,
+                       const std::vector<Binding> & Menu, const YAML::Node & MenuNode)
 {
     const int Hold = StickHoldZone(Next[(int)N64Control::Stick]);
+    const int MenuSlot = MenuSlotOf(Menu);
+    const uint32_t MenuBit = MenuGestureOf(Menu);
+    if (MenuSlot != POINTER_ZONE_NONE && MenuSlot == Hold)
+    {
+        ConfigError(Path, MenuNode, std::string(PointerZoneName(MenuSlot)) + " is the menu slot and cannot also be bound");
+        return false;
+    }
 
     int Owner[POINTER_ZONE_COUNT];
     bool OwnerToggle[POINTER_ZONE_COUNT];
@@ -442,7 +478,18 @@ static bool CheckSlots(const char * Path, const std::vector<Binding> * Next, con
     {
         for (const Binding & B : Next[i])
         {
+            if (B.kind == Binding::Kind::Face && MenuBit != 0 && (uint32_t)B.code == MenuBit)
+            {
+                ConfigError(Path, Nodes[i], std::string(PointerGestureName(PointerGestureIndex(MenuBit))) +
+                                                " is the menu's gesture and cannot also be bound");
+                return false;
+            }
             if (B.kind != Binding::Kind::Zone) continue;
+            if (B.code == MenuSlot)
+            {
+                ConfigError(Path, Nodes[i], std::string(PointerZoneName(B.code)) + " is the menu slot and cannot also be bound");
+                return false;
+            }
             const std::string Slot = PointerZoneName(B.code);
             if (B.code == Hold)
             {
@@ -485,6 +532,8 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
     DefaultBindings(Next);
     bool Seen[(int)N64Control::Count] = { false };
     YAML::Node ControlNodes[(int)N64Control::Count];
+    std::vector<Binding> NextMenu;
+    YAML::Node MenuNode;
 
     // The head-direction rule (spec Part 1): remembered during the loop, checked after it,
     // so it holds whichever order the file names Stick and the gesture in.
@@ -501,6 +550,32 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
             for (const auto & Entry : Bindings)
             {
                 const std::string ControlName = Entry.first.as<std::string>();
+                // Menu is a key of bindings but no N64 control (the emulator actions menu).
+                if (ControlName == "Menu")
+                {
+                    if (!NextMenu.empty()) { ConfigError(Path, Entry.first, "control named twice"); return false; }
+                    const YAML::Node & Value = Entry.second;
+                    if (!Value.IsMap() || Value.size() != 1 || !(Value["zone"] || Value["face"]))
+                    {
+                        ConfigError(Path, Value, "menu must be {zone:} or {face:}");
+                        return false;
+                    }
+                    Binding B;
+                    if (!ParseBinding(Path, Value, N64Control::A, B)) return false;
+                    if (B.kind == Binding::Kind::Zone && B.code == POINTER_ZONE_GAME)
+                    {
+                        ConfigError(Path, Value["zone"], "the menu cannot be game");
+                        return false;
+                    }
+                    if (B.kind == Binding::Kind::Face && ((uint32_t)B.code & POINTER_GESTURE_HEAD_DIRECTIONS) != 0 && HeadGestureName.empty())
+                    {
+                        HeadGestureNode = Value["face"];
+                        HeadGestureName = PointerGestureName(PointerGestureIndex((uint32_t)B.code));
+                    }
+                    NextMenu.push_back(B);
+                    MenuNode = Value;
+                    continue;
+                }
                 const int Index = ControlFromName(ControlName);
                 if (Index < 0) { ConfigError(Path, Entry.first, "unknown control \"" + ControlName + "\""); return false; }
                 if (Seen[Index]) { ConfigError(Path, Entry.first, "control named twice"); return false; }
@@ -518,7 +593,7 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
                 }
             }
         }
-        if (!CheckSlots(Path, Next, ControlNodes)) return false;
+        if (!CheckSlots(Path, Next, ControlNodes, NextMenu, MenuNode)) return false;
         if (StickIsHead && !HeadGestureName.empty())
         {
             ConfigError(Path, HeadGestureNode, HeadGestureName + " cannot be bound while Stick is head");
@@ -535,6 +610,7 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
     {
         m_Bindings[i] = Next[i];
     }
+    m_Menu = NextMenu;
     if (SeenOut != nullptr)
     {
         for (int i = 0; i < (int)N64Control::Count; i++) SeenOut[i] = Seen[i];

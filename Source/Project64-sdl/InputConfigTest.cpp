@@ -281,6 +281,48 @@ void RunInputConfigTests()
         CHECK(C.Bindings(N64Control::Z)[0].code == 11);      // still mid4 after every rejection
     }
 
+    // The Menu key: a slot or a gesture, never a control.
+    {
+        char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
+        char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Menu: {zone: pad-down}\n  A: {zone: game}\n")));
+        CHECK(C.MenuZone() == 1 && C.MenuGesture() == 0 && C.MenuBinding().size() == 1);
+        CHECK(C.UsesPointer() && !C.UsesFace());
+        C.PointerLabels(Labels, GestureLabels);
+        CHECK(strcmp(Labels[1], "==") == 0);
+        CHECK(C.Bindings(N64Control::DPadDown)[0].kind != Binding::Kind::Zone);   // the menu presses nothing
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Menu: {face: tilt-right}\n")));
+        CHECK(C.MenuZone() == POINTER_ZONE_NONE && C.MenuGesture() == POINTER_GESTURE_TILT_RIGHT);
+        CHECK(C.UsesPointer() && C.UsesFace());
+        C.PointerLabels(Labels, GestureLabels);
+        CHECK(strcmp(GestureLabels[PointerGestureIndex(POINTER_GESTURE_TILT_RIGHT)], "==") == 0);
+        CHECK(C.Load(TestWriteTemp("bindings:\n  A: {key: X}\n")));
+        CHECK(C.MenuBinding().empty() && C.MenuZone() == POINTER_ZONE_NONE && C.MenuGesture() == 0);
+        CHECK(!C.UsesPointer());
+    }
+
+    // Each menu error in its own words; a rejected file changes nothing.
+    {
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Menu: {zone: pad-down}\n")));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Menu: {key: X}\n")),
+                      "menu must be {zone:} or {face:}"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Menu: {zone: mid1, toggle: true}\n")),
+                      "menu must be {zone:} or {face:}"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Menu: {zone: game}\n")),
+                      "the menu cannot be game"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Menu: {zone: mid1}\n  Start: {zone: mid1}\n")),
+                      "mid1 is the menu slot and cannot also be bound"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Start: {zone: mid1}\n  Menu: {zone: mid1}\n")),
+                      "mid1 is the menu slot and cannot also be bound"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid5}\n  Menu: {zone: mid5}\n")),
+                      "mid5 is the menu slot and cannot also be bound"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Menu: {face: smile}\n  B: {face: smile}\n")),
+                      "smile is the menu's gesture and cannot also be bound"));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Stick: {stick: head}\n  Menu: {face: head-up}\n")),
+                      "head-up cannot be bound while Stick is head"));
+        CHECK(C.MenuZone() == 1);                         // still pad-down after every rejection
+    }
+
     CHECK(C.Load("Config/input.yaml"));               // the tracked file must parse
     CHECK(C.Bindings(N64Control::A).size() == 1);
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);

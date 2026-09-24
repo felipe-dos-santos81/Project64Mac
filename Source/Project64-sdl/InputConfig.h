@@ -49,6 +49,18 @@ inline int StickHoldZone(const std::vector<Binding> & Stick)
     return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
 }
 
+// The slot or gesture bit of a Menu binding list ({zone:} or {face:} under Menu), or
+// POINTER_ZONE_NONE / 0. The reader's table, its slot checks and the wizard's draft ask this.
+inline int MenuSlotOf(const std::vector<Binding> & Menu)
+{
+    return (!Menu.empty() && Menu[0].kind == Binding::Kind::Zone) ? Menu[0].code : POINTER_ZONE_NONE;
+}
+
+inline uint32_t MenuGestureOf(const std::vector<Binding> & Menu)
+{
+    return (!Menu.empty() && Menu[0].kind == Binding::Kind::Face) ? (uint32_t)Menu[0].code : 0u;
+}
+
 class InputConfig
 {
 public:
@@ -95,6 +107,14 @@ public:
     // The stick's hold slot from {stick: pointer, hold: <slot>}, or POINTER_ZONE_NONE.
     int PointerHoldZone() const;
 
+    // The Menu key of bindings, {zone:} or {face:}, which opens the emulator actions menu
+    // and presses no N64 control. Empty when the file names none.
+    const std::vector<Binding> & MenuBinding() const;
+
+    // The menu's slot, or POINTER_ZONE_NONE; its gesture bit, or 0.
+    int MenuZone() const;
+    uint32_t MenuGesture() const;
+
     // Overlay labels: for each zone and each gesture, the label of the control bound to
     // it, or "" when nothing is.
     void PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
@@ -106,6 +126,7 @@ private:
     static void DefaultBindings(std::vector<Binding> * Out);
 
     std::vector<Binding> m_Bindings[(int)N64Control::Count];
+    std::vector<Binding> m_Menu;
 };
 
 bool DefaultConfigPath(char * Out, size_t Size);
