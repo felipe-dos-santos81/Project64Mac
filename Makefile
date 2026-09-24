@@ -349,7 +349,7 @@ $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 $(LAUNCHER_OBJS): CPPFLAGS += $(SDL_CFLAGS) $(YAML_CFLAGS)
 $(LAUNCHER_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard launcher app config all run grid run-wizard run-launcher rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard launcher app config all run grid run-wizard run-launcher rom-test grid-selftest pointer-selftest face-selftest launcher-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -525,6 +525,10 @@ pointer-selftest: ## Prove the injected-pointer path: a game click, mid1, a per-
 face-selftest: ## Prove the injected-face path maps mouth-open to A and the head stick to the X axis, with no camera (usage: make face-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make face-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/face_selftest.sh "$(rom)"
+
+launcher-selftest: ## Prove the app's launcher starts two games in turn, the second with an added menu, and comes back after each; no camera (usage: make launcher-selftest rom=/path/to/game.z64)
+	@test -n "$(rom)" || { echo "usage: make launcher-selftest rom=/path/to/game.z64"; exit 1; }
+	Scripts/launcher_selftest.sh "$(rom)"
 
 wizard-selftest: wizard ## Prove the wizard's screens write the mapping they show, with no window and no camera
 	Scripts/wizard_selftest.sh
