@@ -82,9 +82,11 @@ set, and the default layout is only chosen by the launcher.
    - `PJ64_MENU_AUTO=1`.
    - `PJ64_FACE=0` when Face is off; `PJ64_FACE` removed when Face is on, so the layout
      decides as it does today.
-4. It hides its window, `fork`s and `execv`s `<emulator dir>/Project64 <rom>` with the
-   working directory set to the emulator dir, and keeps pumping events, checking
-   `waitpid(…, WNOHANG)` every 50 ms.
+4. It hides its window and starts `<emulator dir>/Project64 <rom>` with `posix_spawn`,
+   handing it the environment built in step 3 and the emulator dir as its working
+   directory, then keeps pumping events, checking `waitpid(…, WNOHANG)` every 50 ms. Not
+   `fork` then `setenv` as `GridHost` does: SDL has started threads by then, and `setenv`
+   between `fork` and `exec` is not safe in a threaded process.
 5. When the child exits, the launcher shows and raises its window on the view the player
    left, moves the game to the front of the recent games, saves the settings, and reports
    the exit (below).
@@ -189,7 +191,9 @@ plugin's `PluginLoaded` (so the plugin publishes the same `MenuZone` and suppres
 slot). Both read the same file and the same rule, so they agree. It is not in `Load` itself,
 so the wizard, which also loads layouts, never adds a menu to a file it writes.
 
-The rule, a pure function beside `MenuSlotOf` in `InputConfig.h`:
+The rule, in `ApplyAutoMenu`, which returns the slot it added (or `POINTER_ZONE_NONE`) so
+the `input-config` area can test it without an environment; `AutoMenuWanted()`, beside
+`MenuSlotOf` in `InputConfig.h`, is the one reader of the variable:
 
 - Do nothing if the layout has a `Menu:` or does not use the pointer (a keyboard-only layout
   has no panel).
@@ -234,8 +238,8 @@ pick it only for a ROM named `default.z64`; that is accepted.
   `CFBundleIdentifier` `io.github.felipe-dos-santos81.Project64Mac`, `CFBundleName`
   `Project64`, `CFBundlePackageType` `APPL`, `NSHighResolutionCapable` true, and
   `NSCameraUsageDescription` ("Project64 uses the camera to read face gestures when a game's
-  layout binds them."). `CFBundleShortVersionString` is filled in from the frontend's
-  `--version` line at build time.
+  layout binds them."). `CFBundleShortVersionString` is `MAJOR.MINOR.REVISION` from
+  `Source/Project64-core/Version.h.in`, filled in at build time.
 - An ad-hoc signature (`codesign --force -s -`) over the bundle.
 
 The bundle has no icon. The launcher never uses the camera itself; the usage string is
@@ -247,7 +251,8 @@ The launcher prints to stderr, which a Finder launch discards and a terminal run
 
 - `launcher: emulator <path>` at start, or `launcher: Project64 not found beside the app`.
 - `launcher: folder <path> (<n> games)` after each scan.
-- `launcher: started <rom>` and `launcher: game ended (exit N)` or `(signal N)`.
+- `launcher: started <rom>`, or `launcher: started <rom> with the generic layout`, and
+  `launcher: game ended (exit N)` or `(signal N)`.
 - `launcher: window back` once the window is shown again.
 - `launcher: settings unreadable, using defaults: <path>` for a bad `launcher.yaml`.
 
@@ -276,13 +281,16 @@ seconds after starting it. Only the self-test sets it.
 - **`make launcher-selftest rom=<path>`** (`Scripts/launcher_selftest.sh`): builds a
   temporary folder holding two links to the ROM (`withlayout.z64`, beside a minimal
   `withlayout.yaml` binding only `Stick: {stick: pointer}` and `A: {zone: game}`, and `nolayout.z64`),
-  writes a `launcher.yaml` there with Face off, and runs `Project64-launcher --selftest`
-  with `PJ64_LAUNCHER_HOME` and `PJ64_LAUNCHER_SELFTEST=6`. `--selftest` drives the real
+  writes a `launcher.yaml` there with Face off, and runs the bundle's copy,
+  `Bin/macOS/Project64.app/Contents/MacOS/Project64-launcher --selftest`, so the run also
+  proves the emulator is found three levels up, with `PJ64_LAUNCHER_HOME` and
+  `PJ64_LAUNCHER_SELFTEST=6`. `--selftest` drives the real
   screens with synthetic clicks, as the wizard's does: it clicks the first row
   (`Nolayout`), waits for the window to come back, clicks the second (`Withlayout`), waits
   again, and checks that the recent games are `withlayout.z64` then `nolayout.z64`. The script requires, in the combined stderr:
-  `launcher: started …nolayout.z64`, `input layout: …Config/mouse/default.yaml`,
-  `launcher: started …withlayout.z64`, `menu: added on mid5`, two
+  `launcher: started …nolayout.z64 with the generic layout`,
+  `launcher: started …withlayout.z64`, `input layout: …withlayout.yaml`, exactly one
+  `menu: added on mid5` (the generic layout has its own menu), two
   `launcher: game ended (signal 15)`, two `launcher: window back`, and
   `launcher: selftest ok`. The camera is never opened. It needs a window server.
 - **By hand**, recorded in the Result:
@@ -293,10 +301,12 @@ seconds after starting it. Only the self-test sets it.
 
 ## Documentation
 
-- `Docs/UserGuide.md`: a new section, "The launcher", covering `make app`, starting it
+- `Docs/UserGuide.md`: a new subsection of section 3, "Starting from the launcher" (a
+  subsection, so no section number the guide and AGENTS.md cite moves), covering `make app`, starting it
   from Finder or the Dock, the screen, what `generic` means, the menu the launcher adds and
-  where it goes, Face on and off, and where the settings live. Section 11 gains
-  `PJ64_MENU_AUTO`, `PJ64_LAUNCHER_HOME` and `PJ64_LAUNCHER_SELFTEST`.
+  where it goes, Face on and off, and where the settings live. Section 11 gains rows
+  for `PJ64_MENU_AUTO` and `PJ64_LAUNCHER_HOME`, and `PJ64_LAUNCHER_SELFTEST` joins the
+  test-hooks row.
 - `AGENTS.md`: `make app`, `make run-launcher` and `make launcher-selftest` in Commands; a
   launcher paragraph in Architecture; the `launcher` area in the unit-test list; two traps:
   the app finds the emulator by its place in `Bin/macOS` and breaks if moved, and
