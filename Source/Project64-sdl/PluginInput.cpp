@@ -43,6 +43,23 @@ static PointerSettleRule g_PointerSettleRule;
 // Fixed once the layout loads: PublishPointerLabels sets them once, and every poll reads them.
 static uint32_t g_PointerToggleMask = 0u;
 static int g_PointerHoldZone = POINTER_ZONE_NONE;
+// The last PointerState::ClearClicks this plugin acted on.
+static uint32_t g_PointerClearSeen = 0;
+
+// Forgets toggles, the hold and the rest, keeping the button marked as down so a press
+// already in progress (the menu's closing click, a click held through a reset) needs a
+// release before it counts.
+static void ForgetPointerClicks(void)
+{
+    g_PointerClicks = PointerClicks();
+    g_PointerClicks.PrevButton = true;
+    g_PointerSettle = PointerSettle();
+    if (g_Pointer != nullptr)
+    {
+        g_Pointer->ToggledZones.store(0u, std::memory_order_relaxed);
+    }
+}
+
 // Flick gate: a cursor that jumps more than g_PointerFlick px between polls keeps the
 // previous poll's tilt, so reaching for the panel never reads as a tilt on the way.
 // PJ64_POINTER_FLICK overrides the threshold; 0 disables the gate.
@@ -243,6 +260,25 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         return;
     }
 
+    // The emulator actions menu owns every input while it is open: the game gets nothing,
+    // and the click that closes it must be released first
+    // (Docs/superpowers/specs/2026-09-24-emulator-actions-menu-design.md).
+    OpenPointerState();
+    if (g_Pointer != nullptr)
+    {
+        if (g_Pointer->MenuOpen.load(std::memory_order_acquire) != 0)
+        {
+            g_PointerClicks.PrevButton = true;
+            return;
+        }
+        const uint32_t Clear = g_Pointer->ClearClicks.load(std::memory_order_acquire);
+        if (Clear != g_PointerClearSeen)
+        {
+            g_PointerClearSeen = Clear;
+            ForgetPointerClicks();
+        }
+    }
+
     bool Snapshot[SDL_SCANCODE_COUNT];
     bool Raw[SDL_SCANCODE_COUNT] = { false };
     const bool * k = SDL_GetKeyboardState(nullptr);
@@ -411,13 +447,9 @@ EXPORT void CALL RomOpen(void)
 EXPORT void CALL RomClosed(void)
 {
     CloseGamepad();
-    // A toggle or a hold never outlives its game, and the next game starts with no rest.
-    g_PointerClicks = PointerClicks();
-    g_PointerSettle = PointerSettle();
-    if (g_Pointer != nullptr)
-    {
-        g_Pointer->ToggledZones.store(0u, std::memory_order_relaxed);
-    }
+    // A toggle or a hold never outlives its game, and a button held through the reset is
+    // not a new press.
+    ForgetPointerClicks();
 }
 
 EXPORT void CALL CloseDLL(void)
@@ -457,6 +489,7 @@ static void PublishPointerLabels(void)
     g_PointerHoldZone = Config.PointerHoldZone();
     g_Pointer->ToggleMarkZones.store(g_PointerToggleMask | (g_PointerHoldZone != POINTER_ZONE_NONE ? 1u << g_PointerHoldZone : 0u));
     g_Pointer->ToggledZones.store(0u);
+    g_Pointer->MenuZone.store(Config.MenuZone());
     g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
     g_Pointer->HeadStickWanted.store(Config.UsesHeadStick() ? 1u : 0u, std::memory_order_release);
     // The frontend's main loop polls this to start the camera; it may run on another

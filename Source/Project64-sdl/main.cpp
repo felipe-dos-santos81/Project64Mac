@@ -111,6 +111,8 @@ static PointerState * CreatePointerState(void)
     memset(State, 0, sizeof(PointerState));
     State->LatchedZone.store(-1);
     State->Quadrant.store(-1);
+    State->MenuZone.store(-1);
+    State->MenuArmed.store(-1);
     char FdText[16];
     snprintf(FdText, sizeof(FdText), "%d", Fd);
     setenv(PJ64_POINTER_ENV, FdText, 1);

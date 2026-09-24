@@ -164,6 +164,13 @@ static const float kRollSign = 1.0f;
         }
     }
 
+    // The menu's Recentre, requested from the main thread; handled here, on this queue,
+    // where the classifier lives.
+    if (m_State->RecentreFace.exchange(0, std::memory_order_acq_rel) != 0)
+    {
+        m_Classifier->Rebaseline();
+    }
+
     const bool HeadStick = m_State->HeadStickWanted.load(std::memory_order_acquire) != 0;
     const uint32_t Bits = m_Classifier->Update(S, HeadStick);
     m_State->Gestures.store(Bits, std::memory_order_relaxed);

@@ -146,6 +146,18 @@ void RunFaceGesturesTests()
         CHECK(Feed(C, T, 1, true, 0.115f, 0.0f) == POINTER_GESTURE_EYEBROWS);
     }
 
+    {
+        // Rebaseline forgets the rest: a brow raise held across it becomes the new rest and
+        // reads as off once the debounce passes.
+        GestureClassifier C(Th);
+        double T = 0;
+        Feed(C, T, 60, true, 0.10f, 0.0f);
+        CHECK(Feed(C, T, 2, true, 0.15f, 0.0f) == POINTER_GESTURE_EYEBROWS);
+        C.Rebaseline();
+        CHECK(Feed(C, T, 2, true, 0.15f, 0.0f) == 0);
+        CHECK(C.BrowBaseline() > 0.149f && C.BrowBaseline() < 0.151f);
+    }
+
     // A face at rest for the new measures: mouth nearly shut, a resting lip width, both
     // eyes open at the same aperture.
     auto Rest = [](double T) {

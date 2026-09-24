@@ -368,6 +368,20 @@ void RunPointerLayoutTests()
         CHECK(C.Latched == 8 && C.Toggled == 0u);
     }
 
+    // A click state marked as already down (the plugin does this while the menu is open,
+    // on ClearClicks and on RomClosed) needs a release before the next press counts, so the
+    // click that closes the menu never lands on the game.
+    {
+        const PointerSettle None = {};
+        PointerClicks C;
+        C.PrevButton = true;
+        PointerClickStep(&C, true, 10, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == POINTER_ZONE_NONE);
+        PointerClickStep(&C, false, 10, 0u, POINTER_ZONE_NONE, None);
+        PointerClickStep(&C, true, 10, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == 10);
+    }
+
     // The hold slot (mid5, zone 12): a press copies the settled tilt, or neutral before any
     // settle; a second press lets go; other presses keep it; a settle in the image ends it.
     {

@@ -75,12 +75,20 @@ struct PointerState
     std::atomic<uint32_t> FaceWanted;    // 1 when the layout binds a face gesture
     std::atomic<uint32_t> HeadStickWanted; // 1 when Stick is {stick: head} or {stick: head-digital}
     std::atomic<uint32_t> ToggleMarkZones; // one bit per zone: the toggle slots and the hold slot, which draw the corner mark
+    std::atomic<int32_t> MenuZone;          // the menu's slot, POINTER_ZONE_NONE for none (plugin at load)
     char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     // Plugin each GetKeys -> overlay.
     std::atomic<int32_t> LatchedZone;    // POINTER_ZONE_NONE when nothing is held
     std::atomic<int32_t> Quadrant;       // PointerQuadrant of the stick the game got; -1 neutral
     std::atomic<uint32_t> ToggledZones;  // one bit per zone: toggles that are on, and the hold slot while holding
+    // The emulator actions menu. The frontend's MenuHost -> plugin, overlay and tracker.
+    std::atomic<uint32_t> MenuOpen;      // 1 while the menu is open: the game gets no input
+    std::atomic<int32_t> MenuArmed;      // the armed item's slot, or POINTER_ZONE_NONE
+    std::atomic<uint32_t> ClearClicks;   // bumped to make the plugin forget toggles, the hold and the rest
+    std::atomic<uint32_t> RecentreFace;  // 1 asks the tracker to forget the resting pose; it clears it
+    // Overlay -> MenuHost: bumped after every draw, so the host knows the menu is on screen.
+    std::atomic<uint32_t> OverlayFrames;
 };
 
 inline void PointerPublish(PointerState * State, const PointerSample & Sample)

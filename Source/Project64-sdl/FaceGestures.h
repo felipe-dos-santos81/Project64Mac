@@ -63,6 +63,10 @@ public:
     float BrowBaseline() const { return m_Baseline[FACE_BROW]; }
     float YawBaseline() const { return m_Baseline[FACE_YAW]; }
 
+    // Forgets the resting pose: the next sample with a face becomes the new rest, as at
+    // start-up. The emulator actions menu's Recentre.
+    void Rebaseline() { m_HaveBaseline = false; }
+
 private:
     // One held bit with debounce and hysteresis.
     struct Channel
