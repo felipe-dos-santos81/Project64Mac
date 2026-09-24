@@ -7,10 +7,10 @@
 #include "LauncherModel.h"
 #include "Screens.h"
 
+#include <Project64-sdl/ExecutablePath.h>
 #include <SDL3/SDL.h>
 
 #include <limits.h>
-#include <mach-o/dyld.h>
 #include <mutex>
 #include <signal.h>
 #include <spawn.h>
@@ -26,15 +26,6 @@ extern char ** environ;
 
 namespace
 {
-std::string ExecutablePath()
-{
-    char Buf[PATH_MAX];
-    uint32_t Size = sizeof(Buf);
-    if (_NSGetExecutablePath(Buf, &Size) != 0) return "";
-    char Resolved[PATH_MAX];
-    return realpath(Buf, Resolved) != nullptr ? std::string(Resolved) : std::string();
-}
-
 // $PJ64_LAUNCHER_HOME/launcher.yaml, else ~/Library/Application Support/Project64/launcher.yaml.
 std::string SettingsPath()
 {

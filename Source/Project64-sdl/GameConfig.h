@@ -14,4 +14,8 @@
 // environment variable, so main.cpp owns the PJ64_INPUT_YAML decision.
 bool GameConfigPath(const char * RomPath, const char * ExeDir, char * Out, size_t Size);
 
+// The path GameConfigPath tries first for RomPath: <rom dir>/<base>.yaml. False when the ROM
+// path has no file name. The panel editor saves there, so the saved layout wins at once.
+bool GameConfigBesideRom(const char * RomPath, char * Out, size_t Size);
+
 #endif

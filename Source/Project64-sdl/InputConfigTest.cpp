@@ -408,6 +408,16 @@ void RunInputConfigTests()
         CHECK(C.PointerHoldZone() == PointerZoneFromName("pad-down"));
         CHECK(C.Bindings(N64Control::A).empty());
 
+        // The order itself, as play and the editor share it.
+        bool Used[POINTER_ZONE_COUNT] = { false };
+        CHECK(AutoMenuSlot(Used, POINTER_ZONE_NONE) == PointerZoneFromName("mid5"));
+        Used[PointerZoneFromName("mid5")] = true;
+        Used[PointerZoneFromName("mid4")] = true;
+        CHECK(AutoMenuSlot(Used, POINTER_ZONE_NONE) == PointerZoneFromName("mid3"));
+        for (const char * Name : { "mid3", "mid2", "mid1" }) Used[PointerZoneFromName(Name)] = true;
+        CHECK(AutoMenuSlot(Used, POINTER_ZONE_NONE) == PointerZoneFromName("pad-down"));
+        CHECK(AutoMenuSlot(Used, PointerZoneFromName("pad-down")) == PointerZoneFromName("pad-up"));
+
         CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));
         CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(false); }) == "menu: added on mid5\n");
         CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));

@@ -60,6 +60,15 @@ void RunGameConfigTests()
     if (getcwd(Cwd, sizeof(Cwd)) == nullptr || chdir(Roms.c_str()) != 0) { perror("chdir"); TestFailures()++; return; }
     CHECK(GameConfigPath("game.z64", Exe.c_str(), Out, sizeof(Out)));
     CHECK(strcmp(Out, "./game.yaml") == 0);
+
+    // The name a layout saved for a ROM takes: beside it, the last extension replaced.
+    char Beside[PATH_MAX];
+    CHECK(GameConfigBesideRom("/r/game.z64", Beside, sizeof(Beside)) && strcmp(Beside, "/r/game.yaml") == 0);
+    CHECK(GameConfigBesideRom("/r/a.b.v64", Beside, sizeof(Beside)) && strcmp(Beside, "/r/a.b.yaml") == 0);
+    CHECK(GameConfigBesideRom("game.n64", Beside, sizeof(Beside)) && strcmp(Beside, "./game.yaml") == 0);
+    CHECK(GameConfigBesideRom("/r/.hidden", Beside, sizeof(Beside)) && strcmp(Beside, "/r/.hidden.yaml") == 0);
+    CHECK(!GameConfigBesideRom("/r/", Beside, sizeof(Beside)));
+
     if (chdir(Cwd) != 0) { perror("chdir"); TestFailures()++; }
 
 }

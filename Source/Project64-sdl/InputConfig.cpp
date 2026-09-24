@@ -639,43 +639,35 @@ int InputConfig::ApplyAutoMenu(bool Quiet)
     const int Hold = PointerHoldZone();
     if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
 
-    static const char * const kOrder[] = { "mid5", "mid4", "mid3", "mid2", "mid1" };
-    for (const char * Name : kOrder)
-    {
-        const int Zone = PointerZoneFromName(Name);
-        if (Used[Zone]) continue;
-        m_Menu.assign(1, MakeZone(Zone));
-        if (!Quiet) fprintf(stderr, "menu: added on %s\n", Name);
-        return Zone;
-    }
-
-    const int PadDown = PointerZoneFromName("pad-down");
-    const int Fallback = (Hold == PadDown) ? PointerZoneFromName("pad-up") : PadDown;
-    const char * FallbackName = PointerZoneName(Fallback);
+    const int Slot = AutoMenuSlot(Used, Hold);
+    const char * SlotName = PointerZoneName(Slot);
     const char * Taken = nullptr;
-    for (int i = 0; i < (int)N64Control::Count; i++)
+    if (Used[Slot])
     {
-        std::vector<Binding> & List = m_Bindings[i];
-        for (size_t j = 0; j < List.size();)
+        for (int i = 0; i < (int)N64Control::Count; i++)
         {
-            if (List[j].kind == Binding::Kind::Zone && List[j].code == Fallback)
+            std::vector<Binding> & List = m_Bindings[i];
+            for (size_t j = 0; j < List.size();)
             {
-                List.erase(List.begin() + j);
-                if (Taken == nullptr) Taken = kControlNames[i];
-            }
-            else
-            {
-                j++;
+                if (List[j].kind == Binding::Kind::Zone && List[j].code == Slot)
+                {
+                    List.erase(List.begin() + j);
+                    if (Taken == nullptr) Taken = kControlNames[i];
+                }
+                else
+                {
+                    j++;
+                }
             }
         }
     }
-    m_Menu.assign(1, MakeZone(Fallback));
+    m_Menu.assign(1, MakeZone(Slot));
     if (!Quiet)
     {
-        if (Taken != nullptr) fprintf(stderr, "menu: took %s from %s\n", FallbackName, Taken);
-        else fprintf(stderr, "menu: added on %s\n", FallbackName);
+        if (Taken != nullptr) fprintf(stderr, "menu: took %s from %s\n", SlotName, Taken);
+        else fprintf(stderr, "menu: added on %s\n", SlotName);
     }
-    return Fallback;
+    return Slot;
 }
 
 // The plugin lives at <bin>/Plugin/Input/<name>.dylib. Stripping the file name and then

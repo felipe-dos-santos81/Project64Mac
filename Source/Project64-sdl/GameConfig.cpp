@@ -7,21 +7,33 @@
 #include <string>
 #include <unistd.h>
 
-bool GameConfigPath(const char * RomPath, const char * ExeDir, char * Out, size_t Size)
+// RomPath's directory ("." for a bare name) and its file name without the last extension.
+static bool SplitRom(const char * RomPath, std::string * Dir, std::string * Base)
 {
     const std::string Rom = RomPath;
     const size_t Slash = Rom.find_last_of('/');
-    const std::string Dir = Slash == std::string::npos ? "." : Rom.substr(0, Slash);
-    std::string Base = Slash == std::string::npos ? Rom : Rom.substr(Slash + 1);
-    const size_t Dot = Base.find_last_of('.');
+    *Dir = Slash == std::string::npos ? "." : Rom.substr(0, Slash);
+    *Base = Slash == std::string::npos ? Rom : Rom.substr(Slash + 1);
+    const size_t Dot = Base->find_last_of('.');
     if (Dot != std::string::npos && Dot > 0)   // ".hidden" keeps its name whole
     {
-        Base.erase(Dot);
+        Base->erase(Dot);
     }
-    if (Base.empty())
-    {
-        return false;
-    }
+    return !Base->empty();
+}
+
+bool GameConfigBesideRom(const char * RomPath, char * Out, size_t Size)
+{
+    std::string Dir, Base;
+    if (!SplitRom(RomPath, &Dir, &Base)) return false;
+    snprintf(Out, Size, "%s/%s.yaml", Dir.c_str(), Base.c_str());
+    return true;
+}
+
+bool GameConfigPath(const char * RomPath, const char * ExeDir, char * Out, size_t Size)
+{
+    std::string Dir, Base;
+    if (!SplitRom(RomPath, &Dir, &Base)) return false;
     const std::string Candidates[2] = {
         Dir + "/" + Base + ".yaml",
         std::string(ExeDir) + "/Config/mouse/" + Base + ".yaml",

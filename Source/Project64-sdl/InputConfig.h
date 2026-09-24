@@ -61,6 +61,22 @@ inline uint32_t MenuGestureOf(const std::vector<Binding> & Menu)
     return (!Menu.empty() && Menu[0].kind == Binding::Kind::Face) ? (uint32_t)Menu[0].code : 0u;
 }
 
+// Where the added menu goes: the first of mid5, mid4, mid3, mid2, mid1 that Used does not
+// mark, else the fallback — pad-down, or pad-up when pad-down is the stick's Hold. The fallback
+// comes back whether or not Used marks it: ApplyAutoMenu then takes it from its control, and
+// the panel editor refuses. The one statement of the order, for play and for editing.
+inline int AutoMenuSlot(const bool Used[POINTER_ZONE_COUNT], int Hold)
+{
+    static const char * const kOrder[] = { "mid5", "mid4", "mid3", "mid2", "mid1" };
+    for (const char * Name : kOrder)
+    {
+        const int Zone = PointerZoneFromName(Name);
+        if (!Used[Zone]) return Zone;
+    }
+    const int PadDown = PointerZoneFromName("pad-down");
+    return Hold == PadDown ? PointerZoneFromName("pad-up") : PadDown;
+}
+
 class InputConfig
 {
 public:
