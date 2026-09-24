@@ -294,7 +294,7 @@ INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp MenuHost.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
-WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp Screenshots.cpp)
+WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp EditLayout.cpp Screenshots.cpp)
 LAUNCHER_SRC = $(addprefix Project64-launcher/, main.cpp Screens.cpp LauncherModel.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
@@ -343,8 +343,8 @@ $(SOFTFLOAT_OBJS): CFLAGS += -Wno-implicit-function-declaration
 $(CORE_OBJS): CPPFLAGS += -I$(SRC)/$(SOFTFLOAT_DIR)/source/8086 \
   -I$(SRC)/$(SOFTFLOAT_DIR)/source/include -I$(SRC)/$(SOFTFLOAT_DIR)/build/Win32-SSE2-MinGW
 $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
-$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(SDL_CFLAGS)
-$(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
+$(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/EditLayoutTest.o: CPPFLAGS += $(SDL_CFLAGS)
+$(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/EditLayoutTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 $(LAUNCHER_OBJS): CPPFLAGS += $(SDL_CFLAGS) $(YAML_CFLAGS)
 $(LAUNCHER_OBJS): WARN = -Wall
@@ -547,7 +547,7 @@ wizard-screenshots-check: wizard ## Prove the committed wizard pictures match wh
 UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o PointerMenuTest.o \
                    FaceGesturesTest.o FaceGestures.o GameConfigTest.o GameConfig.o \
                    InputConfigTest.o InputConfig.o) \
-                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o) \
+                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o EditLayoutTest.o EditLayout.o) \
                  $(addprefix $(BUILD)/Project64-launcher/, LauncherModelTest.o LauncherModel.o)
 
 $(BUILD)/unit-tests: $(UNIT_TEST_OBJS)

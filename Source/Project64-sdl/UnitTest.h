@@ -76,4 +76,5 @@ void RunFaceGesturesTests();
 void RunGameConfigTests();
 void RunInputConfigTests();
 void RunWizardDraftTests();
+void RunWizardEditTests();
 void RunLauncherTests();
