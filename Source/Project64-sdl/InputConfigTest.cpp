@@ -417,11 +417,11 @@ void RunInputConfigTests()
         const char * Before = getenv("PJ64_MENU_AUTO");
         const std::string Saved = Before != nullptr ? Before : "";
         unsetenv("PJ64_MENU_AUTO");
-        CHECK(!AutoMenuWanted());
+        CHECK(!InputConfig::AutoMenuWanted());
         setenv("PJ64_MENU_AUTO", "0", 1);
-        CHECK(!AutoMenuWanted());
+        CHECK(!InputConfig::AutoMenuWanted());
         setenv("PJ64_MENU_AUTO", "1", 1);
-        CHECK(AutoMenuWanted());
+        CHECK(InputConfig::AutoMenuWanted());
         if (Before != nullptr) setenv("PJ64_MENU_AUTO", Saved.c_str(), 1);
         else unsetenv("PJ64_MENU_AUTO");
     }
@@ -429,10 +429,10 @@ void RunInputConfigTests()
     // The launcher's generic layout: one button, no camera, its own menu on pad-down.
     CHECK(C.Load("Config/mouse/default.yaml"));
     CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
-    CHECK(C.PointerHoldZone() == 12);                                  // mid5
-    CHECK(C.PointerToggleZones() == (1u << 9));                        // Z on mid2
-    CHECK(C.MenuZone() == 1);                                          // pad-down
-    CHECK(C.Bindings(N64Control::L)[0].code == 0);                     // pad-up
+    CHECK(C.PointerHoldZone() == PointerZoneFromName("mid5"));
+    CHECK(C.PointerToggleZones() == (1u << PointerZoneFromName("mid2")));   // Z
+    CHECK(C.MenuZone() == PointerZoneFromName("pad-down"));
+    CHECK(C.Bindings(N64Control::L)[0].code == PointerZoneFromName("pad-up"));
     CHECK(C.Bindings(N64Control::DPadUp).size() == 2);                 // unbound: keeps key and gamepad
     CHECK(C.ApplyAutoMenu(true) == POINTER_ZONE_NONE);
 }

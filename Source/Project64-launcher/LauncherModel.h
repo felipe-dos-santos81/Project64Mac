@@ -48,11 +48,24 @@ void LauncherPushRecent(std::vector<std::string> * Recent, const std::string & P
 // Dir gets the resolved path.
 bool LauncherFindEmulator(const char * LauncherPath, std::string * Dir);
 
-// The game's environment: Environ without PJ64_MENU_AUTO, PJ64_FACE or an empty
-// PJ64_INPUT_YAML; then the generic layout for a Generic game unless Environ names a layout;
-// PJ64_MENU_AUTO=1; and PJ64_FACE=0 when Face is off.
-std::vector<std::string> LauncherChildEnv(const char * const * Environ, const std::string & EmulatorDir,
-                                          bool Generic, bool FaceOn);
+// A game's environment, and whether it kept the launcher's own PJ64_INPUT_YAML, which then
+// wins over the game's layout.
+struct LauncherEnv
+{
+    std::vector<std::string> Vars;   // NAME=value, as posix_spawn takes them
+    bool InheritedLayout = false;
+};
+
+// Environ without PJ64_MENU_AUTO, PJ64_FACE or an empty PJ64_INPUT_YAML; then the generic
+// layout for a Generic game unless Environ names a layout; PJ64_MENU_AUTO=1; and PJ64_FACE=0
+// when Face is off. The launcher's Face button alone decides the camera: an inherited
+// PJ64_FACE never reaches the game.
+LauncherEnv LauncherChildEnv(const char * const * Environ, const std::string & EmulatorDir,
+                             const LauncherGame & Game, bool FaceOn);
+
+// $PJ64_LAUNCHER_HOME/launcher.yaml when that variable is set and non-empty, else "" (the
+// caller then uses the per-user preferences folder).
+std::string LauncherHomeSettingsPath();
 
 #define LAUNCHER_VIEW_RECENT -1   // LauncherState::View of the recent games; pages are 0 … N-1
 #define LAUNCHER_WIDTH 800

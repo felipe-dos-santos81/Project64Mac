@@ -38,8 +38,8 @@ std::string ExecutablePath()
 // $PJ64_LAUNCHER_HOME/launcher.yaml, else ~/Library/Application Support/Project64/launcher.yaml.
 std::string SettingsPath()
 {
-    const char * Home = getenv("PJ64_LAUNCHER_HOME");
-    if (Home != nullptr && Home[0] != '\0') return std::string(Home) + "/launcher.yaml";
+    const std::string Home = LauncherHomeSettingsPath();
+    if (!Home.empty()) return Home;
     char * Pref = SDL_GetPrefPath("", "Project64");   // ends in a slash; creates the folder
     if (Pref == nullptr) return "";
     const std::string Path = std::string(Pref) + "launcher.yaml";
@@ -51,23 +51,24 @@ std::string SettingsPath()
 // from here under the lock.
 struct FolderPick
 {
+    enum class Phase { Idle, Waiting, Answered };
     std::mutex Lock;
-    bool Open = false;
-    bool Done = false;
-    std::string Path;   // empty: cancelled or failed
+    Phase State = Phase::Idle;
+    std::string Path;   // once Answered; empty: cancelled or failed
 };
 
 void SDLCALL OnFolderPicked(void * User, const char * const * Files, int)
 {
     FolderPick * Pick = (FolderPick *)User;
     std::lock_guard<std::mutex> Guard(Pick->Lock);
-    Pick->Done = true;
+    Pick->State = FolderPick::Phase::Answered;
     Pick->Path = (Files != nullptr && Files[0] != nullptr) ? Files[0] : "";
     if (Files == nullptr) fprintf(stderr, "launcher: folder picker failed: %s\n", SDL_GetError());
 }
 
 struct Launcher
 {
+    SDL_Window * Window = nullptr;
     std::string EmulatorDir;
     std::string SettingsFile;
     LauncherSettings Settings;
@@ -115,40 +116,40 @@ void Rescan(Launcher & L)
     }
 }
 
-void OpenPicker(Launcher & L, SDL_Window * Window)
+void OpenPicker(Launcher & L)
 {
     {
         std::lock_guard<std::mutex> Guard(L.Pick.Lock);
-        if (L.Pick.Open) return;
-        L.Pick.Open = true;
-        L.Pick.Done = false;
+        if (L.Pick.State != FolderPick::Phase::Idle) return;
+        L.Pick.State = FolderPick::Phase::Waiting;
     }
     const char * Start = L.Settings.Folder.empty() ? nullptr : L.Settings.Folder.c_str();
-    SDL_ShowOpenFolderDialog(OnFolderPicked, &L.Pick, Window, Start, false);
+    SDL_ShowOpenFolderDialog(OnFolderPicked, &L.Pick, L.Window, Start, false);
 }
 
-void TakePick(Launcher & L)
+// Applies the picker's answer, if one came. True when it changed the folder.
+bool TakePick(Launcher & L)
 {
     std::string Path;
     {
         std::lock_guard<std::mutex> Guard(L.Pick.Lock);
-        if (!L.Pick.Done) return;
-        L.Pick.Done = false;
-        L.Pick.Open = false;
+        if (L.Pick.State != FolderPick::Phase::Answered) return false;
+        L.Pick.State = FolderPick::Phase::Idle;
         Path = L.Pick.Path;
     }
-    if (Path.empty()) return;   // cancelled: the current folder stays
+    if (Path.empty()) return false;   // cancelled: the current folder stays
     L.Settings.Folder = Path;
     Save(L);
     L.State.View = 0;
     Rescan(L);
+    return true;
 }
 
-void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
+void StartGame(Launcher & L, const LauncherGame & Game)
 {
-    const std::vector<std::string> Env = LauncherChildEnv(environ, L.EmulatorDir, Game.Generic, L.Settings.Face);
+    const LauncherEnv Child = LauncherChildEnv(environ, L.EmulatorDir, Game, L.Settings.Face);
     std::vector<char *> Envp;
-    for (const std::string & E : Env) Envp.push_back(const_cast<char *>(E.c_str()));
+    for (const std::string & E : Child.Vars) Envp.push_back(const_cast<char *>(E.c_str()));
     Envp.push_back(nullptr);
     const std::string Exe = L.EmulatorDir + "/Project64";
     char * Argv[] = { const_cast<char *>(Exe.c_str()), const_cast<char *>(Game.Path.c_str()), nullptr };
@@ -157,11 +158,11 @@ void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
     // calls are allowed between fork and exec in a threaded process.
     posix_spawn_file_actions_t Actions;
     posix_spawn_file_actions_init(&Actions);
-    // The Makefile sets no -mmacosx-version-min, so the deployment target is the host's own
-    // SDK version, and -Wdeprecated-declarations fires simply because that SDK marks the _np
-    // name deprecated from macOS 26 onward. The _np call stays because the plan pins it; its
-    // replacement, posix_spawn_file_actions_addchdir, needs macOS 26 itself, which the host
-    // already is, so silence the warning rather than change the call.
+    // The _np name exists in every SDK since macOS 10.15; its replacement,
+    // posix_spawn_file_actions_addchdir, exists only from macOS 26, whose SDK marks the _np
+    // name deprecated. Keeping the _np call lets the launcher build against either SDK, so the
+    // deprecation (which fires because the Makefile sets no -mmacosx-version-min and the
+    // deployment target is the host's) is silenced here rather than the call changed.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     posix_spawn_file_actions_addchdir_np(&Actions, L.EmulatorDir.c_str());
@@ -175,11 +176,10 @@ void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
         fprintf(stderr, "launcher: cannot start %s: %s\n", Exe.c_str(), strerror(Err));
         return;
     }
-    // A non-empty PJ64_INPUT_YAML in the launcher's own environment wins for every game
-    // (LauncherChildEnv keeps it and skips the generic default), so say that instead of
-    // "the generic layout" here, whether or not this particular ROM has its own layout.
-    const char * InheritedLayout = getenv("PJ64_INPUT_YAML");
-    if (InheritedLayout != nullptr && InheritedLayout[0] != '\0')
+    // A PJ64_INPUT_YAML LauncherChildEnv kept from the launcher's own environment wins for
+    // every game, so say that instead of "the generic layout", whether or not this particular
+    // ROM has its own layout.
+    if (Child.InheritedLayout)
     {
         fprintf(stderr, "launcher: started %s with $PJ64_INPUT_YAML\n", Game.Path.c_str());
     }
@@ -193,12 +193,13 @@ void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
     const char * Selftest = getenv("PJ64_LAUNCHER_SELFTEST");
     const int Seconds = Selftest != nullptr ? atoi(Selftest) : 0;
     L.KillAt = Seconds > 0 ? SDL_GetTicks() + (Uint64)Seconds * 1000 : 0;
-    SDL_HideWindow(Window);
+    SDL_HideWindow(L.Window);
 }
 
-void PollChild(Launcher & L, SDL_Window * Window)
+// Reaps the game once it ends and brings the window back. True when it did.
+bool PollChild(Launcher & L)
 {
-    if (L.Child == 0) return;
+    if (L.Child == 0) return false;
     if (L.KillAt != 0 && SDL_GetTicks() >= L.KillAt)
     {
         kill(L.Child, SIGTERM);
@@ -206,7 +207,7 @@ void PollChild(Launcher & L, SDL_Window * Window)
     }
     int Status = 0;
     const pid_t Done = waitpid(L.Child, &Status, WNOHANG);
-    if (Done == 0) return;
+    if (Done == 0) return false;
     L.Child = 0;
     L.GamesEnded++;
     char How[32];
@@ -219,13 +220,14 @@ void PollChild(Launcher & L, SDL_Window * Window)
     LauncherPushRecent(&L.Settings.Recent, L.ChildGame.Path);
     RebuildRecent(L);
     Save(L);
-    SDL_ShowWindow(Window);
-    SDL_RaiseWindow(Window);
+    SDL_ShowWindow(L.Window);
+    SDL_RaiseWindow(L.Window);
     fprintf(stderr, "launcher: window back\n");
+    return true;
 }
 
 // Runs what a released click on T does. False: quit.
-bool Handle(Launcher & L, LauncherTarget T, SDL_Window * Window)
+bool ActOnClick(Launcher & L, LauncherTarget T)
 {
     const LauncherGame * Game = nullptr;
     switch (LauncherAct(&L.State, T, &Game))
@@ -234,13 +236,13 @@ bool Handle(Launcher & L, LauncherTarget T, SDL_Window * Window)
         L.Settings.Face = !L.Settings.Face;
         Save(L);
         break;
-    case LauncherCommand::PickFolder: OpenPicker(L, Window); break;
+    case LauncherCommand::PickFolder: OpenPicker(L); break;
     case LauncherCommand::Quit: return false;
     case LauncherCommand::Start:
         if (Game != nullptr)
         {
             const LauncherGame Copy = *Game;   // State may change while the game runs
-            StartGame(L, Copy, Window);
+            StartGame(L, Copy);
         }
         break;
     case LauncherCommand::None: break;
@@ -248,10 +250,7 @@ bool Handle(Launcher & L, LauncherTarget T, SDL_Window * Window)
     return true;
 }
 
-// --selftest (Scripts/launcher_selftest.sh): click the first row, wait for the window to
-// come back, click the second, wait again, then check the recent games. Clicks are pushed as
-// real SDL events, so they take the same path as a player's. Returns -1 while running, else
-// the exit code.
+// A left click on the centre of T, pushed as real SDL events so it takes a player's path.
 void PushClick(LauncherTarget T)
 {
     const LauncherRect R = LauncherTargetRect(T);
@@ -268,6 +267,9 @@ void PushClick(LauncherTarget T)
     SDL_PushEvent(&E);
 }
 
+// --selftest (Scripts/launcher_selftest.sh): click the first row, wait for the window to
+// come back, click the second, wait again, then check the recent games. Returns -1 while
+// running, else the exit code.
 int SelftestStep(Launcher & L, int * Step)
 {
     if (L.Child != 0) return -1;
@@ -333,27 +335,31 @@ int main(int argc, char ** argv)
     L.State.View = LauncherInitialView(L.State);
 
     // Fixed size: every rectangle in LauncherModel is laid out for 800x640.
-    SDL_Window * Window = SDL_CreateWindow("Project64", LAUNCHER_WIDTH, LAUNCHER_HEIGHT, 0);
-    SDL_Renderer * Renderer = Window != nullptr ? SDL_CreateRenderer(Window, nullptr) : nullptr;
+    L.Window = SDL_CreateWindow("Project64", LAUNCHER_WIDTH, LAUNCHER_HEIGHT, 0);
+    SDL_Renderer * Renderer = L.Window != nullptr ? SDL_CreateRenderer(L.Window, nullptr) : nullptr;
     if (Renderer == nullptr)
     {
         fprintf(stderr, "launcher: cannot open a window: %s\n", SDL_GetError());
-        if (Window != nullptr) SDL_DestroyWindow(Window);
+        if (L.Window != nullptr) SDL_DestroyWindow(L.Window);
         SDL_Quit();
         return 1;
     }
 
-    if (L.State.EmulatorFound && !Selftest && L.Settings.Folder.empty()) OpenPicker(L, Window);
+    if (L.State.EmulatorFound && !Selftest && L.Settings.Folder.empty()) OpenPicker(L);
 
     LauncherTarget Hover, Pressed;
     int Step = 0;
     int ExitCode = 0;
     bool Running = true;
+    // The screen changes only on an event, a folder choice or a game's end; an idle launcher
+    // does not redraw.
+    bool Redraw = true;
     while (Running)
     {
         SDL_Event E;
         while (SDL_PollEvent(&E))
         {
+            Redraw = true;
             if (E.type == SDL_EVENT_QUIT || E.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
             {
                 Running = false;
@@ -371,15 +377,15 @@ int main(int argc, char ** argv)
             else if (E.type == SDL_EVENT_MOUSE_BUTTON_UP && E.button.button == SDL_BUTTON_LEFT)
             {
                 const LauncherTarget Released = LauncherHit(L.State, E.button.x, E.button.y);
-                if (Released.Kind != LauncherTargetKind::None && Released == Pressed && !Handle(L, Released, Window))
+                if (Released.Kind != LauncherTargetKind::None && Released == Pressed && !ActOnClick(L, Released))
                 {
                     Running = false;
                 }
                 Pressed = LauncherTarget();
             }
         }
-        TakePick(L);
-        PollChild(L, Window);
+        if (TakePick(L)) Redraw = true;
+        if (PollChild(L)) Redraw = true;
         if (Selftest && Running)
         {
             const int Result = SelftestStep(L, &Step);
@@ -389,8 +395,9 @@ int main(int argc, char ** argv)
                 Running = false;
             }
         }
-        if (L.Child == 0)
+        if (L.Child == 0 && Redraw)
         {
+            Redraw = false;
             std::string Status = L.Status;
             if (Status.empty() && !L.Settings.Face) Status = "Face is off: gesture controls do nothing";
             const LauncherLabels Labels = { L.Settings.Face, L.Settings.Folder.c_str(), Status.c_str() };
@@ -419,7 +426,7 @@ int main(int argc, char ** argv)
         }
     }
     SDL_DestroyRenderer(Renderer);
-    SDL_DestroyWindow(Window);
+    SDL_DestroyWindow(L.Window);
     SDL_Quit();
     return ExitCode;
 }

@@ -5,7 +5,9 @@
 # a layout with no menu, which must get one on mid5 (PJ64_MENU_AUTO). The launcher clicks
 # each row in turn with synthetic events (--selftest), stops each game after
 # PJ64_LAUNCHER_SELFTEST seconds, and must come back after each and list both as recent,
-# newest first. Face is off and PJ64_FACE=0: the camera never opens.
+# newest first. The camera never opens: launcher.yaml has Face off, which makes the launcher
+# give each game PJ64_FACE=0. The PJ64_FACE=0 below follows AGENTS.md's rule for unattended
+# runs, but the launcher drops an inherited PJ64_FACE, so it is not what keeps the camera shut.
 # Design: Docs/superpowers/specs/2026-09-24-launcher-design.md
 set -eu
 

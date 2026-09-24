@@ -139,26 +139,31 @@ static bool HasPrefix(const char * S, const char * Prefix)
     return strncmp(S, Prefix, strlen(Prefix)) == 0;
 }
 
-std::vector<std::string> LauncherChildEnv(const char * const * Environ, const std::string & EmulatorDir,
-                                          bool Generic, bool FaceOn)
+LauncherEnv LauncherChildEnv(const char * const * Environ, const std::string & EmulatorDir,
+                             const LauncherGame & Game, bool FaceOn)
 {
     static const char kLayout[] = "PJ64_INPUT_YAML=";
-    std::vector<std::string> Out;
-    bool Inherited = false;
+    LauncherEnv Out;
     for (const char * const * E = Environ; E != nullptr && *E != nullptr; E++)
     {
         if (HasPrefix(*E, "PJ64_MENU_AUTO=") || HasPrefix(*E, "PJ64_FACE=")) continue;
         if (HasPrefix(*E, kLayout))
         {
             if ((*E)[sizeof(kLayout) - 1] == '\0') continue;
-            Inherited = true;
+            Out.InheritedLayout = true;
         }
-        Out.push_back(*E);
+        Out.Vars.push_back(*E);
     }
-    if (Generic && !Inherited) Out.push_back(std::string(kLayout) + EmulatorDir + "/Config/mouse/default.yaml");
-    Out.push_back("PJ64_MENU_AUTO=1");
-    if (!FaceOn) Out.push_back("PJ64_FACE=0");
+    if (Game.Generic && !Out.InheritedLayout) Out.Vars.push_back(std::string(kLayout) + EmulatorDir + "/Config/mouse/default.yaml");
+    Out.Vars.push_back("PJ64_MENU_AUTO=1");
+    if (!FaceOn) Out.Vars.push_back("PJ64_FACE=0");
     return Out;
+}
+
+std::string LauncherHomeSettingsPath()
+{
+    const char * Home = getenv("PJ64_LAUNCHER_HOME");
+    return (Home != nullptr && Home[0] != '\0') ? std::string(Home) + "/launcher.yaml" : std::string();
 }
 
 LauncherLoad LauncherLoadSettings(const char * Path, LauncherSettings * Out)
@@ -231,18 +236,18 @@ static const float kRowTop = 148.0f, kRowHeight = 40.0f;
 
 const std::vector<LauncherTarget> & LauncherTargets()
 {
-    static std::vector<LauncherTarget> All;
-    if (All.empty())
-    {
+    static const std::vector<LauncherTarget> All = [] {
+        std::vector<LauncherTarget> Targets;
         const LauncherTargetKind Fixed[] = { LauncherTargetKind::Face, LauncherTargetKind::Folder, LauncherTargetKind::Quit,
                                              LauncherTargetKind::Recent };
-        for (LauncherTargetKind K : Fixed) All.push_back(LauncherTarget{ K, 0 });
-        for (int i = 0; i < 26; i++) All.push_back(LauncherTarget{ LauncherTargetKind::Letter, i });
-        for (int i = 0; i < LAUNCHER_ROWS; i++) All.push_back(LauncherTarget{ LauncherTargetKind::Row, i });
-        All.push_back(LauncherTarget{ LauncherTargetKind::Prev, 0 });
-        All.push_back(LauncherTarget{ LauncherTargetKind::Next, 0 });
-        All.push_back(LauncherTarget{ LauncherTargetKind::Choose, 0 });
-    }
+        for (LauncherTargetKind K : Fixed) Targets.push_back(LauncherTarget{ K, 0 });
+        for (int i = 0; i < 26; i++) Targets.push_back(LauncherTarget{ LauncherTargetKind::Letter, i });
+        for (int i = 0; i < LAUNCHER_ROWS; i++) Targets.push_back(LauncherTarget{ LauncherTargetKind::Row, i });
+        Targets.push_back(LauncherTarget{ LauncherTargetKind::Prev, 0 });
+        Targets.push_back(LauncherTarget{ LauncherTargetKind::Next, 0 });
+        Targets.push_back(LauncherTarget{ LauncherTargetKind::Choose, 0 });
+        return Targets;
+    }();
     return All;
 }
 

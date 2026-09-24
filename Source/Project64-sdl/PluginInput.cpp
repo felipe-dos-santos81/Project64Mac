@@ -503,20 +503,22 @@ static void PublishPointerLabels(void)
 
 EXPORT void CALL PluginLoaded(void)
 {
+    bool Loaded = false;
     const char * Env = getenv("PJ64_INPUT_YAML");
     if (Env != nullptr && Env[0] != '\0')
     {
-        InputConfig::Get().Load(Env);
+        Loaded = InputConfig::Get().Load(Env);
     }
     else
     {
         char Path[PATH_MAX];
         if (DefaultConfigPath(Path, sizeof(Path)) && access(Path, R_OK) == 0)
         {
-            InputConfig::Get().Load(Path);
+            Loaded = InputConfig::Get().Load(Path);
         }
     }
-    // The launcher's added menu (PJ64_MENU_AUTO), before the labels and MenuZone are published.
-    if (AutoMenuWanted()) InputConfig::Get().ApplyAutoMenu(false);
+    // The launcher's added menu (PJ64_MENU_AUTO), after a successful load as the frontend does,
+    // and before the labels and MenuZone are published.
+    if (Loaded && InputConfig::AutoMenuWanted()) InputConfig::Get().ApplyAutoMenu(false);
     PublishPointerLabels();
 }

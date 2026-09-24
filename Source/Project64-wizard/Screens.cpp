@@ -7,6 +7,7 @@
 
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
+#include <Project64-sdl/DebugText.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -27,10 +28,7 @@ static const float kMessageY = kWindowHeight - 32.0f;
 
 void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text)
 {
-    const float S = (float)Scale;
-    SDL_SetRenderScale(Renderer, S, S);
-    SDL_RenderDebugText(Renderer, X / S, Y / S, Text);
-    SDL_SetRenderScale(Renderer, 1.0f, 1.0f);
+    DebugText(Renderer, X, Y, Scale, Text);
 }
 
 // How many glyphs of Scale-scaled debug text fit in MaxWidth pixels. The debug font is fixed
@@ -38,28 +36,12 @@ void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char
 // — the head fit, the tail fit, and DrawReview's split of a reader message across two lines.
 static int FitChars(int Scale, float MaxWidth)
 {
-    const int GlyphWidth = SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * Scale;
-    return GlyphWidth > 0 ? (int)(MaxWidth / (float)GlyphWidth) : 0;
+    return DebugTextChars(Scale, MaxWidth);
 }
 
 void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
 {
-    const int MaxChars = FitChars(Scale, MaxWidth);
-    if ((int)strlen(Text) <= MaxChars)
-    {
-        WizardText(Renderer, X, Y, Scale, Text);
-        return;
-    }
-    char Buffer[256];
-    if (MaxChars > 3)
-    {
-        snprintf(Buffer, sizeof(Buffer), "%.*s...", MaxChars - 3, Text);
-    }
-    else
-    {
-        snprintf(Buffer, sizeof(Buffer), "%.*s", MaxChars > 0 ? MaxChars : 0, Text);
-    }
-    WizardText(Renderer, X, Y, Scale, Buffer);
+    DebugText(Renderer, X, Y, Scale, DebugTextFitHead(Text, FitChars(Scale, MaxWidth)).c_str());
 }
 
 // Like WizardTextFit, but keeps the *tail* of Text — a leading "..." then as many trailing
@@ -69,25 +51,7 @@ void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const c
 // typed path, the caret that has to stay visible for the player to see what they are doing.
 static void WizardTextFitTail(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth)
 {
-    const int MaxChars = FitChars(Scale, MaxWidth);
-    const int Len = (int)strlen(Text);
-    if (Len <= MaxChars)
-    {
-        WizardText(Renderer, X, Y, Scale, Text);
-        return;
-    }
-    char Buffer[256];
-    const int Tail = MaxChars > 3 ? MaxChars - 3 : (MaxChars > 0 ? MaxChars : 0);
-    const char * From = Text + (Len - Tail);
-    if (MaxChars > 3)
-    {
-        snprintf(Buffer, sizeof(Buffer), "...%s", From);
-    }
-    else
-    {
-        snprintf(Buffer, sizeof(Buffer), "%s", From);
-    }
-    WizardText(Renderer, X, Y, Scale, Buffer);
+    DebugText(Renderer, X, Y, Scale, DebugTextFitTail(Text, FitChars(Scale, MaxWidth)).c_str());
 }
 
 // Up/Down within a Count-row list. HandleBase, CaptureStickForm and CaptureGesture each clamp

@@ -275,7 +275,7 @@ static bool LayoutUsesPointer(const std::string & ExeDir)
     if (!Config.Load(Path.c_str(), true)) return false;
     // The launcher's added menu (PJ64_MENU_AUTO): quiet here, the plugin reports it. Applied
     // before MenuHost reads MenuZone below, so the host and the plugin agree on the slot.
-    if (AutoMenuWanted()) Config.ApplyAutoMenu(true);
+    if (InputConfig::AutoMenuWanted()) Config.ApplyAutoMenu(true);
     return Config.UsesPointer();
 }
 

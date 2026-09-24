@@ -135,31 +135,51 @@ static int CountPrefix(const std::vector<std::string> & Env, const char * Prefix
 
 static void ChildEnvironment()
 {
+    LauncherGame Generic;
+    Generic.Generic = true;
+    const LauncherGame OwnLayout;
+
     // A caller's own PJ64_FACE, PJ64_MENU_AUTO and empty PJ64_INPUT_YAML never reach the game.
     const char * const Inherited[] = { "HOME=/Users/you", "PJ64_FACE=1", "PJ64_MENU_AUTO=0", "PJ64_INPUT_YAML=", nullptr };
-    std::vector<std::string> Env = LauncherChildEnv(Inherited, "/emu", true, false);
-    CHECK(Has(Env, "HOME=/Users/you"));
-    CHECK(Has(Env, "PJ64_INPUT_YAML=/emu/Config/mouse/default.yaml") && CountPrefix(Env, "PJ64_INPUT_YAML=") == 1);
-    CHECK(Has(Env, "PJ64_MENU_AUTO=1") && CountPrefix(Env, "PJ64_MENU_AUTO=") == 1);
-    CHECK(Has(Env, "PJ64_FACE=0") && CountPrefix(Env, "PJ64_FACE=") == 1);
+    LauncherEnv Env = LauncherChildEnv(Inherited, "/emu", Generic, false);
+    CHECK(!Env.InheritedLayout);                       // an empty PJ64_INPUT_YAML is not kept
+    CHECK(Has(Env.Vars, "HOME=/Users/you"));
+    CHECK(Has(Env.Vars, "PJ64_INPUT_YAML=/emu/Config/mouse/default.yaml") && CountPrefix(Env.Vars, "PJ64_INPUT_YAML=") == 1);
+    CHECK(Has(Env.Vars, "PJ64_MENU_AUTO=1") && CountPrefix(Env.Vars, "PJ64_MENU_AUTO=") == 1);
+    CHECK(Has(Env.Vars, "PJ64_FACE=0") && CountPrefix(Env.Vars, "PJ64_FACE=") == 1);
 
     // Face on: PJ64_FACE is absent, so the layout decides. A game with its own layout gets
     // no PJ64_INPUT_YAML: the frontend finds the layout itself.
-    Env = LauncherChildEnv(Inherited, "/emu", false, true);
-    CHECK(CountPrefix(Env, "PJ64_FACE=") == 0);
-    CHECK(CountPrefix(Env, "PJ64_INPUT_YAML=") == 0);
-    CHECK(Has(Env, "PJ64_MENU_AUTO=1"));
+    Env = LauncherChildEnv(Inherited, "/emu", OwnLayout, true);
+    CHECK(CountPrefix(Env.Vars, "PJ64_FACE=") == 0);
+    CHECK(CountPrefix(Env.Vars, "PJ64_INPUT_YAML=") == 0);
+    CHECK(Has(Env.Vars, "PJ64_MENU_AUTO=1"));
 
     // A caller's explicit layout wins over the generic one, as the frontend's own rule says.
     const char * const Explicit[] = { "PJ64_INPUT_YAML=/mine.yaml", nullptr };
-    Env = LauncherChildEnv(Explicit, "/emu", true, false);
-    CHECK(Has(Env, "PJ64_INPUT_YAML=/mine.yaml") && CountPrefix(Env, "PJ64_INPUT_YAML=") == 1);
+    Env = LauncherChildEnv(Explicit, "/emu", Generic, false);
+    CHECK(Has(Env.Vars, "PJ64_INPUT_YAML=/mine.yaml") && CountPrefix(Env.Vars, "PJ64_INPUT_YAML=") == 1);
+    CHECK(Env.InheritedLayout);
 }
 
 static void Settings()
 {
     const std::string Root = TestMakeTempDir("pj64-launcher-settings");
-    const std::string Path = Root + "/launcher.yaml";
+
+    // PJ64_LAUNCHER_HOME names the folder; unset or empty, the caller's per-user folder is
+    // used. The caller's own value is put back afterwards.
+    const char * Before = getenv("PJ64_LAUNCHER_HOME");
+    const std::string Saved = Before != nullptr ? Before : "";
+    setenv("PJ64_LAUNCHER_HOME", "", 1);
+    CHECK(LauncherHomeSettingsPath().empty());
+    unsetenv("PJ64_LAUNCHER_HOME");
+    CHECK(LauncherHomeSettingsPath().empty());
+    setenv("PJ64_LAUNCHER_HOME", Root.c_str(), 1);
+    const std::string Path = LauncherHomeSettingsPath();
+    CHECK(Path == Root + "/launcher.yaml");
+    if (Before != nullptr) setenv("PJ64_LAUNCHER_HOME", Saved.c_str(), 1);
+    else unsetenv("PJ64_LAUNCHER_HOME");
+
     const std::string Odd = Root + "/N64: Games \"best\"";   // a colon and quotes survive
     TestMakeDir(Odd);
     TestTouch(Odd + "/a.z64");
@@ -211,7 +231,7 @@ static LauncherState StateOf(int GameCount, int RecentCount)
     return S;
 }
 
-static LauncherTarget T(LauncherTargetKind Kind, int Index = 0)
+static LauncherTarget Target(LauncherTargetKind Kind, int Index = 0)
 {
     LauncherTarget Out;
     Out.Kind = Kind;
@@ -249,53 +269,56 @@ static void Screen()
     for (const LauncherTarget & Each : All) CHECK(!LauncherEnabled(S, Each) || HitCentre(S, Each) == Each);
     CHECK(LauncherHit(S, 2, 2).Kind == LauncherTargetKind::None);        // the corner is no target
     CHECK(LauncherHit(S, 300, 20).Kind == LauncherTargetKind::None);     // beside the title
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Prev)));             // page 1, no recent games
-    CHECK(HitCentre(S, T(LauncherTargetKind::Prev)).Kind == LauncherTargetKind::None);
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Recent)));
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Choose)));
-    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Letter, 24)));        // Y24, the last title
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Letter, 25)));       // no title starts with Z
+    CHECK(LauncherHit(S, 184, 70).Kind == LauncherTargetKind::None);     // between the A and B cells
+    CHECK(LauncherHit(S, 150, 98).Kind == LauncherTargetKind::None);     // between the two letter rows
+    CHECK(LauncherHit(S, 100, 187).Kind == LauncherTargetKind::None);    // between the first two game rows
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Prev)));             // page 1, no recent games
+    CHECK(HitCentre(S, Target(LauncherTargetKind::Prev)).Kind == LauncherTargetKind::None);
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Recent)));
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Choose)));
+    CHECK(LauncherEnabled(S, Target(LauncherTargetKind::Letter, 24)));        // Y24, the last title
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Letter, 25)));       // no title starts with Z
 
     const LauncherGame * G = nullptr;
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 1);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 1);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
     CHECK(LauncherRowCount(S) == 5);
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));             // last page
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Row, 5)));           // beyond the page's games
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 4), &G) == LauncherCommand::Start);
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Next)));             // last page
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Row, 5)));           // beyond the page's games
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Row, 4), &G) == LauncherCommand::Start);
     CHECK(G == &S.Games[24]);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Letter, 0), &G) == LauncherCommand::None && S.View == 0);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Face), &G) == LauncherCommand::ToggleFace);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Folder), &G) == LauncherCommand::PickFolder);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Quit), &G) == LauncherCommand::Quit);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Letter, 0), &G) == LauncherCommand::None && S.View == 0);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Face), &G) == LauncherCommand::ToggleFace);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Folder), &G) == LauncherCommand::PickFolder);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Quit), &G) == LauncherCommand::Quit);
 
     // With recent games: opens on Recent; < on page 1 goes there; > from it goes to page 1.
     S = StateOf(25, 2);
     CHECK(LauncherInitialView(S) == LAUNCHER_VIEW_RECENT);
     S.View = 0;
-    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Prev)));
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Prev), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
-    CHECK(LauncherRowCount(S) == 2 && !LauncherEnabled(S, T(LauncherTargetKind::Prev)));
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 1), &G) == LauncherCommand::Start && G == &S.Recent[1]);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 0);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Recent), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
+    CHECK(LauncherEnabled(S, Target(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Prev), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
+    CHECK(LauncherRowCount(S) == 2 && !LauncherEnabled(S, Target(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Row, 1), &G) == LauncherCommand::Start && G == &S.Recent[1]);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 0);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Recent), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
 
     // No games: Choose in place of the rows, and a disabled target does nothing.
     S = StateOf(0, 0);
     CHECK(LauncherEmpty(S) && LauncherRowCount(S) == 0);
-    CHECK(HitCentre(S, T(LauncherTargetKind::Choose)).Kind == LauncherTargetKind::Choose);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Choose), &G) == LauncherCommand::PickFolder);
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 0), &G) == LauncherCommand::None);
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));
-    for (int L = 0; L < 26; L++) CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Letter, L)));
+    CHECK(HitCentre(S, Target(LauncherTargetKind::Choose)).Kind == LauncherTargetKind::Choose);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Choose), &G) == LauncherCommand::PickFolder);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Row, 0), &G) == LauncherCommand::None);
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Next)));
+    for (int L = 0; L < 26; L++) CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Letter, L)));
 
     // No games but recent ones (a folder that vanished): Recent still works.
     S = StateOf(0, 0);
     S.Recent.push_back(LauncherGame());
-    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Prev)));
-    CHECK(LauncherAct(&S, T(LauncherTargetKind::Prev), &G) == LauncherCommand::None && !LauncherEmpty(S));
-    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));
+    CHECK(LauncherEnabled(S, Target(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Prev), &G) == LauncherCommand::None && !LauncherEmpty(S));
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Next)));
 
     // No emulator: only Quit.
     S = StateOf(25, 2);

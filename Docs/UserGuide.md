@@ -137,7 +137,9 @@ off, either — the window's close button still ends the game.
 
 `Face: off`, the default, starts every game with the camera off, so its gesture-bound
 controls do nothing, which the status line says. `Face: on` lets each game's own layout
-decide, the way starting it from a terminal does. The camera prompt names Project64.
+decide, the way starting it from a terminal does. The camera prompt should name Project64,
+since macOS asks on behalf of the app that started the game; if it names something else,
+see section 10.
 
 Quit from the menu, or the window's close button, brings the list back silently. A game
 that cannot start, or one that ends with an error — a crash or a non-zero exit — shows on
@@ -396,7 +398,7 @@ The camera starts by itself when a layout binds a gesture or the head stick; `fa
 `--face` forces it, `face=0` or `PJ64_FACE=0` keeps it off. macOS asks for camera
 permission once, and because the emulator is not an app bundle the prompt is attributed to
 the terminal or IDE you launched from; started from `Project64.app` (section 3, "Starting
-from the launcher"), the prompt and the System Settings entry name Project64 instead.
+from the launcher"), the prompt and the System Settings entry should name Project64 instead.
 Frames stay in memory and are never saved, shown or logged. If the camera is denied or
 absent, everything else keeps working; only the gesture-bound controls go missing.
 

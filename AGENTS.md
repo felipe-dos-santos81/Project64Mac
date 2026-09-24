@@ -53,7 +53,7 @@ targets). It prints `ok: <area>` for each; `only=<area>` runs one. There is no o
 unit-test command. `make pointer-selftest` needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
-`audio`, `input`, `frontend`, `config`. Run `make core` after touching the core rather
+`audio`, `input`, `frontend`, `wizard`, `launcher`, `config`, `app`. Run `make core` after touching the core rather
 than rebuilding everything.
 
 ## Verifying a change
@@ -262,9 +262,9 @@ Only the `Aarch64` backend directory survives.
   Reset also bumps `ClearClicks` to clear the clicks at once.
 - **The camera prompt is attributed to whatever started the emulator.** The binary is not
   an app bundle, so macOS asks for camera access on behalf of the terminal or IDE that ran
-  it — except from `Project64.app`, where it is the app itself (its `Info.plist` carries
-  `NSCameraUsageDescription`), since macOS attributes a child's camera request to the app
-  that started it. A past denial there makes the tracker report `denied` without a new
+  it — except, as designed, from `Project64.app`, where it should be the app itself (its
+  `Info.plist` carries `NSCameraUsageDescription`), since macOS attributes a child's camera
+  request to the app that started it; the launcher spec's manual check confirms this. A past denial there makes the tracker report `denied` without a new
   prompt; the fix is in System Settings, under whichever name asked.
 - **`Config/input.yaml` must stay keyboard-active.** A mouse block there would replace the
   keyboard bindings under the one-binding rule and break the grid's keyboard broadcast and
@@ -278,7 +278,8 @@ Only the `Aarch64` backend directory survives.
   Any unattended launcher over a ROM folder must set `PJ64_FACE=0` itself, the way
   `Scripts/run_rom_pack.py` does — otherwise a matching layout can open the camera with
   nobody watching. `Source/Project64-launcher/` is an attended launcher, not an unattended
-  one: its Face button, off by default, is what sets `PJ64_FACE=0` for it.
+  one: its Face button, off by default, is what sets `PJ64_FACE=0` for it, and it drops an
+  inherited `PJ64_FACE`, so that button alone decides the camera for the games it starts.
 - **The frontend owns `PJ64_VIEWPORT_OFFSET`.** It sets the variable to the panel height,
   or clears it, before the plugins load, from the layout it parsed itself. Never set it by
   hand: a value the video plugin honours without the taller window pushes the game off the

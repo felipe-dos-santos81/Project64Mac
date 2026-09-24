@@ -108,7 +108,8 @@ bad ROM, reaches the launcher the same way.
 ### The screen
 
 The window is 800x640 points, fixed size, titled `Project64`. Text is the debug font at
-twice its size (16 px glyphs). Every target is a rectangle that lights under the pointer and
+twice its size (16 px glyphs), except the `Project64` heading, at three times, and a status
+line too long for the row, drawn at the font's own size so its end is never cut. Every target is a rectangle that lights under the pointer and
 acts on **release inside the same target it was pressed in**; a press that drifts off does
 nothing. There is no keyboard handling.
 

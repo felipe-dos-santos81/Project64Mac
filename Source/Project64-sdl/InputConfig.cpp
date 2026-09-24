@@ -7,6 +7,7 @@
 
 #include <dlfcn.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 
@@ -616,6 +617,12 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
         for (int i = 0; i < (int)N64Control::Count; i++) SeenOut[i] = Seen[i];
     }
     return true;
+}
+
+bool InputConfig::AutoMenuWanted()
+{
+    const char * Env = getenv("PJ64_MENU_AUTO");
+    return Env != nullptr && strcmp(Env, "1") == 0;
 }
 
 int InputConfig::ApplyAutoMenu(bool Quiet)
