@@ -110,6 +110,10 @@ digit). `Recent` shows the last five games played, and is where the launcher ope
 there are any. A click starts the game it is released over; move off before letting go and
 nothing happens.
 
+Each row also has an `Edit` button next to it — beside `generic`, when a row shows one —
+which opens that game's layout in the panel editor (section 6, "Editing a game's layout by
+clicking") instead of starting the game. Editing a game does not add it to Recent.
+
 `generic`, next to a game, means it has no layout of its own, so it starts with
 `Config/mouse/default.yaml`, the generic one-button layout:
 
@@ -279,6 +283,80 @@ beside the ROM instead (destination `2`, section 9), not in either of those fold
 Nothing is written until the emulator's own reader has accepted it: the wizard emits the
 file, loads it back through the same reader the game uses, and refuses with the reader's
 reason if it objects. The message line reads "Saved. Escape to quit." when it is done.
+
+### Editing a game's layout by clicking
+
+```sh
+./Bin/macOS/Project64-wizard --edit Roms/game.z64
+```
+
+or `Edit`, next to a game in the launcher (section 3): a second, faster way in, for a
+layout that already has a mouse panel, trading the step-by-step walk for clicking straight
+on the slot you want to change.
+
+![The panel editor: the picture holds A, mid5 shows Ho, pad-down shows ==, and mid2 has a gold toggle bar](img/wizard/12-edit-panel.png)
+
+**The panel** shows the game's real slots — the same ones section 7 draws — each labelled
+the way the overlay labels them: two letters per control, `Ho` for the stick hold, `==` for
+the menu, and a gold bar along a toggle slot's foot. An empty slot is blank. `Not placed:`
+along the bottom lists every control with no slot and no gesture; the panel editor never
+touches their keys or gamepad buttons, so they keep whatever the loaded layout, or the
+built-in table, already gives them. A layout with no menu of its own gets one the moment
+you open it, the same way a new game from the launcher does, and the status line says
+where.
+
+**Click a slot, or the picture, to open its chooser.**
+
+![mid2's chooser: the fourteen controls with Z lit, Toggle lit gold, and Back](img/wizard/13-edit-chooser.png)
+
+The choices are the fourteen controls, then `Menu`, `Hold` and `Nothing`, with `Toggle` and
+`Back` below them. A choice already there is lit gold; one that would do nothing is
+dimmed, and clicking it puts the reason on the status line instead of changing anything:
+`Menu` on the picture ("the picture cannot hold the menu"); `Hold` on the picture ("the
+hold cannot go on the picture") or anywhere while the stick is not the pointer ("the hold
+needs the stick to be the pointer"); `Toggle` on an empty slot ("a toggle needs a control
+in the slot").
+
+**The rules.** A slot, or a gesture, holds one thing: choosing a control for it moves that
+control off wherever it was, and whatever it displaces is not placed any more, keeping its
+built-in key and gamepad pair — the same thing `Clear` does in the step-by-step wizard. The
+menu always has a place: taking its slot for something else moves the menu instead, by the
+same order as a new game from the launcher (section 3) — `mid5` down to `mid1`, then
+`pad-down`, or `pad-up` instead when `pad-down` is the stick's hold — and when every slot
+is already taken, the move is refused ("The panel is full: free a slot for the menu
+first") rather than losing the menu. The hold only works with the pointer stick. Switching
+the stick to `head` or `head-digital` clears any control, or the menu, from the four
+head-turn gestures and dims those four rows in the gesture list, since the head now moves
+the stick instead of them.
+
+**Gestures.** `Gestures` (`Back to panel` once you are there) swaps the panel for the
+eleven face gestures, each showing what holds it now. A gesture's chooser offers the same
+fourteen controls and `Nothing`, but never `Menu`, `Hold` or `Toggle` — those are
+panel-only.
+
+![The gesture list: mouth-open lit gold for Start, the tracker reporting "tracking"](img/wizard/14-edit-gestures.png)
+
+The camera starts the first time you open this list, never before, the same rule as the
+step-by-step wizard's; `PJ64_FACE=0`, or `Face: off` in the launcher, keeps it off and the
+list still works, unlit.
+
+**The stick.** `Stick: <form>` at top left opens a chooser of three forms — `pointer`,
+`head`, `head-digital` — with the current one lit. `Stick: other` means a gamepad stick, a
+whole side, or four keys, set in the step-by-step wizard; picking one of the three here
+replaces it, and there is no way back to `other` from here.
+
+**Save** writes `<rom name>.yaml` beside the ROM, which wins over `Config/mouse/` at once
+the next time you play it (section 9). The first save over an existing file of that name
+keeps a copy first, as `<rom name>.yaml.orig`; restore it by renaming that back over the
+`.yaml` file. A later save never touches the `.orig` again. Into a folder you cannot write
+to, Save fails and says why on the status line, and nothing changes.
+
+**Cancel** closes without saving. With changes since you opened it, one click only warns —
+"Cancel again to discard your changes" — and a second click on Cancel discards them; Save,
+or any further change, clears that warning.
+
+Keys and gamepad buttons still take the step-by-step wizard, above: the panel editor only
+places controls on the panel and the gesture list.
 
 ## 7. Playing with a mouse
 
@@ -503,7 +581,7 @@ Environment variables. Unset means the default.
 | `PJ64_VIEWPORT_OFFSET`, `PJ64_TILE_SIZE`, `PJ64_AUDIO_MUTE`, `PJ64_POINTER_FD`, `PJ64_GRID_KEYS_FD` | Set by the emulator for its own child processes and plugins. Never set by hand. |
 | `PJ64_MENU_AUTO` | `1`: a layout with a panel and no `Menu:` gets one on its first free slot (the launcher sets it for every game). |
 | `PJ64_LAUNCHER_HOME` | A directory to keep `launcher.yaml` in instead of `~/Library/Application Support/Project64/`. |
-| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_MENU_SELFTEST`, `PJ64_GRID_SELFTEST`, `PJ64_LAUNCHER_SELFTEST` | Test hooks used by the `*-selftest` targets. |
+| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_MENU_SELFTEST`, `PJ64_GRID_SELFTEST`, `PJ64_LAUNCHER_SELFTEST`, `PJ64_EDIT_SELFTEST` | Test hooks used by the `*-selftest` targets. |
 
 Make targets for players. `make help` also lists the self-tests; the build stages are
 hidden.

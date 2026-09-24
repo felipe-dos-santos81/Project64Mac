@@ -23,7 +23,7 @@ make unit-test                           # every headless unit-test area, then t
 make unit-test only=input-config         # one area, without the drift check
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
-make wizard-selftest                     # the wizard's screens, driven by synthetic events
+make wizard-selftest                     # the wizard's screens and the panel editor (--edit, PJ64_EDIT_SELFTEST=1), synthetic events, needs make config
 make wizard-screenshots                  # render the user guide's wizard pictures into Docs/img/wizard
 make wizard-screenshots-check            # fail if those pictures no longer match what the wizard draws
 make run-wizard                          # launch the binding wizard window
@@ -48,9 +48,10 @@ window. Its areas, in the order they run: `pointer-layout` (the mouse panel's ge
 and the one-button rules), `pointer-menu` (the emulator actions menu's rules),
 `face-gestures` (the gesture classifier), `game-config` (the per-game YAML lookup),
 `input-config` (the YAML reader), `wizard-draft` (the wizard's draft and the YAML it
-writes) and `launcher` (the launcher's model: games, pages, settings, the screen's
-targets). It prints `ok: <area>` for each; `only=<area>` runs one. There is no other
-unit-test command. `make pointer-selftest` needs a window server and takes ~30 s.
+writes), `wizard-edit` (the panel editor's layout and click logic) and `launcher` (the
+launcher's model: games, pages, settings, the screen's targets). It prints `ok: <area>` for
+each; `only=<area>` runs one. There is no other unit-test command. `make pointer-selftest`
+needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
 `audio`, `input`, `frontend`, `wizard`, `launcher`, `config`, `app`. Run `make core` after touching the core rather
@@ -108,18 +109,32 @@ point the four `Plugin_*_Current` settings at the dylib paths, then
 and watches for `g_BaseSystem` going null.
 
 `Bin/macOS/Project64-wizard` is a second binary from `Source/Project64-wizard/`. It shares
-`InputConfig.o`, `FaceGestures.o` and `FaceTracker.o` with the frontend but links no
-OpenGL: it draws with `SDL_Renderer` and SDL's 8x8 debug font, because the overlay's font
-has twenty-one glyphs and cannot spell a scancode name. `WizardDraft` holds the mapping
-and emits the YAML with no SDL window in sight, which is why the `wizard-draft` unit-test
-area can test it headlessly; `Screens.cpp` turns one event into one call on the draft, which is why
-`--selftest <path>` can drive the real screens with synthetic events — a flag on the
-binary itself, which `Scripts/wizard_selftest.sh` (what `make wizard-selftest` runs) calls
-but does not own.
+`InputConfig.o`, `GameConfig.o`, `FaceGestures.o` and `FaceTracker.o` with the frontend but
+links no OpenGL: it draws with `SDL_Renderer` and SDL's 8x8 debug font, because the
+overlay's font has twenty-one glyphs and cannot spell a scancode name. `WizardDraft` holds
+the mapping and emits the YAML with no SDL window in sight, which is why the `wizard-draft`
+unit-test area can test it headlessly; `Screens.cpp` turns one event into one call on the
+draft, which is why `--selftest <path>` can drive the real screens with synthetic events —
+a flag on the binary itself, which `Scripts/wizard_selftest.sh` (what `make wizard-selftest`
+runs) calls but does not own.
+
+`--edit <rom>` (`main.cpp`'s `RunEditor`) opens the panel editor instead: one game's layout,
+in its own window over the same `WizardDraft`, rather than all fifteen controls.
+`EditLayout.{h,cpp}` is pure, the way `WizardDraft` is — the panel's targets and their
+rectangles (from `PointerZoneRect`, so a slot is the slot the player clicks in play),
+whether each is enabled and why not, and what a click does to the draft. `EditScreen.cpp`
+only paints what `EditLayout` reports and turns SDL events into `EditHit`/`EditAct` calls;
+the editing rules themselves — one thing per slot, a displaced control losing its place, the
+menu never lost — live as methods on `WizardDraft` alongside the step-by-step wizard's own,
+tested in the `wizard-edit` unit-test area. A layout with no `Menu:` gets one from
+`EnsureMenu`, which places it by `AutoMenuSlot` (`Source/Project64-sdl/InputConfig.h`), the
+one statement of that order shared with `ApplyAutoMenu`, the launcher's own per-game menu.
+`PJ64_EDIT_SELFTEST=1` runs `EditScript`, the scripted edit behind `Scripts/wizard_selftest.sh`
+and `make wizard-selftest`, with no window.
 
 `--screenshots <dir>` (`Screenshots.cpp`) walks a second fixed tour through the same
 screens and writes one PNG per stop through `SDL_CreateSoftwareRenderer` and
-`SDL_SavePNG`, with no window and no `SDL_Init`; the user guide references those eleven
+`SDL_SavePNG`, with no window and no `SDL_Init`; the user guide references those fourteen
 files by name and `Scripts/wizard_screenshots_check.sh` compares a fresh render with the
 committed `Docs/img/wizard/` byte for byte.
 
@@ -130,9 +145,11 @@ rectangle and rule; `Screens.cpp` draws it the way the wizard's `Screens.cpp` do
 `SDL_Renderer` and the debug font. `main.cpp` runs the chosen game with `posix_spawn` and
 waits for it; the child's environment always gets `PJ64_MENU_AUTO=1`, gets
 `Config/mouse/default.yaml` as `PJ64_INPUT_YAML` when the ROM has no layout of its own, and
-gets `PJ64_FACE=0` when the launcher's Face button is off. `Bin/macOS/Project64.app` is a
-thin bundle around the same binary. `--selftest`, like the wizard's, drives the real screen
-with pushed SDL events.
+gets `PJ64_FACE=0` when the launcher's Face button is off. Each row's `Edit` button runs
+`Project64-wizard --edit <rom>` down the same `StartChild`/`posix_spawn` path, with the same
+environment as a game; its exit rescans and rebuilds the recent-games rows instead of
+pushing the game onto Recent. `Bin/macOS/Project64.app` is a thin bundle around the same
+binary. `--selftest`, like the wizard's, drives the real screen with pushed SDL events.
 
 **Grid mode runs one process per ROM.** `Source/Project64-sdl/GridHost.cpp` turns
 `--grid a b c` into an orchestrator that lays out 4:3 tiles, spawns
@@ -280,6 +297,10 @@ Only the `Aarch64` backend directory survives.
   nobody watching. `Source/Project64-launcher/` is an attended launcher, not an unattended
   one: its Face button, off by default, is what sets `PJ64_FACE=0` for it, and it drops an
   inherited `PJ64_FACE`, so that button alone decides the camera for the games it starts.
+- **An editor-made layout always has a menu, and its first save keeps `.orig`.** The editor
+  places a missing menu by `AutoMenuSlot`, the play-time order, and never lets it go; the
+  first save over an existing `<rom>.yaml` copies it to `<rom>.yaml.orig`, which nothing
+  touches again — a helper restores a generated layout by renaming it back.
 - **The frontend owns `PJ64_VIEWPORT_OFFSET`.** It sets the variable to the panel height,
   or clears it, before the plugins load, from the layout it parsed itself. Never set it by
   hand: a value the video plugin honours without the taller window pushes the game off the
