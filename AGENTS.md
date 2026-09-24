@@ -42,11 +42,11 @@ line plus four `ok:` lines.
 
 `make unit-test` builds and runs one program, `build/macos/unit-tests`, which needs no
 window. Its areas, in the order they run: `pointer-layout` (the mouse panel's geometry
-and the one-button rules), `face-gestures` (the gesture classifier), `game-config` (the
-per-game YAML lookup), `input-config` (the YAML reader) and `wizard-draft` (the wizard's
-draft and the YAML it writes). It prints `ok: <area>` for each; `only=<area>` runs one.
-There is no other unit-test command. `make pointer-selftest` needs a window server and
-takes ~30 s.
+and the one-button rules), `pointer-menu` (the emulator actions menu's rules),
+`face-gestures` (the gesture classifier), `game-config` (the per-game YAML lookup),
+`input-config` (the YAML reader) and `wizard-draft` (the wizard's draft and the YAML it
+writes). It prints `ok: <area>` for each; `only=<area>` runs one. There is no other
+unit-test command. `make pointer-selftest` needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
 `audio`, `input`, `frontend`, `config`. Run `make core` after touching the core rather

@@ -14,6 +14,7 @@ struct Area
 
 const Area kAreas[] = {
     { "pointer-layout", RunPointerLayoutTests },
+    { "pointer-menu", RunPointerMenuTests },
     { "face-gestures", RunFaceGesturesTests },
     { "game-config", RunGameConfigTests },
     { "input-config", RunInputConfigTests },

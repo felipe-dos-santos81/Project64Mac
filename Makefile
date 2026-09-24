@@ -509,7 +509,7 @@ wizard-screenshots-check: wizard ## Prove the committed wizard pictures match wh
 # One headless program: every area's Test.o, the shared main, and the objects under test.
 # It links SDL3 and yaml-cpp; the linker drops libraries nothing references. A new area is a
 # file registered in UnitTestMain.cpp, never a new program or target (AGENTS.md).
-UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o \
+UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o PointerMenuTest.o \
                    FaceGesturesTest.o FaceGestures.o GameConfigTest.o GameConfig.o \
                    InputConfigTest.o InputConfig.o) \
                  $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o)

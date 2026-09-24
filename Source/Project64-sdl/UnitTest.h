@@ -40,6 +40,7 @@ inline bool TestHas(const std::string & Text, const char * Needle)
 }
 
 void RunPointerLayoutTests();
+void RunPointerMenuTests();
 void RunFaceGesturesTests();
 void RunGameConfigTests();
 void RunInputConfigTests();
