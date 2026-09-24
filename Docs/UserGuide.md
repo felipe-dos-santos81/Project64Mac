@@ -91,6 +91,56 @@ One limit to know: the CPU is always the interpreter, because Apple Silicon refu
 writable-and-executable memory a dynamic recompiler needs. Super Mario 64 still runs at
 full speed with sound.
 
+### Starting from the launcher
+
+```sh
+make app
+```
+
+builds `Bin/macOS/Project64.app` (`make all` includes this step). Double-click it in
+Finder, or drag it to the Dock. It works only where it was built: it runs the emulator
+beside it, in `Bin/macOS`, and `make clean` deletes the app along with that build — the
+launcher's own settings survive.
+
+The first start asks for the ROM folder; `Folder` changes it later.
+
+Ten games show per page. `<` and `>` turn the page, and the letters above them jump to the
+first game whose name starts with that letter (`A` also covers a name starting with a
+digit). `Recent` shows the last five games played, and is where the launcher opens once
+there are any. A click starts the game it is released over; move off before letting go and
+nothing happens.
+
+`generic`, next to a game, means it has no layout of its own, so it starts with
+`Config/mouse/default.yaml`, the generic one-button layout:
+
+| Slot | Control |
+|---|---|
+| the game image | the stick, and A on a click anywhere in it |
+| `pad-up` | L |
+| `pad-down` (`==`) | the menu |
+| `pad-left`, `pad-right` | D-pad left, D-pad right |
+| `c-up`, `c-down`, `c-left`, `c-right` | C-up, C-down, C-left, C-right |
+| `mid1` | Start |
+| `mid2` | Z, a toggle |
+| `mid3` | B |
+| `mid4` | R |
+| `mid5` (`Ho`) | the stick hold |
+
+Every game started from the launcher has the menu (section 7, "The menu"), whatever its own
+layout says: one with no `Menu:` of its own gets `==` on its first free slot, from `mid5`
+down to `mid1`, or on `pad-down` once every slot is taken, in which case the control that
+was bound there does nothing for that game. The layout file itself is never changed.
+
+`Face: off`, the default, starts every game with the camera off, so its gesture-bound
+controls do nothing, which the status line says. `Face: on` lets each game's own layout
+decide, the way starting it from a terminal does. The camera prompt names Project64.
+
+Quit from the menu, or the window's close button, brings the list back; an error starting a
+game shows on the status line instead.
+
+The settings — the folder, Face, and the recent games — live in
+`~/Library/Application Support/Project64/launcher.yaml`.
+
 ## 4. Several games at once
 
 ```sh
@@ -442,7 +492,9 @@ Environment variables. Unset means the default.
 | `PJ64_FRAME_DUMP_MIN_NONBLACK` | Wait for the first frame with at least this percent of non-black pixels instead. |
 | `PJ64_FRAME_DUMP_MAX` | Latest frame to wait until; the best seen is written then. |
 | `PJ64_VIEWPORT_OFFSET`, `PJ64_TILE_SIZE`, `PJ64_AUDIO_MUTE`, `PJ64_POINTER_FD`, `PJ64_GRID_KEYS_FD` | Set by the emulator for its own child processes and plugins. Never set by hand. |
-| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_MENU_SELFTEST`, `PJ64_GRID_SELFTEST` | Test hooks used by the `*-selftest` targets. |
+| `PJ64_MENU_AUTO` | `1`: a layout with a panel and no `Menu:` gets one on its first free slot (the launcher sets it for every game). |
+| `PJ64_LAUNCHER_HOME` | A directory to keep `launcher.yaml` in instead of `~/Library/Application Support/Project64/`. |
+| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_MENU_SELFTEST`, `PJ64_GRID_SELFTEST`, `PJ64_LAUNCHER_SELFTEST` | Test hooks used by the `*-selftest` targets. |
 
 Make targets for players. `make help` also lists the self-tests; the build stages are
 hidden.

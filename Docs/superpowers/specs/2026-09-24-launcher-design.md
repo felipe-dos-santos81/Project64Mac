@@ -252,9 +252,20 @@ The launcher prints to stderr, which a Finder launch discards and a terminal run
 - `launcher: emulator <path>` at start, or `launcher: Project64 not found beside the app`.
 - `launcher: folder <path> (<n> games)` after each scan.
 - `launcher: started <rom>`, or `launcher: started <rom> with the generic layout`, and
-  `launcher: game ended (exit N)` or `(signal N)`.
+  `launcher: game ended (exit N)` or `(signal N)`. SDL3 turns `SIGTERM` into a quit event
+  (`SDL_events.h`: a signal-generated quit event "will be delivered to the application at
+  the next event poll"), so a game the launcher stops — the self-test's timer, or the
+  launcher quitting while a game runs — shuts down through its own event loop and exits 0,
+  not by the raw signal; `launcher: game ended (exit 0)` is what a clean stop looks like.
 - `launcher: window back` once the window is shown again.
 - `launcher: settings unreadable, using defaults: <path>` for a bad `launcher.yaml`.
+- On screen, `<title> could not start: <reason>` when `posix_spawn` fails.
+- `launcher: cannot start <exe>: <reason>` for that same failure, on stderr.
+- `launcher: cannot write <settings path>` when `launcher.yaml` cannot be saved.
+- `launcher: folder picker failed: <SDL error>` when the folder dialog's callback gets no
+  files back.
+- `launcher: cannot open a window: <SDL error>` and `SDL_Init failed: <SDL error>` for the
+  two ways startup itself can fail.
 
 `PJ64_LAUNCHER_SELFTEST=<seconds>` makes the launcher send the child `SIGTERM` that many
 seconds after starting it. Only the self-test sets it.
@@ -291,8 +302,9 @@ seconds after starting it. Only the self-test sets it.
   `launcher: started …nolayout.z64 with the generic layout`,
   `launcher: started …withlayout.z64`, `input layout: …withlayout.yaml`, exactly one
   `menu: added on mid5` (the generic layout has its own menu), two
-  `launcher: game ended (signal 15)`, two `launcher: window back`, and
-  `launcher: selftest ok`. The camera is never opened. It needs a window server.
+  `launcher: game ended (exit 0)` — SDL3 turns the self-test's `SIGTERM` into a quit event,
+  so the child exits cleanly rather than dying by the signal — two `launcher: window back`,
+  and `launcher: selftest ok`. The camera is never opened. It needs a window server.
 - **By hand**, recorded in the Result:
   - double-click `Bin/macOS/Project64.app` in Finder, and start it from the Dock;
   - Face on, start a face layout's game, and confirm the camera prompt names Project64;

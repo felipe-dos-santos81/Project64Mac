@@ -32,6 +32,9 @@ make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
 make rom-test                            # sweep a ROM pack, screenshot each game (see --help)
+make app                                 # Bin/macOS/Project64.app: the launcher, double-clickable (part of make all)
+make run-launcher                        # open the launcher from the terminal
+make launcher-selftest rom=Roms/a.z64    # the app's launcher starts two games in turn, no camera
 make clean                               # removes build/macos, Bin/macOS, generated Version.h files
 make help                                # user-facing targets; build stages are hidden
 ```
@@ -44,8 +47,9 @@ line plus four `ok:` lines.
 window. Its areas, in the order they run: `pointer-layout` (the mouse panel's geometry
 and the one-button rules), `pointer-menu` (the emulator actions menu's rules),
 `face-gestures` (the gesture classifier), `game-config` (the per-game YAML lookup),
-`input-config` (the YAML reader) and `wizard-draft` (the wizard's draft and the YAML it
-writes). It prints `ok: <area>` for each; `only=<area>` runs one. There is no other
+`input-config` (the YAML reader), `wizard-draft` (the wizard's draft and the YAML it
+writes) and `launcher` (the launcher's model: games, pages, settings, the screen's
+targets). It prints `ok: <area>` for each; `only=<area>` runs one. There is no other
 unit-test command. `make pointer-selftest` needs a window server and takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
@@ -118,6 +122,17 @@ screens and writes one PNG per stop through `SDL_CreateSoftwareRenderer` and
 `SDL_SavePNG`, with no window and no `SDL_Init`; the user guide references those eleven
 files by name and `Scripts/wizard_screenshots_check.sh` compares a fresh render with the
 committed `Docs/img/wizard/` byte for byte.
+
+`Bin/macOS/Project64-launcher`, from `Source/Project64-launcher/`, is a fourth binary: no
+ROM, no core, no OpenGL. `LauncherModel.{h,cpp}` is pure and unit-tested — the folder scan,
+titles, pages, the letter strip, recent games, `launcher.yaml`, and every screen target's
+rectangle and rule; `Screens.cpp` draws it the way the wizard's `Screens.cpp` does, with
+`SDL_Renderer` and the debug font. `main.cpp` runs the chosen game with `posix_spawn` and
+waits for it; the child's environment always gets `PJ64_MENU_AUTO=1`, gets
+`Config/mouse/default.yaml` as `PJ64_INPUT_YAML` when the ROM has no layout of its own, and
+gets `PJ64_FACE=0` when the launcher's Face button is off. `Bin/macOS/Project64.app` is a
+thin bundle around the same binary. `--selftest`, like the wizard's, drives the real screen
+with pushed SDL events.
 
 **Grid mode runs one process per ROM.** `Source/Project64-sdl/GridHost.cpp` turns
 `--grid a b c` into an orchestrator that lays out 4:3 tiles, spawns
@@ -259,7 +274,8 @@ Only the `Aarch64` backend directory survives.
   line `input layout: <path>` is the tell; `PJ64_INPUT_YAML` and `PJ64_FACE=0` override it.
   Any unattended launcher over a ROM folder must set `PJ64_FACE=0` itself, the way
   `Scripts/run_rom_pack.py` does — otherwise a matching layout can open the camera with
-  nobody watching.
+  nobody watching. `Source/Project64-launcher/` is an attended launcher, not an unattended
+  one: its Face button, off by default, is what sets `PJ64_FACE=0` for it.
 - **The frontend owns `PJ64_VIEWPORT_OFFSET`.** It sets the variable to the panel height,
   or clears it, before the plugins load, from the layout it parsed itself. Never set it by
   hand: a value the video plugin honours without the taller window pushes the game off the
@@ -321,6 +337,14 @@ Only the `Aarch64` backend directory survives.
   `SDL_GetWindowSize` or `SDL_GetMouseState` directly, outside `PublishMouse` — the one
   place that maps them: in a resized or full-screen window those are scaled and offset by
   the bars, and the panel's pixel constants would land on the wrong slot.
+- **The app finds the emulator by where it sits.** `Project64.app` holds only the launcher,
+  which runs `Project64` from its own directory or three levels up; moved out of
+  `Bin/macOS`, it shows `Project64 not found beside the app`. The emulator's base directory
+  holds both its data and the player's saves, which is why the bundle is not self-contained
+  (spec's non-goals).
+- **`make clean` deletes the app but not the launcher's settings.** `launcher.yaml` lives in
+  `~/Library/Application Support/Project64/`; `PJ64_LAUNCHER_HOME` redirects it, which every
+  test must do.
 
 ## Design docs
 
