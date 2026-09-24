@@ -92,7 +92,7 @@ set, and the default layout is only chosen by the launcher.
    the exit (below).
 
 If the launcher is asked to quit (Cmd-Q from the Dock) while a game runs, it sends the child
-`SIGTERM`, waits for it, and exits.
+`SIGTERM`, waits up to 5 seconds for it, then sends `SIGKILL` and waits for that, and exits.
 
 **Finding the emulator.** From its executable's own path (`_NSGetExecutablePath`; not
 `SDL_GetBasePath`, which returns `Contents/Resources/` inside a bundle), the launcher looks
@@ -199,9 +199,12 @@ the `input-config` area can test it without an environment; `AutoMenuWanted()`, 
   has no panel).
 - Otherwise take the first of `mid5`, `mid4`, `mid3`, `mid2`, `mid1` that no zone binding,
   toggle or stick hold uses (`hold: mid5` counts as used).
-- If all five are used, take `pad-down`. A control bound to `pad-down` loses that binding for
-  this run and does nothing. A control has one binding, so it has no other source.
-- Print one stderr line: `menu: added on mid5`, or `menu: took pad-down from DPadDown`.
+- If all five are used, take `pad-down`, or `pad-up` when `pad-down` is the stick's hold slot
+  (`CheckSlots` forbids a file from sharing the hold slot, so the menu must not either). A
+  control bound to that fallback slot loses that binding for this run and does nothing. A
+  control has one binding, so it has no other source.
+- Print one stderr line: `menu: added on mid5`, `menu: took pad-down from DPadDown`, or, when
+  the fallback is `pad-up`, `menu: added on pad-up` / `menu: took pad-up from <Control>`.
 
 The rest follows sub-project 2 unchanged: the slot's label is `==`, and the menu's Quit ends
 the process with exit 0, which takes the player back to the list.
@@ -250,13 +253,20 @@ there because macOS attributes the child's camera request to the app that starte
 The launcher prints to stderr, which a Finder launch discards and a terminal run shows:
 
 - `launcher: emulator <path>` at start, or `launcher: Project64 not found beside the app`.
-- `launcher: folder <path> (<n> games)` after each scan.
-- `launcher: started <rom>`, or `launcher: started <rom> with the generic layout`, and
-  `launcher: game ended (exit N)` or `(signal N)`. SDL3 turns `SIGTERM` into a quit event
+- `launcher: folder <path> (<n> games)` after each scan, or `launcher: cannot read folder
+  <path>` when `opendir` itself fails (the folder was removed, or lost its permissions).
+- `launcher: started <rom>`, `launcher: started <rom> with the generic layout`, or
+  `launcher: started <rom> with $PJ64_INPUT_YAML` when the launcher's own environment
+  already names a layout (`LauncherChildEnv`'s inherited case, which wins over the generic
+  layout for every game, not only a generic one), and `launcher: game ended (exit N)` or
+  `(signal N)`. SDL3 turns `SIGTERM` into a quit event
   (`SDL_events.h`: a signal-generated quit event "will be delivered to the application at
   the next event poll"), so a game the launcher stops — the self-test's timer, or the
   launcher quitting while a game runs — shuts down through its own event loop and exits 0,
   not by the raw signal; `launcher: game ended (exit 0)` is what a clean stop looks like.
+- `menu: added on <slot>` (`mid5`, `mid4`, `mid3`, `mid2`, `mid1`, `pad-down` or `pad-up`),
+  or `menu: took pad-down from <Control>` / `menu: took pad-up from <Control>`, printed once
+  by `ApplyAutoMenu` when `PJ64_MENU_AUTO=1` adds a menu slot (see "The added menu" above).
 - `launcher: window back` once the window is shown again.
 - `launcher: settings unreadable, using defaults: <path>` for a bad `launcher.yaml`.
 - On screen, `<title> could not start: <reason>` when `posix_spawn` fails.
@@ -269,6 +279,9 @@ The launcher prints to stderr, which a Finder launch discards and a terminal run
   files back.
 - `launcher: cannot open a window: <SDL error>` and `SDL_Init failed: <SDL error>` for the
   two ways startup itself can fail.
+- `launcher: game did not stop, killed it` when quitting while a game runs (Cmd-Q from the
+  Dock) has to fall back to `SIGKILL` because the child did not exit within 5 seconds of
+  `SIGTERM`.
 
 `PJ64_LAUNCHER_SELFTEST=<seconds>` makes the launcher send the child `SIGTERM` that many
 seconds after starting it. Only the self-test sets it.

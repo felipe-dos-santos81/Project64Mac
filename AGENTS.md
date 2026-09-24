@@ -260,9 +260,12 @@ Only the `Aarch64` backend directory survives.
   never by drawing from the main thread. A soft reset reaches the plugins' `RomClosed` only
   when the core's reset timer finishes, about a second of game time later, so the menu's
   Reset also bumps `ClearClicks` to clear the clicks at once.
-- **The camera prompt is attributed to the launcher.** The binary is not an app bundle, so
-  macOS asks for camera access on behalf of the terminal or IDE. A past denial there makes
-  the tracker report `denied` without a new prompt; the fix is in System Settings.
+- **The camera prompt is attributed to whatever started the emulator.** The binary is not
+  an app bundle, so macOS asks for camera access on behalf of the terminal or IDE that ran
+  it — except from `Project64.app`, where it is the app itself (its `Info.plist` carries
+  `NSCameraUsageDescription`), since macOS attributes a child's camera request to the app
+  that started it. A past denial there makes the tracker report `denied` without a new
+  prompt; the fix is in System Settings, under whichever name asked.
 - **`Config/input.yaml` must stay keyboard-active.** A mouse block there would replace the
   keyboard bindings under the one-binding rule and break the grid's keyboard broadcast and
   `make grid-selftest`. Mouse layouts live in `Config/mouse/`. The wizard warns before

@@ -127,9 +127,10 @@ public:
 
     // Give a layout with a panel and no Menu key a menu slot, for the launcher
     // (Docs/superpowers/specs/2026-09-24-launcher-design.md): the first of mid5, mid4, mid3,
-    // mid2, mid1 no zone binding or stick hold uses, else pad-down, taken from whichever
-    // control is bound there. Returns the slot, or POINTER_ZONE_NONE when nothing was added.
-    // Prints "menu: added on <slot>" or "menu: took pad-down from <control>" unless Quiet.
+    // mid2, mid1 no zone binding or stick hold uses, else pad-down, or pad-up when pad-down
+    // is the stick's hold slot, taken from whichever control is bound there. Returns the
+    // slot, or POINTER_ZONE_NONE when nothing was added. Prints "menu: added on <slot>" or
+    // "menu: took <slot> from <control>" unless Quiet.
     // Not part of Load: the wizard loads layouts too and must never write an added menu.
     int ApplyAutoMenu(bool Quiet);
 

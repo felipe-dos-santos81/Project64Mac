@@ -46,7 +46,10 @@ fail() { cat "$LOG" >&2; echo "launcher-selftest: $1" >&2; exit 1; }
 need() { grep -q -- "$1" "$LOG" || fail "missing: $1"; }
 count() { N=$(grep -c -- "$1" "$LOG" || true); [ "$N" -eq "$2" ] || fail "wanted $2 of \"$1\", got $N"; }
 
-need "^launcher: emulator $ROOT/Bin/macOS\$"
+# The launcher prints realpath(3) of its own directory, which resolves symlinks; ROOT above
+# does not, so compare against the same resolved path rather than ROOT itself.
+EMULATOR_DIR="$(cd "$ROOT/Bin/macOS" && pwd -P)"
+need "^launcher: emulator $EMULATOR_DIR\$"
 need "^launcher: started $WORK/games/nolayout.z64 with the generic layout\$"
 need "^launcher: started $WORK/games/withlayout.z64\$"
 need "^input layout: $WORK/games/withlayout.yaml\$"

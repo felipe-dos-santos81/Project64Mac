@@ -643,13 +643,15 @@ int InputConfig::ApplyAutoMenu(bool Quiet)
     }
 
     const int PadDown = PointerZoneFromName("pad-down");
+    const int Fallback = (Hold == PadDown) ? PointerZoneFromName("pad-up") : PadDown;
+    const char * FallbackName = PointerZoneName(Fallback);
     const char * Taken = nullptr;
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         std::vector<Binding> & List = m_Bindings[i];
         for (size_t j = 0; j < List.size();)
         {
-            if (List[j].kind == Binding::Kind::Zone && List[j].code == PadDown)
+            if (List[j].kind == Binding::Kind::Zone && List[j].code == Fallback)
             {
                 List.erase(List.begin() + j);
                 if (Taken == nullptr) Taken = kControlNames[i];
@@ -660,13 +662,13 @@ int InputConfig::ApplyAutoMenu(bool Quiet)
             }
         }
     }
-    m_Menu.assign(1, MakeZone(PadDown));
+    m_Menu.assign(1, MakeZone(Fallback));
     if (!Quiet)
     {
-        if (Taken != nullptr) fprintf(stderr, "menu: took pad-down from %s\n", Taken);
-        else fprintf(stderr, "menu: added on pad-down\n");
+        if (Taken != nullptr) fprintf(stderr, "menu: took %s from %s\n", FallbackName, Taken);
+        else fprintf(stderr, "menu: added on %s\n", FallbackName);
     }
-    return PadDown;
+    return Fallback;
 }
 
 // The plugin lives at <bin>/Plugin/Input/<name>.dylib. Stripping the file name and then

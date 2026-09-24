@@ -28,6 +28,15 @@ static std::string Fit(const std::string & S, int MaxChars)
     return MaxChars > 3 ? S.substr(0, MaxChars - 3) + "..." : S.substr(0, MaxChars > 0 ? MaxChars : 0);
 }
 
+// S cut to MaxChars from the front, starting with "..." when it was longer: for a path, the
+// useful end (the ROM folder's own name) stays on screen instead of the shared prefix above it.
+static std::string FitFront(const std::string & S, int MaxChars)
+{
+    if ((int)S.size() <= MaxChars) return S;
+    if (MaxChars <= 3) return S.substr(S.size() - (MaxChars > 0 ? MaxChars : 0));
+    return "..." + S.substr(S.size() - (MaxChars - 3));
+}
+
 static void Fill(SDL_Renderer * R, LauncherRect Rect, Uint8 Red, Uint8 Green, Uint8 Blue)
 {
     SDL_SetRenderDrawColor(R, Red, Green, Blue, 255);
@@ -116,9 +125,12 @@ void LauncherDraw(SDL_Renderer * R, const LauncherState & S, LauncherTarget Hove
 
     if (LauncherEmpty(S))
     {
-        const std::string Message = L.Folder[0] == '\0' ? std::string("No folder chosen") : std::string("No games in ") + L.Folder;
+        static const char * const kNoGames = "No games in ";
+        const std::string Message = L.Folder[0] == '\0'
+            ? std::string("No folder chosen")
+            : std::string(kNoGames) + FitFront(L.Folder, kLineChars - (int)strlen(kNoGames));
         Ink(R, true);
-        Text(R, 16, 280, kScale, Fit(Message, kLineChars).c_str());
+        Text(R, 16, 280, kScale, Message.c_str());
     }
 
     char Page[32];

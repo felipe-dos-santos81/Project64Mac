@@ -157,10 +157,11 @@ void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
     // calls are allowed between fork and exec in a threaded process.
     posix_spawn_file_actions_t Actions;
     posix_spawn_file_actions_init(&Actions);
-    // The _np name is deprecated on SDKs from macOS 26 onward in favor of the now-standard
-    // posix_spawn_file_actions_addchdir, which is itself only available from macOS 26 onward;
-    // the build sets no minimum macOS version, so keep the portable _np call and silence the
-    // newer SDK's deprecation notice rather than dropping support for older systems.
+    // The Makefile sets no -mmacosx-version-min, so the deployment target is the host's own
+    // SDK version, and -Wdeprecated-declarations fires simply because that SDK marks the _np
+    // name deprecated from macOS 26 onward. The _np call stays because the plan pins it; its
+    // replacement, posix_spawn_file_actions_addchdir, needs macOS 26 itself, which the host
+    // already is, so silence the warning rather than change the call.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     posix_spawn_file_actions_addchdir_np(&Actions, L.EmulatorDir.c_str());
@@ -174,7 +175,18 @@ void StartGame(Launcher & L, const LauncherGame & Game, SDL_Window * Window)
         fprintf(stderr, "launcher: cannot start %s: %s\n", Exe.c_str(), strerror(Err));
         return;
     }
-    fprintf(stderr, "launcher: started %s%s\n", Game.Path.c_str(), Game.Generic ? " with the generic layout" : "");
+    // A non-empty PJ64_INPUT_YAML in the launcher's own environment wins for every game
+    // (LauncherChildEnv keeps it and skips the generic default), so say that instead of
+    // "the generic layout" here, whether or not this particular ROM has its own layout.
+    const char * InheritedLayout = getenv("PJ64_INPUT_YAML");
+    if (InheritedLayout != nullptr && InheritedLayout[0] != '\0')
+    {
+        fprintf(stderr, "launcher: started %s with $PJ64_INPUT_YAML\n", Game.Path.c_str());
+    }
+    else
+    {
+        fprintf(stderr, "launcher: started %s%s\n", Game.Path.c_str(), Game.Generic ? " with the generic layout" : "");
+    }
     L.Child = Pid;
     L.ChildGame = Game;
     L.Status.clear();
@@ -388,11 +400,23 @@ int main(int argc, char ** argv)
         SDL_Delay(L.Child != 0 ? 50 : 16);
     }
 
-    // Quit while a game runs (Cmd-Q from the Dock): stop the game first.
+    // Quit while a game runs (Cmd-Q from the Dock): stop the game first, but do not wait on
+    // it forever — up to 5 seconds for SIGTERM to work, then SIGKILL.
     if (L.Child != 0)
     {
         kill(L.Child, SIGTERM);
-        waitpid(L.Child, nullptr, 0);
+        bool Exited = false;
+        for (int i = 0; i < 100; i++)
+        {
+            if (waitpid(L.Child, nullptr, WNOHANG) != 0) { Exited = true; break; }
+            SDL_Delay(50);
+        }
+        if (!Exited)
+        {
+            kill(L.Child, SIGKILL);
+            waitpid(L.Child, nullptr, 0);
+            fprintf(stderr, "launcher: game did not stop, killed it\n");
+        }
     }
     SDL_DestroyRenderer(Renderer);
     SDL_DestroyWindow(Window);

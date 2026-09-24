@@ -394,6 +394,20 @@ void RunInputConfigTests()
         CHECK(C.MenuZone() == PointerZoneFromName("pad-down"));
         CHECK(C.Bindings(N64Control::B).empty());
 
+        // pad-down is the stick's hold slot here, so the fallback must not share it
+        // (CheckSlots forbids a file from doing that): pad-up is next instead.
+        const char * FullHeldDown =
+            "bindings:\n"
+            "  Stick: {stick: pointer, hold: pad-down}\n"
+            "  A: {zone: pad-up}\n"
+            "  B: {zone: mid1}\n  Z: {zone: mid2}\n  Start: {zone: mid3}\n"
+            "  CUp: {zone: mid4}\n  CDown: {zone: mid5}\n";
+        CHECK(C.Load(TestWriteTemp(FullHeldDown)));
+        CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(false); }) == "menu: took pad-up from A\n");
+        CHECK(C.MenuZone() == PointerZoneFromName("pad-up"));
+        CHECK(C.PointerHoldZone() == PointerZoneFromName("pad-down"));
+        CHECK(C.Bindings(N64Control::A).empty());
+
         CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));
         CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(false); }) == "menu: added on mid5\n");
         CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));

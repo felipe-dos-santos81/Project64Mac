@@ -126,10 +126,14 @@ nothing happens.
 | `mid4` | R |
 | `mid5` (`Ho`) | the stick hold |
 
-Every game started from the launcher has the menu (section 7, "The menu"), whatever its own
-layout says: one with no `Menu:` of its own gets `==` on its first free slot, from `mid5`
-down to `mid1`, or on `pad-down` once every slot is taken, in which case the control that
-was bound there does nothing for that game. The layout file itself is never changed.
+Every game started from the launcher gets the menu (section 7, "The menu") when its layout
+has a panel: one with no `Menu:` of its own gets `==` on its first free slot, from `mid5`
+down to `mid1`, or on `pad-down` once every slot is taken — or on `pad-up` instead, when
+`pad-down` is the stick's hold slot — in which case the control that was bound there does
+nothing for that game. The layout file itself is never changed. A keyboard-only layout, or
+one that fails to load, has no panel and so gets no menu; the window's close button is the
+only way out. A layout whose own `Menu:` is a face gesture cannot be opened while Face is
+off, either — the window's close button still ends the game.
 
 `Face: off`, the default, starts every game with the camera off, so its gesture-bound
 controls do nothing, which the status line says. `Face: on` lets each game's own layout
@@ -391,9 +395,10 @@ make run rom=Roms/mk64.z64 input=Config/face/mario_kart_64_u.yaml
 The camera starts by itself when a layout binds a gesture or the head stick; `face=1` or
 `--face` forces it, `face=0` or `PJ64_FACE=0` keeps it off. macOS asks for camera
 permission once, and because the emulator is not an app bundle the prompt is attributed to
-the terminal or IDE you launched from. Frames stay in memory and are never saved, shown or
-logged. If the camera is denied or absent, everything else keeps working; only the
-gesture-bound controls go missing.
+the terminal or IDE you launched from; started from `Project64.app` (section 3, "Starting
+from the launcher"), the prompt and the System Settings entry name Project64 instead.
+Frames stay in memory and are never saved, shown or logged. If the camera is denied or
+absent, everything else keeps working; only the gesture-bound controls go missing.
 
 - **Your head is the stick.** `Stick: {stick: head}` turns a head turn into X and a nod
   into Y: full tilt at 15 degrees of turn or 10 of nod from your resting pose, with a dead
@@ -440,8 +445,9 @@ emulator unattended over a folder of games should set `PJ64_FACE=0`; the ROM swe
 ## 10. When something goes wrong
 
 **The camera never asks, and gestures do nothing.** A past denial for the terminal or IDE
-you launch from makes the tracker report "denied" without a new prompt. System Settings >
-Privacy & Security > Camera, find that app, switch it on.
+you launch from — or for Project64, if you launched from `Project64.app` — makes the
+tracker report "denied" without a new prompt. System Settings > Privacy & Security >
+Camera, find that app, switch it on.
 
 **The window stays black.** Read a frame from inside the emulator, never a screen grab:
 
@@ -506,6 +512,8 @@ hidden.
 | `make test` | Smoke test: the version line and four `ok:` lines. |
 | `make run rom=… [input=…] [face=0/1]` | Run one game. |
 | `make grid roms="…"` | Run one to sixteen games side by side. |
+| `make app` | Build `Bin/macOS/Project64.app`: double-click it, or keep it in the Dock. |
+| `make run-launcher` | Open the launcher from the terminal: pick a ROM folder, then click a game to play it. |
 | `make run-wizard` | Open the binding wizard. |
 | `make wizard-screenshots` | Re-render the pictures in this guide. |
 | `make unit-test` | Every headless test, including a check that those pictures are current. If only that check fails, right after a Homebrew SDL upgrade, the wizard itself still works fine — the committed pictures are just stale for a contributor to regenerate. |
