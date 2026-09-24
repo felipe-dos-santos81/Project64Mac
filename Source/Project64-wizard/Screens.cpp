@@ -521,6 +521,13 @@ static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
             continue;
         }
 
+        if (Zone == Draft.MenuZone())
+        {
+            Colour(Renderer, false);
+            WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, "==");
+            continue;
+        }
+
         // Whatever the draft already puts in this slot, so the choice is made in context.
         // The same two-character label the game's own overlay draws here, not the full
         // control name, which would spill across neighbouring slots. Stick has no overlay

@@ -234,6 +234,7 @@ void WizardDraft::LoadDefaults()
         m_Bindings[i] = C.Bindings((N64Control)i);
         m_Explicit[i] = false;
     }
+    m_Menu.clear();
     m_Error.clear();
 }
 
@@ -254,6 +255,7 @@ bool WizardDraft::LoadBase(const char * Path)
         m_Bindings[i] = C.Bindings((N64Control)i);
         m_Explicit[i] = Named[i];
     }
+    m_Menu = C.MenuBinding();
     return true;
 }
 
@@ -305,6 +307,8 @@ void WizardDraft::SetZone(N64Control Control, int Zone)
     {
         m_Bindings[(int)N64Control::Stick][0].Hold = POINTER_ZONE_NONE;
     }
+    // So is the menu's slot; a control taking it takes it off the menu.
+    if (Zone != POINTER_ZONE_NONE && Zone == MenuZone()) m_Menu.clear();
     Replace(Control, B);
 }
 
@@ -313,6 +317,8 @@ void WizardDraft::SetGesture(N64Control Control, uint32_t Bit)
     Binding B = {};
     B.kind = Binding::Kind::Face;
     B.code = (int)Bit;
+    // A control taking the menu's gesture takes it off the menu.
+    if (MenuGestureOf(m_Menu) == Bit) m_Menu.clear();
     Replace(Control, B);
 }
 
@@ -405,6 +411,11 @@ int WizardDraft::HoldZone() const
     return StickHoldZone(m_Bindings[(int)N64Control::Stick]);
 }
 
+int WizardDraft::MenuZone() const
+{
+    return MenuSlotOf(m_Menu);
+}
+
 // One binding in English. ValueText is the file's voice; this is the screen's. Both read the
 // same BindingFacts and render it differently, which is the whole point of the split: nothing
 // here is quoted, bracketed or comma-separated, and the gesture kind reads by its English
@@ -464,7 +475,7 @@ std::string WizardDraft::Emit(const char * BaseName) const
     {
         if (m_Explicit[i] && !m_Bindings[i].empty()) Count++;
     }
-    if (Count == 0)
+    if (Count == 0 && m_Menu.empty())
     {
         Out += "bindings: {}\n";
         return Out;
@@ -478,6 +489,12 @@ std::string WizardDraft::Emit(const char * BaseName) const
         char Line[256];
         snprintf(Line, sizeof(Line), "  %-10s %s\n", Label.c_str(),
                  ValueText(m_Bindings[i][0]).c_str());
+        Out += Line;
+    }
+    if (!m_Menu.empty())
+    {
+        char Line[256];
+        snprintf(Line, sizeof(Line), "  %-10s %s\n", "Menu:", ValueText(m_Menu[0]).c_str());
         Out += Line;
     }
     return Out;

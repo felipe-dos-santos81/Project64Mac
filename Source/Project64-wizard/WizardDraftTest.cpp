@@ -183,6 +183,35 @@ void RunWizardDraftTests()
         CHECK(TestHas(D.Emit("x"), "Stick:     {stick: pointer}\n"));
     }
 
+    // The Menu key round-trips after the controls, and a control taking its slot or its
+    // gesture takes it off the menu, so the draft never writes a file the reader rejects.
+    {
+        const std::string Base = TestWriteTemp("bindings:\n  Menu: {zone: pad-down}\n  A: {zone: game}\n");
+        WizardDraft D;
+        CHECK(D.LoadBase(Base.c_str()));
+        CHECK(D.MenuZone() == 1);
+        CHECK(TestHas(D.Emit("x"), "  A:         {zone: game}\n  Menu:      {zone: pad-down}\n"));
+        CHECK(D.Validate("x"));
+        D.SetZone(N64Control::DPadDown, 1);
+        CHECK(D.MenuZone() == POINTER_ZONE_NONE);
+        CHECK(!TestHas(D.Emit("x"), "Menu:"));
+        CHECK(D.Validate("x"));
+        remove(Base.c_str());
+    }
+    {
+        const std::string Base = TestWriteTemp("bindings:\n  Menu: {face: tilt-right}\n");
+        WizardDraft D;
+        CHECK(D.LoadBase(Base.c_str()));
+        CHECK(TestHas(D.Emit("x"), "bindings:\n  Menu:      {face: tilt-right}\n"));
+        D.SetGesture(N64Control::Start, POINTER_GESTURE_TILT_RIGHT);
+        CHECK(!TestHas(D.Emit("x"), "Menu:"));
+        CHECK(D.Validate("x"));
+        D.LoadBase(Base.c_str());
+        D.LoadDefaults();
+        CHECK(!TestHas(D.Emit("x"), "Menu:"));
+        remove(Base.c_str());
+    }
+
     // The five shipped layouts are offered as bases, by label and by path.
     CHECK(WizardBaseCount() == 5);
     CHECK(strcmp(WizardBaseFile(0), "Config/mouse/super_mario_64_usa.yaml") == 0);

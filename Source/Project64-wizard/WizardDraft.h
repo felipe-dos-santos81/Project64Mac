@@ -76,6 +76,11 @@ public:
     // belongs to no control, so ZoneOwner never names it.
     int HoldZone() const;
 
+    // The draft's menu slot ({zone:} under Menu), or POINTER_ZONE_NONE. Like the hold slot
+    // it belongs to no control. The wizard keeps Menu from a base and writes it back;
+    // choosing it is the clickable wizard's job.
+    int MenuZone() const;
+
     // What the control is bound to, in English: "key X", "zone mid1",
     // "gesture mouth-open (Mo)", "keys Up/Down/Left/Right". An inherited control reads
     // "inherited: " followed by every built-in input, joined by " or ".
@@ -101,4 +106,5 @@ private:
     bool m_Explicit[(int)N64Control::Count];
     std::string m_Error;
     std::string m_LastEmit;   // set by Validate; Save reuses it rather than calling Emit twice
+    std::vector<Binding> m_Menu;   // the base's Menu key, empty for none
 };
