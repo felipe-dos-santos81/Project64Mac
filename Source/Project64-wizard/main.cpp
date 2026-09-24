@@ -299,6 +299,9 @@ static int RunEditor(const char * Rom)
     if (Script != nullptr && strcmp(Script, "1") == 0) return EditScript(S, Draft, Rom, BaseName);
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    // Without this, closing the last window posts CLOSE_REQUESTED and then QUIT in the same
+    // poll batch, so one click reaches EditAct's Cancel twice and skips the dirty confirm.
+    SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
