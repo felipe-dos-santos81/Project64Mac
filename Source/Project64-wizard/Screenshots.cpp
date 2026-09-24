@@ -13,8 +13,12 @@
 // SDL_GetBasePath too). Typed paths live under a neutral /Users/you/.
 //
 // The tour never writes a YAML: stop 10 ends when typing ends, stop 11 is never confirmed.
+//
+// The tour also pictures the panel editor (12-14), from a draft built in code — never read
+// from a file — so nothing machine-specific can show there either.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "Screenshots.h"
+#include "EditScreen.h"
 #include "Screens.h"
 #include "SyntheticEvents.h"
 #include "WizardDraft.h"
@@ -52,6 +56,23 @@ void Capture(Tour & T, const char * Name, uint32_t Gestures, uint32_t Face)
     SDL_SetRenderDrawColor(T.Renderer, 16, 16, 20, 255);
     SDL_RenderClear(T.Renderer);
     WizardDrawScreen(T.Renderer, kWidth, kHeight, T.Ui, T.Draft, Gestures, Face);
+    SDL_RenderPresent(T.Renderer);
+    char Path[1024];
+    snprintf(Path, sizeof(Path), "%s/%s", T.Dir, Name);
+    if (!SDL_SavePNG(T.Surface, Path))
+    {
+        fprintf(stderr, "wizard --screenshots: %s: %s\n", Path, SDL_GetError());
+        T.Failed = true;
+        return;
+    }
+    T.Written++;
+}
+
+// One picture of the panel editor, drawn the way its window loop draws it.
+void CaptureEdit(Tour & T, const char * Name, const EditState & S, const WizardDraft & D, uint32_t Gestures, uint32_t Face)
+{
+    if (T.Failed) return;
+    EditDraw(T.Renderer, S, D, "Layout for super_mario_64_usa.z64", EditTarget(), Gestures, Face);
     SDL_RenderPresent(T.Renderer);
     char Path[1024];
     snprintf(Path, sizeof(Path), "%s/%s", T.Dir, Name);
@@ -182,6 +203,44 @@ void Walk(Tour & T)
     Capture(T, "11-save-warning.png", 0, FACE_OFF);
 }
 
+// 12-14: the panel editor. Its draft is built in code from the built-in bindings — the
+// generic layout's shape — never read from a file, so nothing machine-specific can show.
+void EditWalk(Tour & T)
+{
+    WizardDraft D;
+    std::string N;
+    const auto At = [](const char * Name) { EditPlace P; P.Index = PointerZoneFromName(Name); return P; };
+    EditPlace Picture;
+    Picture.Index = POINTER_ZONE_GAME;
+    bool Ok = D.SetStickForm(EditStick::Pointer, &N) && D.PlaceControl(Picture, N64Control::A, &N) &&
+              D.PlaceControl(At("mid1"), N64Control::Start, &N) && D.PlaceControl(At("mid2"), N64Control::Z, &N) &&
+              D.SetToggle(PointerZoneFromName("mid2"), true, &N) && D.PlaceControl(At("mid3"), N64Control::B, &N) &&
+              D.PlaceControl(At("mid4"), N64Control::R, &N) && D.PlaceHold(PointerZoneFromName("mid5"), &N) &&
+              D.PlaceControl(At("pad-up"), N64Control::L, &N) && D.PlaceControl(At("c-up"), N64Control::CUp, &N) &&
+              D.PlaceControl(At("c-down"), N64Control::CDown, &N) && D.PlaceControl(At("c-left"), N64Control::CLeft, &N) &&
+              D.PlaceControl(At("c-right"), N64Control::CRight, &N) && D.PlaceControl(At("pad-left"), N64Control::DPadLeft, &N) &&
+              D.PlaceControl(At("pad-right"), N64Control::DPadRight, &N) && D.EnsureMenu(&N);
+    if (!Expect(T, Ok && D.MenuZone() == PointerZoneFromName("pad-down"), "the editor's draft did not build")) return;
+
+    // 12: the panel, as the editor opens.
+    EditState S;
+    S.Status = "Click a slot or the picture to change it.";
+    CaptureEdit(T, "12-edit-panel.png", S, D, 0, FACE_OFF);
+
+    // 13: mid2's chooser: Z lit, Toggle on.
+    EditAct(&S, &D, EditTarget{ EditTargetKind::Zone, PointerZoneFromName("mid2") });
+    if (!Expect(T, S.View == EditView::Chooser, "a click on mid2 did not open its chooser")) return;
+    CaptureEdit(T, "13-edit-chooser.png", S, D, 0, FACE_OFF);
+    EditAct(&S, &D, EditTarget{ EditTargetKind::Back, 0 });
+
+    // 14: the gesture list after Start moved onto mouth-open, which is firing.
+    EditAct(&S, &D, EditTarget{ EditTargetKind::Gestures, 0 });
+    EditAct(&S, &D, EditTarget{ EditTargetKind::Gesture, PointerGestureIndex(POINTER_GESTURE_MOUTH_OPEN) });
+    EditAct(&S, &D, EditTarget{ EditTargetKind::Choice, (int)N64Control::Start });
+    if (!Expect(T, S.View == EditView::Gestures, "Start on mouth-open did not return to the list")) return;
+    CaptureEdit(T, "14-edit-gestures.png", S, D, POINTER_GESTURE_MOUTH_OPEN, FACE_TRACKING);
+}
+
 }  // namespace
 
 int WizardScreenshots(const char * Dir)
@@ -206,15 +265,16 @@ int WizardScreenshots(const char * Dir)
     }
 
     Walk(T);
+    if (!T.Failed) EditWalk(T);
 
     SDL_DestroyRenderer(T.Renderer);
     SDL_DestroySurface(T.Surface);
     if (T.Failed) return 1;
-    if (T.Written != 11)
+    if (T.Written != 14)
     {
-        fprintf(stderr, "wizard --screenshots: wrote %d files, not 11\n", T.Written);
+        fprintf(stderr, "wizard --screenshots: wrote %d files, not 14\n", T.Written);
         return 1;
     }
-    printf("wizard --screenshots wrote 11 files to %s\n", Dir);
+    printf("wizard --screenshots wrote 14 files to %s\n", Dir);
     return 0;
 }

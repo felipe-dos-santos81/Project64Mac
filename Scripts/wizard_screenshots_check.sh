@@ -13,10 +13,11 @@ trap 'rm -rf "$TMP"' EXIT
 
 [ -x "$BIN" ] || { echo "not built: $BIN" >&2; exit 1; }
 
-# The eleven stops Docs/UserGuide.md references. A stop added to the tour is added here and
+# The fourteen stops Docs/UserGuide.md references. A stop added to the tour is added here and
 # to the guide; one dropped from the tour fails here until it is dropped from both.
 STOPS="01-base.png 02-control.png 03-key-armed.png 04-key-bound.png 05-no-gamepad.png \
-06-zone.png 07-gestures.png 08-stick-forms.png 09-review.png 10-save.png 11-save-warning.png"
+06-zone.png 07-gestures.png 08-stick-forms.png 09-review.png 10-save.png 11-save-warning.png \
+12-edit-panel.png 13-edit-chooser.png 14-edit-gestures.png"
 
 # alarm: a binary without the flag would open its window and wait forever.
 PJ64_FACE=0 perl -e 'alarm 60; exec @ARGV' -- "$BIN" --screenshots "$TMP" >/dev/null \
