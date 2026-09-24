@@ -7,7 +7,10 @@
 
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
+#include <Project64-sdl/GameConfig.h>
 
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -930,4 +933,86 @@ bool WizardDraft::Save(const char * Path, const char * BaseName)
         m_Error += Path;
     }
     return Ok;
+}
+
+std::string WizardDraft::LoadForRom(const char * RomPath, const char * ExeDir, std::string * Note)
+{
+    Note->clear();
+    char Own[PATH_MAX];
+    if (GameConfigPath(RomPath, ExeDir, Own, sizeof(Own)))
+    {
+        if (LoadBase(Own)) return Own;
+        *Note = "Your layout could not be read (" + m_Error + "); starting from the generic layout";
+    }
+    const std::string Generic = std::string(ExeDir) + "/Config/mouse/default.yaml";
+    if (LoadBase(Generic.c_str())) return Generic;
+    return "";
+}
+
+// A byte-for-byte copy; false when either side cannot be opened or the write falls short.
+static bool CopyFile(const std::string & From, const std::string & To)
+{
+    FILE * In = fopen(From.c_str(), "rb");
+    if (In == nullptr) return false;
+    FILE * Out = fopen(To.c_str(), "wb");
+    if (Out == nullptr)
+    {
+        fclose(In);
+        return false;
+    }
+    bool Ok = true;
+    char Buf[4096];
+    size_t N;
+    while (Ok && (N = fread(Buf, 1, sizeof(Buf), In)) > 0) Ok = fwrite(Buf, 1, N, Out) == N;
+    fclose(In);
+    Ok = fclose(Out) == 0 && Ok;
+    if (!Ok) remove(To.c_str());
+    return Ok;
+}
+
+bool WizardDraft::SaveBesideRom(const char * RomPath, const char * BaseName, std::string * Saved, bool * MadeOrig)
+{
+    *MadeOrig = false;
+    char Path[PATH_MAX];
+    if (!GameConfigBesideRom(RomPath, Path, sizeof(Path)))
+    {
+        m_Error = "the ROM has no name to save a layout under";
+        return false;
+    }
+    *Saved = Path;
+    if (!Validate(BaseName)) return false;
+
+    const std::string Temp = std::string(Path) + ".tmp";
+    FILE * F = fopen(Temp.c_str(), "w");
+    if (F == nullptr)
+    {
+        m_Error = std::string("could not write ") + Path + ": " + strerror(errno);
+        return false;
+    }
+    const bool Wrote = fwrite(m_LastEmit.data(), 1, m_LastEmit.size(), F) == m_LastEmit.size();
+    if (fclose(F) != 0 || !Wrote)
+    {
+        remove(Temp.c_str());
+        m_Error = std::string("could not write ") + Path;
+        return false;
+    }
+
+    const std::string Orig = std::string(Path) + ".orig";
+    if (access(Path, F_OK) == 0 && access(Orig.c_str(), F_OK) != 0)
+    {
+        if (!CopyFile(Path, Orig))
+        {
+            remove(Temp.c_str());
+            m_Error = "could not keep the original as " + Orig;
+            return false;
+        }
+        *MadeOrig = true;
+    }
+    if (rename(Temp.c_str(), Path) != 0)
+    {
+        m_Error = std::string("could not write ") + Path + ": " + strerror(errno);
+        remove(Temp.c_str());
+        return false;
+    }
+    return true;
 }

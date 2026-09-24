@@ -141,6 +141,17 @@ public:
     // Validates, then writes to Path. False on a rejected draft or a write error.
     bool Save(const char * Path, const char * BaseName);
 
+    // The panel editor's file for RomPath: GameConfigPath's (beside the ROM, then ExeDir's
+    // Config/mouse/), else ExeDir's Config/mouse/default.yaml. A layout that will not load
+    // falls back to the generic one with the reason in *Note. Returns the path loaded, or ""
+    // with the reader's reason in Error() when even the generic layout failed.
+    std::string LoadForRom(const char * RomPath, const char * ExeDir, std::string * Note);
+
+    // Validates, then writes GameConfigBesideRom's path through <path>.tmp and a rename,
+    // first copying an existing file to <path>.orig when no .orig exists yet. *Saved gets the
+    // path; *MadeOrig whether this save made the .orig. False with the reason in Error().
+    bool SaveBesideRom(const char * RomPath, const char * BaseName, std::string * Saved, bool * MadeOrig);
+
     // "" when the last Validate or Save succeeded.
     const char * Error() const { return m_Error.c_str(); }
 

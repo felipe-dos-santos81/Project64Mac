@@ -40,6 +40,12 @@ inline bool TestHas(const std::string & Text, const char * Needle)
     return Text.find(Needle) != std::string::npos;
 }
 
+// True when Text contains Needle, for a Needle built by concatenation rather than a literal.
+inline bool TestHas(const std::string & Text, const std::string & Needle)
+{
+    return Text.find(Needle) != std::string::npos;
+}
+
 // Creates an empty file (Mode applied with chmod), exiting on failure: a test tree that
 // cannot be built is not a test failure but a broken machine.
 inline void TestTouch(const std::string & Path, mode_t Mode = 0644)

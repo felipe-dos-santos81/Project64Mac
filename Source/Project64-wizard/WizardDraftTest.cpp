@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 // The shipped layouts this test loads as bases live at the repository root, which is neither
@@ -194,6 +195,71 @@ static void PanelEditing()
     CHECK(Full.EnsureMenu(&N) && N == "the menu took pad-down from B");
     CHECK(Full.MenuZone() == Slot("pad-down") && !Full.Explicit(N64Control::B));
     CHECK(Full.Validate("x"));
+}
+
+static std::string ReadAll(const std::string & Path)
+{
+    std::string Out;
+    FILE * F = fopen(Path.c_str(), "r");
+    if (F == nullptr) return Out;
+    char Buf[4096];
+    size_t N;
+    while ((N = fread(Buf, 1, sizeof(Buf), F)) > 0) Out.append(Buf, N);
+    fclose(F);
+    return Out;
+}
+
+static void WriteAll(const std::string & Path, const char * Text)
+{
+    FILE * F = fopen(Path.c_str(), "w");
+    if (F == nullptr) { perror(Path.c_str()); exit(2); }
+    fputs(Text, F);
+    fclose(F);
+}
+
+static void RomFiles()
+{
+    const std::string Dir = TestMakeTempDir("pj64-wizard-rom");
+    const std::string Rom = Dir + "/game.z64";
+    TestTouch(Rom);
+    std::string Note;
+    WizardDraft D;
+
+    // No layout of its own: the generic one, from the executable's folder (the checkout here).
+    std::string Loaded = D.LoadForRom(Rom.c_str(), g_Root.c_str(), &Note);
+    CHECK(TestHas(Loaded, "Config/mouse/default.yaml") && Note.empty());
+    CHECK(D.MenuZone() == PointerZoneFromName("pad-down"));
+
+    // A layout that will not load: the generic one, and the reason.
+    WriteAll(Dir + "/game.yaml", "bindings: [1, 2]\n");
+    Loaded = D.LoadForRom(Rom.c_str(), g_Root.c_str(), &Note);
+    CHECK(TestHas(Loaded, "Config/mouse/default.yaml"));
+    CHECK(TestHas(Note, "Your layout could not be read (") && TestHas(Note, "); starting from the generic layout"));
+
+    // Saving over it keeps the original as .orig, once; the temporary file never stays.
+    std::string Saved;
+    bool MadeOrig = false;
+    CHECK(D.SaveBesideRom(Rom.c_str(), "default.yaml", &Saved, &MadeOrig));
+    CHECK(Saved == Dir + "/game.yaml" && MadeOrig);
+    CHECK(ReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
+    CHECK(TestHas(ReadAll(Saved), "Menu:      {zone: pad-down}"));
+    CHECK(D.SaveBesideRom(Rom.c_str(), "default.yaml", &Saved, &MadeOrig) && !MadeOrig);
+    CHECK(ReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
+    CHECK(access((Dir + "/game.yaml.tmp").c_str(), F_OK) != 0);
+
+    // The saved layout is what the next edit starts from.
+    Loaded = D.LoadForRom(Rom.c_str(), g_Root.c_str(), &Note);
+    CHECK(Loaded == Dir + "/game.yaml" && Note.empty());
+
+    // A folder that cannot be written: refused with a reason, and no file at all.
+    const std::string Locked = TestMakeTempDir("pj64-wizard-locked");
+    const std::string LockedRom = Locked + "/game.z64";
+    TestTouch(LockedRom);
+    chmod(Locked.c_str(), 0555);
+    CHECK(!D.SaveBesideRom(LockedRom.c_str(), "x", &Saved, &MadeOrig));
+    CHECK(TestHas(D.Error(), "could not write " + Locked + "/game.yaml"));
+    CHECK(access((Locked + "/game.yaml").c_str(), F_OK) != 0 && access((Locked + "/game.yaml.tmp").c_str(), F_OK) != 0);
+    chmod(Locked.c_str(), 0755);
 }
 
 void RunWizardDraftTests()
@@ -503,4 +569,5 @@ void RunWizardDraftTests()
     CHECK(strcmp(WizardStickFormLabel(6), "") == 0);
 
     PanelEditing();
+    RomFiles();
 }

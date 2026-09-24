@@ -437,7 +437,7 @@ $(BIN)/Project64: $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(LIBDIR)/libProject64-co
 # A second binary, with no ROM and no OpenGL: SDL_Renderer and SDL's debug font. It shares
 # the frontend's InputConfig, FaceGestures and FaceTracker objects rather than its own.
 wizard: $(BIN)/Project64-wizard # Build the binding wizard
-$(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(BUILD)/Project64-sdl/FaceGestures.o $(BUILD)/Project64-sdl/FaceTracker.o
+$(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(BUILD)/Project64-sdl/GameConfig.o $(BUILD)/Project64-sdl/FaceGestures.o $(BUILD)/Project64-sdl/FaceTracker.o
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
 
