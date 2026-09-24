@@ -82,4 +82,17 @@ void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char
 void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth);
 
 // What the camera is doing, in one line for a gesture list: "tracking", "camera off: …".
-const char * WizardFaceStatus(uint32_t Face);
+// Inline, so the step-by-step screens and the panel editor share it without either file
+// depending on the other.
+inline const char * WizardFaceStatus(uint32_t Face)
+{
+    switch (Face)
+    {
+    case FACE_OFF: return "camera off: the list still works, unlit";
+    case FACE_STARTING: return "camera starting";
+    case FACE_TRACKING: return "tracking";
+    case FACE_NO_FACE: return "no face found";
+    case FACE_DENIED: return "camera denied in Settings > Privacy & Security";
+    default: return "camera unavailable";
+    }
+}

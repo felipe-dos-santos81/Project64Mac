@@ -209,9 +209,8 @@ void EditWalk(Tour & T)
 {
     WizardDraft D;
     std::string N;
-    const auto At = [](const char * Name) { EditPlace P; P.Index = PointerZoneFromName(Name); return P; };
-    EditPlace Picture;
-    Picture.Index = POINTER_ZONE_GAME;
+    const auto At = [](const char * Name) { return EditPlace(PointerZoneFromName(Name)); };
+    EditPlace Picture(POINTER_ZONE_GAME);
     bool Ok = D.SetStickForm(EditStick::Pointer, &N) && D.PlaceControl(Picture, N64Control::A, &N) &&
               D.PlaceControl(At("mid1"), N64Control::Start, &N) && D.PlaceControl(At("mid2"), N64Control::Z, &N) &&
               D.SetToggle(PointerZoneFromName("mid2"), true, &N) && D.PlaceControl(At("mid3"), N64Control::B, &N) &&

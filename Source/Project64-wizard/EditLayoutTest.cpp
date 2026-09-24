@@ -13,8 +13,6 @@
 #include <string>
 #include <vector>
 
-static int Slot(const char * Name) { return PointerZoneFromName(Name); }
-
 static EditTarget Target(EditTargetKind Kind, int Index = 0)
 {
     EditTarget T;
@@ -35,16 +33,14 @@ static WizardDraft Small()
 {
     WizardDraft D;
     std::string N;
-    EditPlace Picture;
-    Picture.Index = POINTER_ZONE_GAME;
-    EditPlace Mid2;
-    Mid2.Index = Slot("mid2");
+    EditPlace Picture(POINTER_ZONE_GAME);
+    EditPlace Mid2(TestZone("mid2"));
     CHECK(D.SetStickForm(EditStick::Pointer, &N));
     CHECK(D.PlaceControl(Picture, N64Control::A, &N));
     CHECK(D.PlaceControl(Mid2, N64Control::Z, &N));
-    CHECK(D.SetToggle(Slot("mid2"), true, &N));
-    CHECK(D.PlaceHold(Slot("mid5"), &N));
-    CHECK(D.PlaceMenu(Slot("pad-down"), &N));
+    CHECK(D.SetToggle(TestZone("mid2"), true, &N));
+    CHECK(D.PlaceHold(TestZone("mid5"), &N));
+    CHECK(D.PlaceMenu(TestZone("pad-down"), &N));
     return D;
 }
 
@@ -59,7 +55,7 @@ static void Geometry()
         {
             S.View = V;
             S.Place.Gesture = GestureChooser == 1;
-            S.Place.Index = GestureChooser == 1 ? 0 : Slot("mid2");
+            S.Place.Index = GestureChooser == 1 ? 0 : TestZone("mid2");
             const std::vector<EditTarget> All = EditTargets(S);
             for (size_t i = 0; i < All.size(); i++)
             {
@@ -76,7 +72,7 @@ static void Geometry()
     }
 
     // The panel is the game's own: mid1 is 56x48, its top 8 points below the panel's top.
-    const EditRect Mid1 = EditTargetRect(Target(EditTargetKind::Zone, Slot("mid1")));
+    const EditRect Mid1 = EditTargetRect(Target(EditTargetKind::Zone, TestZone("mid1")));
     CHECK(Mid1.W == 56 && Mid1.H == 48 && Mid1.X == 80 + 164 && Mid1.Y == 424 + 8);
     const EditRect Picture = EditTargetRect(Target(EditTargetKind::Zone, POINTER_ZONE_GAME));
     CHECK(Picture.X == 80 && Picture.Y == 96 && Picture.W == 640 && Picture.H == 320);
@@ -87,7 +83,7 @@ static void Geometry()
     // What each view offers.
     S.View = EditView::Chooser;
     S.Place.Gesture = false;
-    S.Place.Index = Slot("mid2");
+    S.Place.Index = TestZone("mid2");
     CHECK(EditTargets(S).size() == 4 + EDIT_CHOICE_COUNT + 2);          // top bar, choices, Toggle, Back
     S.Place.Gesture = true;
     S.Place.Index = PointerGestureIndex(POINTER_GESTURE_SMILE);
@@ -112,21 +108,21 @@ static void Rules()
     CHECK(EditHeader(S, D) == "the picture: A");
 
     // A slot: lit choices, the header, the labels.
-    S.Place.Index = Slot("mid2");
+    S.Place.Index = TestZone("mid2");
     CHECK(EditHeader(S, D) == "mid2: Z, toggle");
     CHECK(EditLabel(S, D, Target(EditTargetKind::Toggle)) == "Toggle: on");
     CHECK(EditLabel(S, D, Target(EditTargetKind::Choice, (int)N64Control::Start)) == "St");
     CHECK(EditLabel(S, D, Target(EditTargetKind::Choice, EDIT_CHOICE_NOTHING)) == "Nothing");
-    S.Place.Index = Slot("mid1");
+    S.Place.Index = TestZone("mid1");
     CHECK(!EditEnabled(S, D, Target(EditTargetKind::Toggle), &Why) && Why == "a toggle needs a control in the slot");
     CHECK(EditLit(S, D, Target(EditTargetKind::Choice, EDIT_CHOICE_NOTHING)));
     CHECK(EditHeader(S, D) == "mid1: nothing");
-    S.Place.Index = Slot("mid5");
+    S.Place.Index = TestZone("mid5");
     CHECK(EditHeader(S, D) == "mid5: the hold");
     S.View = EditView::Panel;
-    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, Slot("mid5"))) == "Ho");
-    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, Slot("pad-down"))) == "==");
-    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, Slot("mid2"))) == "Z");
+    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, TestZone("mid5"))) == "Ho");
+    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, TestZone("pad-down"))) == "==");
+    CHECK(EditLabel(S, D, Target(EditTargetKind::Zone, TestZone("mid2"))) == "Z");
     CHECK(EditLabel(S, D, Target(EditTargetKind::Stick)) == "Stick: pointer");
     CHECK(EditLabel(S, D, Target(EditTargetKind::Gestures)) == "Gestures");
     CHECK(EditNotPlaced(D) == "Not placed: B  St  L  R  C^  Cv  C<  C>  D^  Dv  D<  D>");
@@ -135,7 +131,7 @@ static void Rules()
     std::string N;
     CHECK(D.SetStickForm(EditStick::HeadDigital, &N));
     S.View = EditView::Chooser;
-    S.Place.Index = Slot("mid1");
+    S.Place.Index = TestZone("mid1");
     CHECK(!EditEnabled(S, D, Target(EditTargetKind::Choice, EDIT_CHOICE_HOLD), &Why) && Why == "the hold needs the stick to be the pointer");
     S.View = EditView::Gestures;
     CHECK(!EditEnabled(S, D, Target(EditTargetKind::Gesture, PointerGestureIndex(POINTER_GESTURE_HEAD_UP)), &Why) && Why == "the head moves the stick");
@@ -150,15 +146,15 @@ static void Acts()
     EditState S;
 
     // A slot opens its chooser; a control closes it, marks the draft changed and says what happened.
-    CHECK(EditAct(&S, &D, Target(EditTargetKind::Zone, Slot("mid1"))) == EditCommand::None);
-    CHECK(S.View == EditView::Chooser && !S.Place.Gesture && S.Place.Index == Slot("mid1"));
+    CHECK(EditAct(&S, &D, Target(EditTargetKind::Zone, TestZone("mid1"))) == EditCommand::None);
+    CHECK(S.View == EditView::Chooser && !S.Place.Gesture && S.Place.Index == TestZone("mid1"));
     CHECK(EditAct(&S, &D, Target(EditTargetKind::Choice, (int)N64Control::Start)) == EditCommand::None);
     CHECK(S.View == EditView::Panel && S.Dirty && S.Status == "mid1: Start");
 
     // Toggle stays in the chooser; Back leaves it unchanged.
-    EditAct(&S, &D, Target(EditTargetKind::Zone, Slot("mid1")));
+    EditAct(&S, &D, Target(EditTargetKind::Zone, TestZone("mid1")));
     EditAct(&S, &D, Target(EditTargetKind::Toggle));
-    CHECK(S.View == EditView::Chooser && D.Toggled(Slot("mid1")) && S.Status == "mid1: Start, toggle");
+    CHECK(S.View == EditView::Chooser && D.Toggled(TestZone("mid1")) && S.Status == "mid1: Start, toggle");
     EditAct(&S, &D, Target(EditTargetKind::Back));
     CHECK(S.View == EditView::Panel);
 
@@ -166,7 +162,7 @@ static void Acts()
     // marks the draft dirty: Cancel quits at once rather than asking to confirm.
     WizardDraft Same = Small();
     EditState U;
-    EditAct(&U, &Same, Target(EditTargetKind::Zone, Slot("mid2")));
+    EditAct(&U, &Same, Target(EditTargetKind::Zone, TestZone("mid2")));
     CHECK(EditAct(&U, &Same, Target(EditTargetKind::Choice, (int)N64Control::Z)) == EditCommand::None);
     CHECK(!U.Dirty);
     CHECK(EditAct(&U, &Same, Target(EditTargetKind::Cancel)) == EditCommand::Quit);
@@ -181,7 +177,7 @@ static void Acts()
         "  Menu: {zone: pad-down}\n")));
     EditState F;
     const std::string Before = Full.Emit("x");
-    EditAct(&F, &Full, Target(EditTargetKind::Zone, Slot("pad-down")));
+    EditAct(&F, &Full, Target(EditTargetKind::Zone, TestZone("pad-down")));
     CHECK(EditAct(&F, &Full, Target(EditTargetKind::Choice, EDIT_CHOICE_NOTHING)) == EditCommand::None);
     CHECK(F.View == EditView::Chooser && !F.Dirty && F.Status == "The panel is full: free a slot for the menu first");
     CHECK(Full.Emit("x") == Before);
@@ -216,7 +212,7 @@ static void Acts()
     C.Dirty = true;
     CHECK(EditAct(&C, &D, Target(EditTargetKind::Cancel)) == EditCommand::None);
     CHECK(C.ConfirmCancel && C.Status == "Cancel again to discard your changes");
-    EditAct(&C, &D, Target(EditTargetKind::Zone, Slot("mid3")));                          // any other click forgets it
+    EditAct(&C, &D, Target(EditTargetKind::Zone, TestZone("mid3")));                          // any other click forgets it
     CHECK(!C.ConfirmCancel);
     EditAct(&C, &D, Target(EditTargetKind::Back));
     CHECK(EditAct(&C, &D, Target(EditTargetKind::Cancel)) == EditCommand::None);

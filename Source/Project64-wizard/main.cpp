@@ -58,6 +58,19 @@ static void CloseGamepad(void)
 // that has already returned is not that place, but a static, which outlives main(), is.
 static PointerState g_State;
 
+// Starts the camera for a gesture list, unless PJ64_FACE=0 keeps it shut (the tracker then
+// reads as off, and the list works unlit). True when the tracker started.
+static bool StartCameraUnlessOff()
+{
+    const char * Off = getenv("PJ64_FACE");
+    if (Off != nullptr && strcmp(Off, "0") == 0)
+    {
+        g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
+        return false;
+    }
+    return FaceTrackerStart(&g_State);
+}
+
 // Walks the real screens with a canned sequence and writes the result to Path. No window,
 // no renderer, no camera: this is the end-to-end proof that runs anywhere.
 static int Selftest(const char * Path)
@@ -235,6 +248,14 @@ static std::string FileName(const char * Path)
 // Saves beside the ROM and says so on stderr, or puts the reason on the status line.
 static bool SaveAndReport(WizardDraft & Draft, const char * Rom, const std::string & BaseName, EditState * S)
 {
+    // A layout the reader rejects shows the reader's own line; only a failed write is a
+    // "cannot save". The rules should make a rejection impossible, so this is a net.
+    if (!Draft.Validate(BaseName.c_str()))
+    {
+        S->Status = Draft.Error();
+        fprintf(stderr, "wizard: the reader rejected the layout: %s\n", Draft.Error());
+        return false;
+    }
     std::string Saved;
     bool MadeOrig = false;
     if (Draft.SaveBesideRom(Rom, BaseName.c_str(), &Saved, &MadeOrig))
@@ -290,7 +311,8 @@ static int RunEditor(const char * Rom)
         fprintf(stderr, "wizard: cannot load a layout for %s: %s\n", Rom, Draft.Error());
         return 1;
     }
-    fprintf(stderr, "wizard: editing %s from %s\n", Rom, Loaded.c_str());
+    const bool Generic = Loaded == ExeDir + "/Config/mouse/default.yaml";
+    fprintf(stderr, "wizard: editing %s from %s\n", Rom, Generic ? "the generic layout" : Loaded.c_str());
     if (!S.Status.empty()) fprintf(stderr, "wizard: %s\n", S.Status.c_str());
     std::string MenuNote;
     if (Draft.EnsureMenu(&MenuNote)) S.Status = S.Status.empty() ? MenuNote : S.Status + "; " + MenuNote;
@@ -325,11 +347,16 @@ static int RunEditor(const char * Rom)
     bool CameraAsked = false;
     EditTarget Hover, Pressed;
     bool Running = true;
+    // The screen changes only on an event or when the camera's reading changes; an idle
+    // editor does not redraw.
+    bool Redraw = true;
+    uint32_t ShownGestures = 0, ShownFace = 0;
     while (Running)
     {
         SDL_Event E;
         while (Running && SDL_PollEvent(&E))
         {
+            Redraw = true;
             const EditCommand C = EditHandleEvent(E, &S, &Draft, &Hover, &Pressed);
             if (C == EditCommand::Quit) Running = false;
             else if (C == EditCommand::Save && SaveAndReport(Draft, Rom, BaseName, &S)) Running = false;
@@ -338,13 +365,18 @@ static int RunEditor(const char * Rom)
         if (!CameraAsked && EditShowsGestures(S))
         {
             CameraAsked = true;
-            const char * Off = getenv("PJ64_FACE");
-            if (Off != nullptr && strcmp(Off, "0") == 0) g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
-            else CameraStarted = FaceTrackerStart(&g_State);
+            CameraStarted = StartCameraUnlessOff();
         }
-        EditDraw(Renderer, S, Draft, Title.c_str(), Hover,
-                 g_State.Gestures.load(std::memory_order_relaxed), g_State.Face.load(std::memory_order_relaxed));
-        SDL_RenderPresent(Renderer);
+        const uint32_t Gestures = g_State.Gestures.load(std::memory_order_relaxed);
+        const uint32_t Face = g_State.Face.load(std::memory_order_relaxed);
+        if (Redraw || Gestures != ShownGestures || Face != ShownFace)
+        {
+            EditDraw(Renderer, S, Draft, Title.c_str(), Hover, Gestures, Face);
+            SDL_RenderPresent(Renderer);
+            Redraw = false;
+            ShownGestures = Gestures;
+            ShownFace = Face;
+        }
         SDL_Delay(16);
     }
     if (CameraStarted) FaceTrackerStop();
@@ -460,17 +492,8 @@ int main(int argc, char ** argv)
         // opening the wizard is not consent to be filmed. PJ64_FACE=0 keeps it shut.
         if (Ui.WantCamera && !CameraStarted)
         {
-            const char * Off = getenv("PJ64_FACE");
-            if (Off != nullptr && strcmp(Off, "0") == 0)
-            {
-                g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
-                Ui.WantCamera = false;
-            }
-            else
-            {
-                CameraStarted = FaceTrackerStart(&g_State);
-                Ui.WantCamera = false;
-            }
+            CameraStarted = StartCameraUnlessOff();
+            Ui.WantCamera = false;
         }
 
         if (Ui.Typing != WasTyping)

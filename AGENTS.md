@@ -126,7 +126,7 @@ whether each is enabled and why not, and what a click does to the draft. `EditSc
 only paints what `EditLayout` reports and turns SDL events into `EditHit`/`EditAct` calls;
 the editing rules themselves — one thing per slot, a displaced control losing its place, the
 menu never lost — live as methods on `WizardDraft` alongside the step-by-step wizard's own,
-tested in the `wizard-edit` unit-test area. A layout with no `Menu:` gets one from
+tested in the `wizard-draft` unit-test area (`wizard-edit` tests `EditLayout`). A layout with no `Menu:` gets one from
 `EnsureMenu`, which places it by `AutoMenuSlot` (`Source/Project64-sdl/InputConfig.h`), the
 one statement of that order shared with `ApplyAutoMenu`, the launcher's own per-game menu.
 `PJ64_EDIT_SELFTEST=1` runs `EditScript`, the scripted edit behind `Scripts/wizard_selftest.sh`

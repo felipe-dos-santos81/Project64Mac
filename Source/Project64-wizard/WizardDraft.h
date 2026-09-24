@@ -27,6 +27,9 @@ const char * WizardStickFormLabel(int Index);
 // or a face gesture (its index, 0 … POINTER_GESTURE_COUNT - 1).
 struct EditPlace
 {
+    EditPlace() = default;
+    explicit EditPlace(int PlaceIndex, bool OnGesture = false) : Gesture(OnGesture), Index(PlaceIndex) {}
+
     bool Gesture = false;
     int Index = POINTER_ZONE_NONE;
 };
@@ -159,6 +162,9 @@ private:
     void Replace(N64Control Control, const Binding & Value);
     void ClearControl(N64Control Control, std::string * Note);
     void RemoveHold(std::string * Note);
+    // Marks every zone a control is bound to, and the stick's hold slot: the slots the menu
+    // cannot take without displacing something.
+    void UsedZones(bool Used[POINTER_ZONE_COUNT]) const;
     // Moves the menu to AutoMenuSlot's own answer when that is free, counting Avoid as taken;
     // otherwise to the first free panel slot in zone order (pad-up ... mid5), never the
     // picture. Editor-only: unlike play time, it never takes a slot from its control. False,

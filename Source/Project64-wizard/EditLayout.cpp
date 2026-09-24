@@ -18,7 +18,6 @@ const int kChoiceColumns = 5;
 const float kChoiceLeft = 84.0f, kChoiceTop = 136.0f, kChoiceW = 120.0f, kChoiceH = 48.0f, kChoiceGap = 8.0f;
 const float kGestureTop = 96.0f, kGesturePitch = 42.0f;
 const EditStick kForms[3] = { EditStick::Pointer, EditStick::Head, EditStick::HeadDigital };
-const char * const kFormNames[3] = { "pointer", "head", "head-digital" };
 
 bool Contains(EditRect R, float X, float Y)
 {
@@ -41,12 +40,6 @@ const char * StickName(EditStick Form)
     case EditStick::Other: break;
     }
     return "other";
-}
-
-// A control's short name as the game's overlay draws it; Stick never appears here.
-std::string ShortName(N64Control C)
-{
-    return InputConfig::ControlLabel(C);
 }
 
 bool MenuAt(const WizardDraft & D, EditPlace P)
@@ -185,27 +178,24 @@ std::string EditLabel(const EditState & S, const WizardDraft & D, EditTarget T)
     case EditTargetKind::Cancel: return "Cancel";
     case EditTargetKind::Back: return "Back";
     case EditTargetKind::Toggle: return D.Toggled(S.Place.Index) ? "Toggle: on" : "Toggle: off";
-    case EditTargetKind::StickForm: return kFormNames[T.Index];
+    case EditTargetKind::StickForm: return StickName(kForms[T.Index]);
     case EditTargetKind::Choice:
-        if (T.Index < EDIT_CHOICE_MENU) return ShortName((N64Control)T.Index);
+        if (T.Index < EDIT_CHOICE_MENU) return InputConfig::ControlLabel((N64Control)T.Index);
         if (T.Index == EDIT_CHOICE_MENU) return "Menu";
         if (T.Index == EDIT_CHOICE_HOLD) return "Hold";
         return "Nothing";
     case EditTargetKind::Zone:
     {
-        EditPlace P;
-        P.Index = T.Index;
+        EditPlace P(T.Index);
         if (HoldAt(D, P)) return "Ho";
         if (MenuAt(D, P)) return "==";
         const std::vector<N64Control> Here = D.Occupants(P);
         if (Here.empty()) return "";
-        return ShortName(Here[0]) + (Here.size() > 1 ? "+" : "");
+        return std::string(InputConfig::ControlLabel(Here[0])) + (Here.size() > 1 ? "+" : "");
     }
     case EditTargetKind::Gesture:
     {
-        EditPlace P;
-        P.Gesture = true;
-        P.Index = T.Index;
+        EditPlace P(T.Index, true);
         std::string Holder;
         if (MenuAt(D, P)) Holder = "==";
         for (N64Control C : D.Occupants(P))
@@ -250,10 +240,21 @@ std::string EditNotPlaced(const WizardDraft & D)
     for (N64Control C : Left)
     {
         Line += First ? " " : "  ";
-        Line += ShortName(C);
+        Line += InputConfig::ControlLabel(C);
         First = false;
     }
     return Line;
+}
+
+// The draft call behind a Choice, Toggle or StickForm click.
+static bool Edit(WizardDraft * D, const EditState & S, EditTarget T, std::string * Note)
+{
+    if (T.Kind == EditTargetKind::Toggle) return D->SetToggle(S.Place.Index, !D->Toggled(S.Place.Index), Note);
+    if (T.Kind == EditTargetKind::StickForm) return D->SetStickForm(kForms[T.Index], Note);
+    if (T.Index < EDIT_CHOICE_MENU) return D->PlaceControl(S.Place, (N64Control)T.Index, Note);
+    if (T.Index == EDIT_CHOICE_MENU) return D->PlaceMenu(S.Place.Index, Note);
+    if (T.Index == EDIT_CHOICE_HOLD) return D->PlaceHold(S.Place.Index, Note);
+    return D->PlaceNothing(S.Place, Note);
 }
 
 EditCommand EditAct(EditState * S, WizardDraft * D, EditTarget T)
@@ -290,51 +291,28 @@ EditCommand EditAct(EditState * S, WizardDraft * D, EditTarget T)
         S->Place.Index = T.Index;
         S->Status.clear();
         return EditCommand::None;
-    case EditTargetKind::Choice:
-    {
-        const std::string Before = D->Emit("");
-        bool Ok;
-        if (T.Index < EDIT_CHOICE_MENU) Ok = D->PlaceControl(S->Place, (N64Control)T.Index, &Note);
-        else if (T.Index == EDIT_CHOICE_MENU) Ok = D->PlaceMenu(S->Place.Index, &Note);
-        else if (T.Index == EDIT_CHOICE_HOLD) Ok = D->PlaceHold(S->Place.Index, &Note);
-        else Ok = D->PlaceNothing(S->Place, &Note);
-        if (!Ok)
-        {
-            S->Status = Note;
-            return EditCommand::None;
-        }
-        if (D->Emit("") != Before) S->Dirty = true;
-        S->Status = EditHeader(*S, *D) + (Note.empty() ? "" : "; " + Note);
-        S->View = S->Place.Gesture ? EditView::Gestures : EditView::Panel;
-        return EditCommand::None;
-    }
-    case EditTargetKind::Toggle:
-    {
-        const std::string Before = D->Emit("");
-        if (!D->SetToggle(S->Place.Index, !D->Toggled(S->Place.Index), &Note))
-        {
-            S->Status = Note;
-            return EditCommand::None;
-        }
-        if (D->Emit("") != Before) S->Dirty = true;
-        S->Status = EditHeader(*S, *D);
-        return EditCommand::None;
-    }
     case EditTargetKind::Back:
         S->View = (S->View == EditView::Chooser && S->Place.Gesture) ? EditView::Gestures : EditView::Panel;
         S->Status.clear();
         return EditCommand::None;
+    case EditTargetKind::Choice:
+    case EditTargetKind::Toggle:
     case EditTargetKind::StickForm:
     {
+        // The draft decides; the layout is "changed" only when the file it would write changed,
+        // so a click that puts back what was there does not make Cancel ask twice.
         const std::string Before = D->Emit("");
-        if (!D->SetStickForm(kForms[T.Index], &Note))
+        if (!Edit(D, *S, T, &Note))
         {
             S->Status = Note;
             return EditCommand::None;
         }
         if (D->Emit("") != Before) S->Dirty = true;
-        S->Status = std::string("The stick is ") + StickName(D->StickForm()) + (Note.empty() ? "" : "; " + Note);
-        S->View = EditView::Panel;
+        const std::string What = T.Kind == EditTargetKind::StickForm
+            ? std::string("The stick is ") + StickName(D->StickForm()) : EditHeader(*S, *D);
+        S->Status = What + (Note.empty() ? "" : "; " + Note);
+        if (T.Kind == EditTargetKind::Choice) S->View = S->Place.Gesture ? EditView::Gestures : EditView::Panel;
+        else if (T.Kind == EditTargetKind::StickForm) S->View = EditView::Panel;
         return EditCommand::None;
     }
     case EditTargetKind::None:

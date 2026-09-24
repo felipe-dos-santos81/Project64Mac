@@ -9,6 +9,7 @@
 #include "GridHost.h"
 #include "FaceTracker.h"
 #include "GameConfig.h"
+#include "ExecutablePath.h"
 #include "InputConfig.h"
 #include "MenuHost.h"
 #include <Project64-core/AppInit.h>
@@ -24,7 +25,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/mman.h>
-#include <mach-o/dyld.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -35,24 +35,6 @@
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
-
-static std::string ExecutableDirectory(void)
-{
-    char buf[4096];
-    uint32_t size = sizeof(buf);
-    if (_NSGetExecutablePath(buf, &size) != 0)
-    {
-        return ".";
-    }
-    char resolved[4096];
-    if (realpath(buf, resolved) == nullptr)
-    {
-        return ".";
-    }
-    std::string dir(resolved);
-    size_t slash = dir.rfind('/');
-    return slash == std::string::npos ? "." : dir.substr(0, slash);
-}
 
 // Tears down whatever SDL state exists and returns ExitCode, so each failure path is one
 // line and a new one cannot forget a step. Null arguments are skipped.

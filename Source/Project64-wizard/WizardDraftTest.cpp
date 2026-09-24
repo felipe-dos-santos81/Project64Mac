@@ -55,11 +55,9 @@ static std::string Layout(const char * Relative)
     return g_Root + Relative;
 }
 
-static int Slot(const char * Name) { return PointerZoneFromName(Name); }
+static EditPlace At(const char * Name) { return EditPlace(TestZone(Name)); }
 
-static EditPlace At(const char * Name) { EditPlace P; P.Index = Slot(Name); return P; }
-
-static EditPlace OnGesture(uint32_t Bit) { EditPlace P; P.Gesture = true; P.Index = PointerGestureIndex(Bit); return P; }
+static EditPlace OnGesture(uint32_t Bit) { return EditPlace(PointerGestureIndex(Bit), true); }
 
 static bool Holds(const WizardDraft & D, EditPlace P, N64Control C)
 {
@@ -72,16 +70,15 @@ static WizardDraft PanelDraft()
 {
     WizardDraft D;
     std::string N;
-    EditPlace Picture;
-    Picture.Index = POINTER_ZONE_GAME;
+    EditPlace Picture(POINTER_ZONE_GAME);
     CHECK(D.SetStickForm(EditStick::Pointer, &N));
     CHECK(D.PlaceControl(Picture, N64Control::A, &N));
     CHECK(D.PlaceControl(At("mid1"), N64Control::Start, &N));
     CHECK(D.PlaceControl(At("mid2"), N64Control::Z, &N));
-    CHECK(D.SetToggle(Slot("mid2"), true, &N));
+    CHECK(D.SetToggle(TestZone("mid2"), true, &N));
     CHECK(D.PlaceControl(At("mid3"), N64Control::B, &N));
     CHECK(D.PlaceControl(At("mid4"), N64Control::R, &N));
-    CHECK(D.PlaceHold(Slot("mid5"), &N));
+    CHECK(D.PlaceHold(TestZone("mid5"), &N));
     CHECK(D.PlaceControl(At("pad-up"), N64Control::L, &N));
     CHECK(D.PlaceControl(At("c-up"), N64Control::CUp, &N));
     CHECK(D.PlaceControl(At("c-down"), N64Control::CDown, &N));
@@ -89,21 +86,20 @@ static WizardDraft PanelDraft()
     CHECK(D.PlaceControl(At("c-right"), N64Control::CRight, &N));
     CHECK(D.PlaceControl(At("pad-left"), N64Control::DPadLeft, &N));
     CHECK(D.PlaceControl(At("pad-right"), N64Control::DPadRight, &N));
-    CHECK(D.PlaceMenu(Slot("pad-down"), &N));
+    CHECK(D.PlaceMenu(TestZone("pad-down"), &N));
     return D;
 }
 
 static void PanelEditing()
 {
     std::string N;
-    EditPlace Picture;
-    Picture.Index = POINTER_ZONE_GAME;
+    EditPlace Picture(POINTER_ZONE_GAME);
 
     // The builder itself: a layout the reader accepts, with every control but D^ and Dv placed.
     WizardDraft D = PanelDraft();
     CHECK(D.Validate("x"));
     CHECK(D.NotPlaced().size() == 2);
-    CHECK(D.StickForm() == EditStick::Pointer && D.HoldZone() == Slot("mid5") && D.MenuZone() == Slot("pad-down"));
+    CHECK(D.StickForm() == EditStick::Pointer && D.HoldZone() == TestZone("mid5") && D.MenuZone() == TestZone("pad-down"));
 
     // Placing a control moves it and displaces the target's occupant.
     CHECK(D.PlaceControl(At("mid4"), N64Control::L, &N));
@@ -112,12 +108,12 @@ static void PanelEditing()
     CHECK(!D.Explicit(N64Control::R));
 
     // Toggle follows its control: kept when it is placed again, gone when it moves.
-    CHECK(D.SetToggle(Slot("mid4"), true, &N) && D.Toggled(Slot("mid4")));
-    CHECK(D.PlaceControl(At("mid4"), N64Control::L, &N) && D.Toggled(Slot("mid4")));
+    CHECK(D.SetToggle(TestZone("mid4"), true, &N) && D.Toggled(TestZone("mid4")));
+    CHECK(D.PlaceControl(At("mid4"), N64Control::L, &N) && D.Toggled(TestZone("mid4")));
     CHECK(D.PlaceControl(At("mid3"), N64Control::L, &N) && N == "B is not placed now");
-    CHECK(!D.Toggled(Slot("mid3")) && !D.Toggled(Slot("mid4")));
-    CHECK(!D.CanToggle(Slot("mid4"), &N) && N == "a toggle needs a control in the slot");
-    CHECK(!D.SetToggle(Slot("mid4"), true, &N) && N == "a toggle needs a control in the slot");
+    CHECK(!D.Toggled(TestZone("mid3")) && !D.Toggled(TestZone("mid4")));
+    CHECK(!D.CanToggle(TestZone("mid4"), &N) && N == "a toggle needs a control in the slot");
+    CHECK(!D.SetToggle(TestZone("mid4"), true, &N) && N == "a toggle needs a control in the slot");
 
     // The picture takes a toggle, but neither the menu nor the hold.
     CHECK(D.SetToggle(POINTER_ZONE_GAME, true, &N) && D.Toggled(POINTER_ZONE_GAME));
@@ -133,9 +129,9 @@ static void PanelEditing()
     CHECK(!D.PlaceControl(At("pad-down"), N64Control::DPadUp, &N));
     CHECK(D.Emit("x") == Before);
     CHECK(D.PlaceNothing(At("mid4"), &N) && N == "R is not placed now");
-    CHECK(D.PlaceNothing(At("pad-down"), &N) && N == "the menu moved to mid4" && D.MenuZone() == Slot("mid4"));
+    CHECK(D.PlaceNothing(At("pad-down"), &N) && N == "the menu moved to mid4" && D.MenuZone() == TestZone("mid4"));
     CHECK(D.PlaceControl(At("mid4"), N64Control::R, &N) && N == "the menu moved to pad-down");
-    CHECK(D.PlaceMenu(Slot("c-up"), &N) && N == "CUp is not placed now" && D.MenuZone() == Slot("c-up"));
+    CHECK(D.PlaceMenu(TestZone("c-up"), &N) && N == "CUp is not placed now" && D.MenuZone() == TestZone("c-up"));
     CHECK(D.Validate("x"));
 
     // A free slot elsewhere still gets the menu, even when AutoMenuSlot's own answer is
@@ -146,16 +142,16 @@ static void PanelEditing()
     WizardDraft Repro = PanelDraft();
     CHECK(Repro.PlaceControl(At("pad-left"), N64Control::DPadRight, &N));
     CHECK(Repro.PlaceNothing(At("pad-down"), &N) && N == "the menu moved to pad-right" &&
-          Repro.MenuZone() == Slot("pad-right"));
+          Repro.MenuZone() == TestZone("pad-right"));
     CHECK(Repro.Validate("x"));
 
     // The hold: only with the pointer; moving it frees its old slot; Nothing removes it.
     WizardDraft Plain;
-    CHECK(!Plain.CanPlaceHold(Slot("mid5"), &N) && N == "the hold needs the stick to be the pointer");
-    CHECK(!Plain.PlaceHold(Slot("mid5"), &N));
+    CHECK(!Plain.CanPlaceHold(TestZone("mid5"), &N) && N == "the hold needs the stick to be the pointer");
+    CHECK(!Plain.PlaceHold(TestZone("mid5"), &N));
     D = PanelDraft();
     CHECK(D.PlaceNothing(At("pad-up"), &N) && N == "L is not placed now");
-    CHECK(D.PlaceHold(Slot("pad-up"), &N) && D.HoldZone() == Slot("pad-up") && D.Occupants(At("mid5")).empty());
+    CHECK(D.PlaceHold(TestZone("pad-up"), &N) && D.HoldZone() == TestZone("pad-up") && D.Occupants(At("mid5")).empty());
     CHECK(D.PlaceNothing(At("pad-up"), &N) && N == "the hold is gone" && D.HoldZone() == POINTER_ZONE_NONE);
     CHECK(D.Validate("x"));
 
@@ -173,7 +169,7 @@ static void PanelEditing()
     CHECK(Faced.MenuGesture() == PointerGestureIndex(POINTER_GESTURE_SMILE));
     CHECK(!Faced.EnsureMenu(&N));
     CHECK(Faced.PlaceControl(OnGesture(POINTER_GESTURE_SMILE), N64Control::B, &N) && N == "the menu moved to mid5");
-    CHECK(Faced.MenuZone() == Slot("mid5") && Faced.MenuGesture() == -1);
+    CHECK(Faced.MenuZone() == TestZone("mid5") && Faced.MenuGesture() == -1);
     CHECK(Holds(Faced, OnGesture(POINTER_GESTURE_SMILE), N64Control::B));
     CHECK(Faced.Validate("x"));
 
@@ -186,7 +182,7 @@ static void PanelEditing()
     CHECK(!D.CanUseGesture(PointerGestureIndex(POINTER_GESTURE_HEAD_LEFT), &N) && N == "the head moves the stick");
     CHECK(!D.PlaceControl(OnGesture(POINTER_GESTURE_HEAD_UP), N64Control::R, &N));
     CHECK(D.PlaceControl(OnGesture(POINTER_GESTURE_MOUTH_OPEN), N64Control::R, &N));
-    CHECK(!D.PlaceHold(Slot("mid5"), &N));
+    CHECK(!D.PlaceHold(TestZone("mid5"), &N));
     CHECK(D.Validate("x"));
     CHECK(D.SetStickForm(EditStick::Pointer, &N) && D.StickForm() == EditStick::Pointer);
     CHECK(!D.SetStickForm(EditStick::Other, &N));
@@ -194,7 +190,7 @@ static void PanelEditing()
     // A base without a menu gets one where play would put it.
     WizardDraft Bare;
     CHECK(Bare.SetStickForm(EditStick::Pointer, &N));
-    CHECK(Bare.EnsureMenu(&N) && N == "the menu was added on mid5" && Bare.MenuZone() == Slot("mid5"));
+    CHECK(Bare.EnsureMenu(&N) && N == "the menu was added on mid5" && Bare.MenuZone() == TestZone("mid5"));
     CHECK(!Bare.EnsureMenu(&N));
     WizardDraft Full;
     CHECK(Full.LoadBase(TestWriteTemp(
@@ -204,28 +200,8 @@ static void PanelEditing()
         "  L: {zone: mid1}\n  R: {zone: mid2}\n  DPadUp: {zone: mid3}\n  DPadDown: {zone: mid4}\n"
         "  DPadLeft: {zone: mid5}\n")));
     CHECK(Full.EnsureMenu(&N) && N == "the menu took pad-down from B");
-    CHECK(Full.MenuZone() == Slot("pad-down") && !Full.Explicit(N64Control::B));
+    CHECK(Full.MenuZone() == TestZone("pad-down") && !Full.Explicit(N64Control::B));
     CHECK(Full.Validate("x"));
-}
-
-static std::string ReadAll(const std::string & Path)
-{
-    std::string Out;
-    FILE * F = fopen(Path.c_str(), "r");
-    if (F == nullptr) return Out;
-    char Buf[4096];
-    size_t N;
-    while ((N = fread(Buf, 1, sizeof(Buf), F)) > 0) Out.append(Buf, N);
-    fclose(F);
-    return Out;
-}
-
-static void WriteAll(const std::string & Path, const char * Text)
-{
-    FILE * F = fopen(Path.c_str(), "w");
-    if (F == nullptr) { perror(Path.c_str()); exit(2); }
-    fputs(Text, F);
-    fclose(F);
 }
 
 static void RomFiles()
@@ -244,22 +220,23 @@ static void RomFiles()
     // A layout that will not load: the generic one, and the reason, short enough for the
     // status line — no path, and no dangling "using built-in defaults" (this note is about
     // the panel editor, not the reader's own fallback).
-    WriteAll(Dir + "/game.yaml", "bindings: [1, 2]\n");
+    TestWriteAll(Dir + "/game.yaml", "bindings: [1, 2]\n");
     Loaded = D.LoadForRom(Rom.c_str(), g_Root.c_str(), &Note);
     CHECK(TestHas(Loaded, "Config/mouse/default.yaml"));
     CHECK(TestHas(Note, "Your layout could not be read (") && TestHas(Note, "); starting from the generic layout"));
     CHECK(!TestHas(Note, Dir + "/game.yaml"));
     CHECK(!TestHas(Note, "using built-in defaults"));
+    CHECK(TestHas(Note, "read (line 1: "));   // the position reads as a line, with no stray colon
 
     // Saving over it keeps the original as .orig, once; the temporary file never stays.
     std::string Saved;
     bool MadeOrig = false;
     CHECK(D.SaveBesideRom(Rom.c_str(), "default.yaml", &Saved, &MadeOrig));
     CHECK(Saved == Dir + "/game.yaml" && MadeOrig);
-    CHECK(ReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
-    CHECK(TestHas(ReadAll(Saved), "Menu:      {zone: pad-down}"));
+    CHECK(TestReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
+    CHECK(TestHas(TestReadAll(Saved), "Menu:      {zone: pad-down}"));
     CHECK(D.SaveBesideRom(Rom.c_str(), "default.yaml", &Saved, &MadeOrig) && !MadeOrig);
-    CHECK(ReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
+    CHECK(TestReadAll(Dir + "/game.yaml.orig") == "bindings: [1, 2]\n");
     CHECK(access((Dir + "/game.yaml.tmp").c_str(), F_OK) != 0);
 
     // The saved layout is what the next edit starts from.

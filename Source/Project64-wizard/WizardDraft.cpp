@@ -470,8 +470,7 @@ std::vector<N64Control> WizardDraft::Occupants(EditPlace Place) const
 
 bool WizardDraft::Toggled(int Zone) const
 {
-    EditPlace Place;
-    Place.Index = Zone;
+    EditPlace Place(Zone);
     for (N64Control C : Occupants(Place))
     {
         for (const Binding & B : m_Bindings[(int)C])
@@ -528,8 +527,7 @@ bool WizardDraft::CanPlaceHold(int Zone, std::string * Why) const
 
 bool WizardDraft::CanToggle(int Zone, std::string * Why) const
 {
-    EditPlace Place;
-    Place.Index = Zone;
+    EditPlace Place(Zone);
     if (Occupants(Place).empty()) { *Why = "a toggle needs a control in the slot"; return false; }
     return true;
 }
@@ -557,9 +555,9 @@ void WizardDraft::RemoveHold(std::string * Note)
     AddNote(Note, "the hold is gone");
 }
 
-bool WizardDraft::MoveMenu(int Avoid, std::string * Note)
+void WizardDraft::UsedZones(bool Used[POINTER_ZONE_COUNT]) const
 {
-    bool Used[POINTER_ZONE_COUNT] = { false };
+    for (int Zone = 0; Zone < POINTER_ZONE_COUNT; Zone++) Used[Zone] = false;
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
         for (const Binding & B : m_Bindings[i])
@@ -567,8 +565,14 @@ bool WizardDraft::MoveMenu(int Avoid, std::string * Note)
             if (B.kind == Binding::Kind::Zone) Used[B.code] = true;
         }
     }
+    if (HoldZone() != POINTER_ZONE_NONE) Used[HoldZone()] = true;
+}
+
+bool WizardDraft::MoveMenu(int Avoid, std::string * Note)
+{
+    bool Used[POINTER_ZONE_COUNT];
+    UsedZones(Used);
     const int Hold = HoldZone();
-    if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
     if (Avoid != POINTER_ZONE_NONE) Used[Avoid] = true;
     int Slot = AutoMenuSlot(Used, Hold);
     if (Used[Slot])
@@ -632,8 +636,7 @@ bool WizardDraft::PlaceMenu(int Zone, std::string * Note)
     Note->clear();
     if (!CanPlaceMenu(Zone, Note)) return false;
     WizardDraft Next = *this;
-    EditPlace Place;
-    Place.Index = Zone;
+    EditPlace Place(Zone);
     for (N64Control C : Occupants(Place)) Next.ClearControl(C, Note);
     if (Next.HoldZone() == Zone) Next.RemoveHold(Note);
     Next.m_Menu.assign(1, ZoneBinding(Zone, false));
@@ -646,8 +649,7 @@ bool WizardDraft::PlaceHold(int Zone, std::string * Note)
     Note->clear();
     if (!CanPlaceHold(Zone, Note)) return false;
     WizardDraft Next = *this;
-    EditPlace Place;
-    Place.Index = Zone;
+    EditPlace Place(Zone);
     for (N64Control C : Occupants(Place)) Next.ClearControl(C, Note);
     Next.m_Bindings[(int)N64Control::Stick][0].Hold = Zone;
     if (Next.MenuZone() == Zone && !Next.MoveMenu(Zone, Note)) return false;
@@ -677,8 +679,7 @@ bool WizardDraft::SetToggle(int Zone, bool On, std::string * Note)
 {
     Note->clear();
     if (!CanToggle(Zone, Note)) return false;
-    EditPlace Place;
-    Place.Index = Zone;
+    EditPlace Place(Zone);
     // Every control on the slot, so a shared slot stays all-or-nothing, as the reader requires.
     for (N64Control C : Occupants(Place))
     {
@@ -710,9 +711,7 @@ bool WizardDraft::SetStickForm(EditStick Form, std::string * Note)
         for (int G = 0; G < POINTER_GESTURE_COUNT; G++)
         {
             if (!IsHeadDirection(G)) continue;
-            EditPlace Place;
-            Place.Gesture = true;
-            Place.Index = G;
+            EditPlace Place(G, true);
             for (N64Control C : Next.Occupants(Place)) Next.ClearControl(C, Note);
             if (Next.MenuGesture() == G && !Next.MoveMenu(POINTER_ZONE_NONE, Note)) return false;
         }
@@ -726,19 +725,11 @@ bool WizardDraft::EnsureMenu(std::string * Note)
 {
     Note->clear();
     if (!m_Menu.empty()) return false;
-    bool Used[POINTER_ZONE_COUNT] = { false };
-    for (int i = 0; i < (int)N64Control::Count; i++)
-    {
-        for (const Binding & B : m_Bindings[i])
-        {
-            if (B.kind == Binding::Kind::Zone) Used[B.code] = true;
-        }
-    }
+    bool Used[POINTER_ZONE_COUNT];
+    UsedZones(Used);
     const int Hold = HoldZone();
-    if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
     const int Slot = AutoMenuSlot(Used, Hold);
-    EditPlace Place;
-    Place.Index = Slot;
+    EditPlace Place(Slot);
     const char * Taken = nullptr;
     for (N64Control C : Occupants(Place))
     {
@@ -890,6 +881,23 @@ static bool LoadCapturingStderr(const char * Path, std::string * Message, bool *
     return Ok;
 }
 
+// The reader's message with everything through Path cut away, and what follows the path read
+// as a person would: ":<line>:<col>: reason" becomes "line <line>: reason", ": reason" becomes
+// "reason". Unchanged when the message never names Path. Validate and LoadForRom both show the
+// reader's reason on a status line too short for a path.
+static std::string WithoutPath(const std::string & Message, const char * Path)
+{
+    const size_t Pos = Message.find(Path);
+    if (Pos == std::string::npos) return Message;
+    const std::string Rest = Message.substr(Pos + strlen(Path));
+    int Line = 0, Column = 0, Used = 0;
+    if (sscanf(Rest.c_str(), ":%d:%d: %n", &Line, &Column, &Used) == 2 && Used > 0)
+    {
+        return "line " + std::to_string(Line) + ": " + Rest.substr(Used);
+    }
+    return Rest.compare(0, 2, ": ") == 0 ? Rest.substr(2) : Rest;
+}
+
 bool WizardDraft::Validate(const char * BaseName)
 {
     m_Error.clear();
@@ -910,11 +918,7 @@ bool WizardDraft::Validate(const char * BaseName)
             // rather than guess the prefix's shape by scanning for colons. Leaves ":<line>:
             // <col>: reason" if found. If the message doesn't contain Path (a reader message
             // that never named the file, say), it is shown unchanged.
-            const size_t Pos = m_Error.find(Path);
-            if (Pos != std::string::npos)
-            {
-                m_Error.erase(0, Pos + strlen(Path));
-            }
+            m_Error = WithoutPath(m_Error, Path);
         }
     }
     else
@@ -959,9 +963,7 @@ std::string WizardDraft::LoadForRom(const char * RomPath, const char * ExeDir, s
         // cuts through its temp path, leaving ": reason" or ":<line>:<col>: reason", and drop
         // the trailing clause: this note is about the panel editor, which has no built-in
         // defaults of its own to fall back to mid-sentence.
-        std::string Reason = m_Error;
-        const size_t Pos = Reason.find(Own);
-        if (Pos != std::string::npos) Reason.erase(0, Pos + strlen(Own));
+        std::string Reason = WithoutPath(m_Error, Own);
         const char * const kSuffix = "; using built-in defaults";
         const size_t SuffixLen = strlen(kSuffix);
         if (Reason.size() >= SuffixLen &&

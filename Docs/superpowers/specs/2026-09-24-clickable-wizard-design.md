@@ -204,10 +204,13 @@ with no window and exit.
 - **`launcher` area, extended:** the `Edit` rectangle beside the title with no overlap,
   `LauncherAct` on it, and its dimming without a wizard.
 - **`make wizard-selftest`, second run:** `Project64-wizard --edit <tmp>/game.z64` with
-  `PJ64_EDIT_SELFTEST=1` drives the real editor screen with scripted clicks and no window: Z
-  on `mid2` as a toggle, the hold on `mid5`, A on the picture, a click on the menu's slot that
-  moves the menu, save. The script reads the file back through the real reader's rules and a
-  second run over the existing file must make `.orig` exactly once.
+  `PJ64_EDIT_SELFTEST=1` drives the real editor screen with scripted clicks and no window,
+  starting from the generic layout (which already has Z as a toggle on `mid2`, the hold on
+  `mid5` and A on the picture): L onto `mid4` as a toggle, the hold onto `pad-up`, R onto
+  `pad-down` so the menu moves to `mid5`, Z onto the picture, save. The saved file passes the
+  real reader (Save validates first) and the script compares its bindings block with the
+  expected one; a second run over the existing file must make `.orig`, and a third must leave
+  it alone.
 - **`make launcher-selftest`, third step:** after the two games, `Edit` on the first row
   (`nolayout.z64`) with `PJ64_EDIT_SELFTEST=1` passed through the environment. The script
   requires `launcher: editor ended (exit 0)`, a `nolayout.yaml` beside the ROM link with a

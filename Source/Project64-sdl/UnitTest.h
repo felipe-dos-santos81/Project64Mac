@@ -5,6 +5,8 @@
 // the environment, the InputConfig instance) as it found it. No window and no SDL init.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #pragma once
+#include <Common/PointerLayout.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +34,34 @@ inline const char * TestWriteTemp(const char * Text)
     write(Fd, Text, strlen(Text));
     close(Fd);
     return Path;
+}
+
+// A whole file as a string, "" when it cannot be read.
+inline std::string TestReadAll(const std::string & Path)
+{
+    std::string Out;
+    FILE * F = fopen(Path.c_str(), "r");
+    if (F == nullptr) return Out;
+    char Buf[4096];
+    size_t N;
+    while ((N = fread(Buf, 1, sizeof(Buf), F)) > 0) Out.append(Buf, N);
+    fclose(F);
+    return Out;
+}
+
+// Writes Text to Path, replacing it, exiting on failure like TestTouch.
+inline void TestWriteAll(const std::string & Path, const char * Text)
+{
+    FILE * F = fopen(Path.c_str(), "w");
+    if (F == nullptr) { perror(Path.c_str()); exit(2); }
+    fputs(Text, F);
+    fclose(F);
+}
+
+// A panel slot by its layout name ("mid2", "pad-down", …).
+inline int TestZone(const char * Name)
+{
+    return PointerZoneFromName(Name);
 }
 
 // True when Text contains Needle.
@@ -67,6 +97,7 @@ inline std::string TestMakeTempDir(const char * Prefix)
     char Path[128];
     snprintf(Path, sizeof(Path), "/tmp/%s-XXXXXX", Prefix);
     if (mkdtemp(Path) == nullptr) { perror("mkdtemp"); exit(2); }
+
     return Path;
 }
 

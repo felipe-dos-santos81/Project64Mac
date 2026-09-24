@@ -23,6 +23,12 @@ void Fill(SDL_Renderer * R, EditRect Rect, Uint8 Red, Uint8 Green, Uint8 Blue)
     SDL_RenderFillRect(R, &F);
 }
 
+// The fill of whatever target is under the pointer.
+void FillHot(SDL_Renderer * R, EditRect Rect)
+{
+    Fill(R, Rect, 70, 90, 140);
+}
+
 // Bright for text that acts, dim for text that does not, gold for the current choice.
 void Ink(SDL_Renderer * R, bool Bright, bool Lit)
 {
@@ -40,7 +46,7 @@ void Centred(SDL_Renderer * R, EditRect Rect, const std::string & Text)
 void Button(SDL_Renderer * R, EditRect Rect, const std::string & Label, bool On, bool Lit, bool Hot)
 {
     if (!On) Fill(R, Rect, 28, 28, 32);
-    else if (Hot) Fill(R, Rect, 70, 90, 140);
+    else if (Hot) FillHot(R, Rect);
     else if (Lit) Fill(R, Rect, 72, 62, 30);
     else Fill(R, Rect, 40, 44, 56);
     Ink(R, On, On && Lit);
@@ -54,7 +60,7 @@ void Panel(SDL_Renderer * R, const EditState & S, const WizardDraft & D, EditTar
         const EditTarget T = { EditTargetKind::Zone, Z };
         const EditRect Rect = EditTargetRect(T);
         const bool Hot = S.View == EditView::Panel && Hover == T;
-        if (Hot) Fill(R, Rect, 70, 90, 140);
+        if (Hot) FillHot(R, Rect);
         else if (Z == POINTER_ZONE_GAME) Fill(R, Rect, 28, 28, 34);
         else Fill(R, Rect, 44, 44, 52);
         Ink(R, true, false);
@@ -66,24 +72,6 @@ void Panel(SDL_Renderer * R, const EditState & S, const WizardDraft & D, EditTar
         }
     }
 }
-}
-
-// What the camera is doing, in one line for a gesture list: "tracking", "camera off: …".
-// Declared in Screens.h (Screens.cpp calls it too, for the step-by-step wizard's own gesture
-// screen) but defined here: EditDraw is its only caller in this file, and keeping it beside
-// its one real use lets the unit tests link EditScreen.o for EditHandleEvent without also
-// linking Screens.o and the rest of the step-by-step wizard's screen-drawing code.
-const char * WizardFaceStatus(uint32_t Face)
-{
-    switch (Face)
-    {
-    case FACE_OFF: return "camera off: the list still works, unlit";
-    case FACE_STARTING: return "camera starting";
-    case FACE_TRACKING: return "tracking";
-    case FACE_NO_FACE: return "no face found";
-    case FACE_DENIED: return "camera denied in Settings > Privacy & Security";
-    default: return "camera unavailable";
-    }
 }
 
 void EditDraw(SDL_Renderer * R, const EditState & S, const WizardDraft & D, const char * Title,
@@ -114,7 +102,7 @@ void EditDraw(SDL_Renderer * R, const EditState & S, const WizardDraft & D, cons
         if (T.Kind == EditTargetKind::Gesture)
         {
             const bool Firing = (Gestures & (1u << T.Index)) != 0;
-            if (Hot) Fill(R, Rect, 70, 90, 140);
+            if (Hot) FillHot(R, Rect);
             else Fill(R, Rect, 24, 26, 32);
             Ink(R, On, On && Firing);
             DebugText(R, Rect.X + 8, Rect.Y + (Rect.H - kGlyph) / 2, kScale, EditLabel(S, D, T).c_str());

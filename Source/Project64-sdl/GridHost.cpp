@@ -3,11 +3,11 @@
 // strip that owns the keyboard. See Docs/superpowers/specs/2026-09-14-multi-rom-grid-design.md
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "GridHost.h"
+#include "ExecutablePath.h"
 #include <Common/GridKeys.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <SDL3/SDL.h>
-#include <mach-o/dyld.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,22 +27,6 @@ static volatile sig_atomic_t g_StopRequested = 0;
 static void HandleStopSignal(int /*sig*/)
 {
     g_StopRequested = 1;
-}
-
-static std::string ExecutablePath(void)
-{
-    char Buf[4096];
-    uint32_t Size = sizeof(Buf);
-    if (_NSGetExecutablePath(Buf, &Size) != 0)
-    {
-        return "";
-    }
-    char Resolved[4096];
-    if (realpath(Buf, Resolved) == nullptr)
-    {
-        return "";
-    }
-    return std::string(Resolved);
 }
 
 // Drops one reaped pid so later kill/wait loops never touch a pid the OS may reuse.
