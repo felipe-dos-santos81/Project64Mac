@@ -10,7 +10,10 @@
 # A fourth run loads a small layout with Z as a toggle on mid2: one static press over mid2 is
 # one press edge, so Z must be on and nothing latched (zone=-1).
 # A fifth run presses the shipped Super Mario 64 layout's menu slot (pad-down) from the first
-# frame, while the game is still booting: the menu host must report that it paused the game.
+# frame, while the game is still booting. The menu host must report that the overlay drew at
+# least two frames after the menu opened ("menu: drawn", so one of them certainly drew the
+# menu) and that the core then confirmed the pause ("menu: paused"); a draw that timed out,
+# or a pause the core never confirmed, fails the run even though the host carries on.
 # Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md and
 # Docs/superpowers/specs/2026-09-15-per-game-input-yaml-design.md
 set -eu
@@ -55,7 +58,8 @@ one_run() {
 }
 
 # $1 = inject spec, $2 = ROM path, $3 = PJ64_INPUT_YAML value. Passes when the menu host
-# reports "menu: paused" (PJ64_MENU_SELFTEST prints each phase).
+# reports "menu: drawn" and "menu: paused", and neither "menu: draw timed out" nor
+# "menu: the game did not pause" (PJ64_MENU_SELFTEST prints each phase).
 menu_run() {
     LOG="$(mktemp)"
     PJ64_INPUT_YAML="$3" PJ64_FACE=0 PJ64_MENU_SELFTEST=1 PJ64_POINTER_INJECT="$1" "$BIN" "$2" >"$LOG" 2>&1 &
@@ -68,11 +72,16 @@ menu_run() {
     done
     kill -TERM "$PID" 2>/dev/null || true
     wait "$PID" 2>/dev/null || true
-    if grep -q '^menu: paused' "$LOG"; then
+    WHY=""
+    grep -q '^menu: draw timed out' "$LOG" && WHY="the overlay never drew the menu (draw timed out)"
+    [ -z "$WHY" ] && grep -q '^menu: the game did not pause' "$LOG" && WHY="the core never confirmed the pause"
+    [ -z "$WHY" ] && ! grep -q '^menu: drawn' "$LOG" && WHY="the menu never reported drawn"
+    [ -z "$WHY" ] && ! grep -q '^menu: paused' "$LOG" && WHY="the menu never reported paused"
+    if [ -z "$WHY" ]; then
         rm -f "$LOG"
         return 0
     fi
-    echo "FAIL: inject $1: the menu never reported paused (log: $LOG)" >&2
+    echo "FAIL: inject $1: $WHY (log: $LOG)" >&2
     return 1
 }
 

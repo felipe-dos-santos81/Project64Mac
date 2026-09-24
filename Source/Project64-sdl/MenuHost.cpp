@@ -7,13 +7,15 @@
 // standard containers they rely on, as it does for main.cpp through SdlRenderWindow.h.
 #include <Project64-core/Plugins/Plugin.h>
 #include <Project64-core/N64System/N64System.h>
+#include <Project64-core/N64System/N64Types.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/Settings.h>
 #include <Project64-core/Settings/SettingsID.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static const Uint64 kFrameWaitMs = 500;    // longest wait for the overlay to draw
+static const Uint64 kFrameWaitMs = 500;    // longest wait for the overlay to draw a step
+static const Uint64 kDrawWaitMs = 2000;    // opening: some games present no frame for over a second while booting
 static const Uint64 kPauseWaitMs = 1000;   // longest wait for the core to confirm a pause
 
 MenuHost::MenuHost(PointerState * State, SDL_Window * Window, int MenuZone, uint32_t MenuGesture) :
@@ -113,17 +115,64 @@ bool MenuHost::Poll()
     const bool FaceOn = PointerMenuFaceOn(m_State->Face.load(std::memory_order_relaxed));
     const Uint64 Now = SDL_GetTicks();
 
+    // Frames the overlay finished since the current wait began (unsigned, so a wrap is fine).
+    const uint32_t Drawn = m_State->OverlayFrames.load(std::memory_order_acquire) - m_Frames;
+
     switch (m_Phase)
     {
     case Phase::Closed:
+        // The menu's pause is queued for the CPU thread and a resume only triggers the pause
+        // event, which Pause wipes on entry: a resume that beat its queued pause is lost, and
+        // the late pause would block the game with the menu closed. Undo it here.
+        if (g_Settings->LoadBool(GameRunning_CPU_Paused) && g_Settings->LoadDword(GameRunning_CPU_PausedType) == PauseType_FromMenu)
+        {
+            g_BaseSystem->ExternalEvent(SysEvent_ResumeCPU_FromMenu);
+            if (m_Trace)
+            {
+                fprintf(stderr, "menu: healed a late pause\n");
+            }
+        }
+        return Act(PointerMenuStep(&m_Menu, S.Button, Zone, Gesture, m_MenuZone, FaceOn));
     case Phase::Paused:
         return Act(PointerMenuStep(&m_Menu, S.Button, Zone, Gesture, m_MenuZone, FaceOn));
     case Phase::Drawing:
+        // A frame already in flight when MenuOpen was stored can finish without the menu, so
+        // only the second frame after it certainly drew the menu.
+        if (Drawn >= 2 || Now - m_Since >= kDrawWaitMs)
+        {
+            if (m_Trace)
+            {
+                fprintf(stderr, Drawn >= 2 ? "menu: drawn\n" : "menu: draw timed out\n");
+            }
+            g_BaseSystem->ExternalEvent(SysEvent_PauseCPU_FromMenu);
+            Enter(Phase::Pausing);
+        }
+        break;
     case Phase::Stepping:
-        if (m_State->OverlayFrames.load(std::memory_order_acquire) != m_Frames || Now - m_Since >= kFrameWaitMs)
+        // The CPU was paused when the wait began, so any frame since then drew the change.
+        // Never queue a pause while the CPU still reads as paused: that pause would sit behind
+        // a stale one. If the resume has not taken after a whole wait, send it again.
+        if (Drawn >= 1)
         {
             g_BaseSystem->ExternalEvent(SysEvent_PauseCPU_FromMenu);
             Enter(Phase::Pausing);
+        }
+        else if (Now - m_Since >= kFrameWaitMs)
+        {
+            if (g_Settings->LoadBool(GameRunning_CPU_Paused))
+            {
+                g_BaseSystem->ExternalEvent(SysEvent_ResumeCPU_FromMenu);
+                m_Since = Now;
+                if (m_Trace)
+                {
+                    fprintf(stderr, "menu: resume retried\n");
+                }
+            }
+            else
+            {
+                g_BaseSystem->ExternalEvent(SysEvent_PauseCPU_FromMenu);
+                Enter(Phase::Pausing);
+            }
         }
         break;
     case Phase::Pausing:

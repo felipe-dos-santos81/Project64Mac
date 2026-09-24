@@ -160,7 +160,7 @@ reads the menu gesture's bit and the face status, and runs `PointerMenuStep` whe
 is closed or paused. Its phases:
 
 1. *Closed.* `OPEN` → set `MenuOpen`, note `OverlayFrames`, go to Drawing.
-2. *Drawing.* When `OverlayFrames` has moved on, or after 500 ms, queue
+2. *Drawing.* When `OverlayFrames` has moved on by two frames, or after 2 s, queue
    `PauseCPU_FromMenu` and go to Pausing.
 3. *Pausing.* When `GameRunning_CPU_Paused` is true, go to Paused. After 1 s, print one
    stderr line and go to Paused anyway (the game keeps running; every item still works).
@@ -209,7 +209,8 @@ and say what the menu holds.
   `menu must be {zone:} or {face:}`; `the menu cannot be game`;
   `<slot> is the menu slot and cannot also be bound` (a control's slot or the hold slot);
   `<gesture> is the menu's gesture and cannot also be bound`.
-- The overlay not drawing within 500 ms (a game presenting no frames on some screen): the
+- The overlay not drawing within 2 s of opening, or within 500 ms of each step (a game
+  presenting no frames on some screen, as some do for over a second while booting): the
   host pauses anyway; the menu may look stale until the game presents a frame.
 - The pause not confirmed within 1 s: one stderr line, `menu: the game did not pause`;
   the menu stays usable with the game running.
