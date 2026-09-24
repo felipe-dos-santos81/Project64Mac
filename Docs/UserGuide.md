@@ -302,19 +302,30 @@ the game, and the panel shows the menu's items instead of the buttons:
 
 | Slot | Item |
 |---|---|
-| middle slot, and `==` itself | `Go`: carry on playing |
-| first middle slot | `Fs`: full screen on or off |
-| second middle slot | `Fc`: recentre the face, while the camera runs |
-| fourth middle slot | `Sv`: save the game's state |
-| fifth middle slot | `Ld`: load the saved state |
-| left of the D-pad cross | `Rs`: reset the game |
-| right of the C cross | `Qt`: quit |
+| `mid3`, the middle slot of the five, and `==` itself | `Go`: carry on playing |
+| `mid1`, the first middle slot | `Fs`: full screen on or off |
+| `mid2`, the second middle slot | `Fc`: recentre the face, while the camera runs |
+| `mid4`, the fourth middle slot | `Sv`: save the game's state |
+| `mid5`, the fifth middle slot | `Ld`: load the saved state |
+| `pad-left`, the D-pad cross's left slot | `Rs`: reset the game |
+| `c-right`, the C cross's right slot | `Qt`: quit |
 
 `Sv`, `Ld`, `Rs` and `Qt` need two clicks: the first lights the slot, the second does it,
 and a click anywhere else lets go. There is one save slot, so `Sv` replaces the last save.
 The game gets no input while the menu is open. Each click that changes the menu lets the
 game run for a single frame so the panel can redraw; the character stands still for it.
 The click that closes the menu counts in the game only after you release it.
+
+A layout's menu gesture, `Menu: {face: …}`, also closes the menu while it is open, like
+`Go`.
+
+`Sv` writes under `Bin/macOS/Save/`, in the folder named after the game and its checksum,
+as the file ending `.pj.zip`; `Ld` reads it back. `make clean` removes `Bin/macOS`, and
+the save with it.
+
+A copy of a shipped layout made before the menu existed has no `==`, and that includes
+one kept beside the ROM (section 9). Replace its `DPadDown: {zone: pad-down}` line with
+`Menu: {zone: pad-down}` to get the menu.
 
 ## 8. Playing with your face
 

@@ -172,9 +172,11 @@ is closed or paused. Its phases:
    `OverlayFrames`, go to Stepping. A closing action → queue its event (after setting
    `Game_CurrentSaveState` to 0 for Save and Load; after bumping `ClearClicks` for
    Reset), clear `MenuOpen` and `MenuArmed`, resume, go to Closed. `QUIT` → report quit.
-5. *Stepping.* Queues the next pause once the CPU is running again (the paused flag reads
-   false, or `OverlayFrames` moved), and after 500 ms with the flag still true it resumes
-   again and restarts the wait.
+5. *Stepping.* Waits for `OverlayFrames` to move (the game drew a frame), then queues the
+   next pause and goes to Pausing. Only if 500 ms pass without a frame does it look at the
+   paused flag: false means the CPU is running, so it queues the pause and goes to
+   Pausing; still true means the resume was lost, so it resumes again and restarts the
+   wait.
 
 Presses during Drawing, Pausing and Stepping are ignored, but the button's state is still
 tracked, so a press that began then needs a release before it counts. With
@@ -272,5 +274,7 @@ added.
   may run a few frames rather than one, still with no input.
 - **Games that stop presenting frames** on some screens make every menu change wait for
   the 500 ms timeout and look stale until then.
-- **Soft reset bypasses `RomClosed`.** The menu's Reset clears the clicks through
-  `ClearClicks` instead; any later way to soft-reset must do the same.
+- **Soft reset closes and reopens the plugins late.** The core runs every plugin's
+  `RomClosed` and `RomOpen` about a second of game time after a soft reset, while the game
+  runs; the menu's Reset is the first way to reach that in this port. `ClearClicks` clears
+  the clicks at once rather than waiting for it.

@@ -50,6 +50,21 @@ void MenuHost::ResumeUntilDrawn(Phase Next)
     Enter(Next);
 }
 
+// The menu's pause is queued for the CPU thread and a resume only triggers the pause event,
+// which Pause wipes on entry: a resume that beat its queued pause is lost, and the late pause
+// would block the game. Undo such a pause while nothing of the menu's should be holding it.
+void MenuHost::HealLatePause()
+{
+    if (g_Settings->LoadBool(GameRunning_CPU_Paused) && g_Settings->LoadDword(GameRunning_CPU_PausedType) == PauseType_FromMenu)
+    {
+        g_BaseSystem->ExternalEvent(SysEvent_ResumeCPU_FromMenu);
+        if (m_Trace)
+        {
+            fprintf(stderr, "menu: healed a late pause\n");
+        }
+    }
+}
+
 void MenuHost::Close()
 {
     m_State->MenuArmed.store(POINTER_ZONE_NONE, std::memory_order_release);
@@ -66,8 +81,10 @@ bool MenuHost::Act(PointerMenuAction Action)
         return true;
     case MENU_ACTION_OPEN:
         m_State->MenuArmed.store(POINTER_ZONE_NONE, std::memory_order_release);
-        m_Frames = m_State->OverlayFrames.load(std::memory_order_acquire);
-        m_State->MenuOpen.store(1u, std::memory_order_release);
+        // MenuOpen first, then the frame count: only a frame already in flight can be counted
+        // after this load without having seen the store, so the second one drew the menu.
+        m_State->MenuOpen.store(1u, std::memory_order_seq_cst);
+        m_Frames = m_State->OverlayFrames.load(std::memory_order_seq_cst);
         Enter(Phase::Drawing);
         return true;
     case MENU_ACTION_RESUME:
@@ -80,7 +97,8 @@ bool MenuHost::Act(PointerMenuAction Action)
         Close();
         return true;
     case MENU_ACTION_RESET:
-        // A soft reset never reaches the plugin's RomClosed, so the clicks are cleared here.
+        // A soft reset reaches the plugin's RomClosed only when the core's reset timer
+        // finishes; clear the clicks now.
         m_State->ClearClicks.fetch_add(1u, std::memory_order_release);
         g_BaseSystem->ExternalEvent(SysEvent_ResetCPU_Soft);
         Close();
@@ -88,7 +106,15 @@ bool MenuHost::Act(PointerMenuAction Action)
     case MENU_ACTION_QUIT:
         return false; // CloseSystem resumes a paused CPU before stopping it
     case MENU_ACTION_FULLSCREEN:
-        SDL_SetWindowFullscreen(m_Window, (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) == 0);
+        // Only a window MakeWindowScalable pinned may change size (AGENTS.md).
+        if ((SDL_GetWindowFlags(m_Window) & SDL_WINDOW_RESIZABLE) != 0)
+        {
+            SDL_SetWindowFullscreen(m_Window, (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) == 0);
+        }
+        else
+        {
+            fprintf(stderr, "menu: full screen needs a scalable window\n");
+        }
         break;
     case MENU_ACTION_RECENTRE:
         m_State->RecentreFace.store(1u, std::memory_order_release);
@@ -121,21 +147,14 @@ bool MenuHost::Poll()
     switch (m_Phase)
     {
     case Phase::Closed:
-        // The menu's pause is queued for the CPU thread and a resume only triggers the pause
-        // event, which Pause wipes on entry: a resume that beat its queued pause is lost, and
-        // the late pause would block the game with the menu closed. Undo it here.
-        if (g_Settings->LoadBool(GameRunning_CPU_Paused) && g_Settings->LoadDword(GameRunning_CPU_PausedType) == PauseType_FromMenu)
-        {
-            g_BaseSystem->ExternalEvent(SysEvent_ResumeCPU_FromMenu);
-            if (m_Trace)
-            {
-                fprintf(stderr, "menu: healed a late pause\n");
-            }
-        }
+        // A late pause would block the game with the menu closed.
+        HealLatePause();
         return Act(PointerMenuStep(&m_Menu, S.Button, Zone, Gesture, m_MenuZone, FaceOn));
     case Phase::Paused:
         return Act(PointerMenuStep(&m_Menu, S.Button, Zone, Gesture, m_MenuZone, FaceOn));
     case Phase::Drawing:
+        // A late pause from the last close would stop the frames the menu waits for.
+        HealLatePause();
         // A frame already in flight when MenuOpen was stored can finish without the menu, so
         // only the second frame after it certainly drew the menu.
         if (Drawn >= 2 || Now - m_Since >= kDrawWaitMs)

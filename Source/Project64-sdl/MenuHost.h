@@ -26,6 +26,7 @@ private:
     bool Act(PointerMenuAction Action);
     void Close();
     void ResumeUntilDrawn(Phase Next);
+    void HealLatePause();
 
     PointerState * m_State;
     SDL_Window * m_Window;

@@ -242,8 +242,9 @@ Only the `Aarch64` backend directory survives.
 - **A paused game never redraws the panel.** The overlay is drawn by the emulation thread
   when the game presents a frame, and GL never leaves that thread. Every change to the menu
   is therefore shown by resuming the game until `OverlayFrames` moves, then pausing again;
-  never by drawing from the main thread. A soft reset does not call the plugin's
-  `RomClosed`, so anything that resets the game must bump `ClearClicks` as the menu does.
+  never by drawing from the main thread. A soft reset reaches the plugins' `RomClosed` only
+  when the core's reset timer finishes, about a second of game time later, so the menu's
+  Reset also bumps `ClearClicks` to clear the clicks at once.
 - **The camera prompt is attributed to the launcher.** The binary is not an app bundle, so
   macOS asks for camera access on behalf of the terminal or IDE. A past denial there makes
   the tracker report `denied` without a new prompt; the fix is in System Settings.
