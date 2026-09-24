@@ -9,9 +9,9 @@
 # c-down, c-left, c-right (right cross) and mid1-mid5. Any control can take any slot.
 #
 # Z is a toggle slot: one press holds it, the next lets go, and the button is free in
-# between. mid5 is the stick's hold slot (Ho): press it and the stick keeps the tilt the
-# cursor last rested at while you reach for the panel; it lets go on a second press, or
-# once the cursor rests in the game image again.
+# between. mid5 is the stick's hold slot (Ho): press it and the stick goes back to the
+# tilt the cursor last rested at, and keeps it while you use the panel; it lets go on a
+# second press, or once the cursor rests in the game image again.
 #   Dive:      run, press Ho, press B.
 #   Long jump: run, press Ho, press Z, move up into the game image and click (A); press Z
 #              again to stand.

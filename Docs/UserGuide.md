@@ -270,16 +270,20 @@ leaves the game image. Two forms get around both, and the shipped layouts use th
   A together. Any slot can be a toggle, the game image included (Mario Kart's accelerate).
   Every control on one slot must agree on `toggle`. Toggles clear when the game closes.
 - **The stick hold**, `Stick: {stick: pointer, hold: mid5}`. The slot shows `Ho`. Press it
-  and the stick keeps the tilt the cursor last *rested* at in the game image, while you
-  reach for any other slot. It lets go on a second press, or once the cursor rests in the
-  game image again, so you can click in the picture on the way back up and still have the
-  held tilt.
+  and the stick goes back to the tilt the cursor last *rested* at in the game image, and
+  keeps it while you reach for any other slot. It starts at the press, not before: on a
+  slow reach down to `Ho` the stick reads the picture you cross, so the character may turn
+  or slow on the way. It lets go on a second press, or once the cursor rests in the game
+  image again, so you can click in the picture on the way back up and still have the held
+  tilt.
 
-"Rested" means staying within 8 px for 9 polls, about 150 ms. A slow move down to the
-panel never rests, so the hold never picks up the backward tilt the bottom of the picture
-reads as. `PJ64_POINTER_SETTLE=<px>,<polls>` changes both numbers for a hand that moves
-more or less; `0` turns resting off, and the hold then gives a centred stick and ends only
-on a second press.
+"Rested" means staying within 8 px for 9 of the game's controller reads: about 150 ms in a
+game that reads the controller 60 times a second, twice that in one that reads it 30
+times, as Super Mario 64 and Mario Kart 64 do. A slow move down to the panel never rests,
+so the hold never picks up the backward tilt the bottom of the picture reads as.
+`PJ64_POINTER_SETTLE=<px>,<polls>` changes both numbers for a hand that moves more or
+less; `0` turns resting off, and the hold then gives a centred stick and ends only on a
+second press.
 
 Toggle slots and the hold slot have a mark across their top-right corner, and are bright
 while on. In Super Mario 64:
@@ -338,6 +342,10 @@ is always chosen by name.
 
 Keep your own layouts beside the ROM. `make all` deletes and recopies `Config/mouse/` and
 `Config/face/` under the binary on every build.
+
+A copy of a shipped mouse layout made before the one-button change still binds face
+gestures and starts the camera, and beside the ROM it wins over the new file in
+`Config/mouse/`. Delete it, or copy the new one over it.
 
 A matching layout that binds a gesture starts the camera. Anything that launches the
 emulator unattended over a folder of games should set `PJ64_FACE=0`; the ROM sweep in

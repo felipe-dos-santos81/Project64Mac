@@ -7,9 +7,9 @@
 # The game image steers. A is a toggle on the game image: click the picture once to
 # accelerate and keep going, again to coast; steering is only where the cursor is, so no
 # button needs holding. R is a toggle slot: one press hops and holds the drift, the next
-# lets go. mid5 is the stick's hold slot (Ho): press it to keep steering the way you were
-# while you reach for an item or the brake; it lets go on a second press, or once the
-# cursor rests in the game image again.
+# lets go. mid5 is the stick's hold slot (Ho): press it to go back to steering the way
+# you were resting, and keep that while you reach for an item or the brake; it lets go
+# on a second press, or once the cursor rests in the game image again.
 # L is left out: the game does not need it, and it keeps its keyboard key.
 
 bindings:

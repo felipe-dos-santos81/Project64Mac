@@ -6,9 +6,9 @@
 #
 # The game image is the stick and the zone "game": a click anywhere in it fires. R is a
 # toggle slot: one press enters aim mode, the next leaves it, and the button is free to
-# fire in between. mid5 is the stick's hold slot (Ho): press it to keep walking the way
-# you were while you reach for the panel; it lets go on a second press, or once the cursor
-# rests in the game image again.
+# fire in between. mid5 is the stick's hold slot (Ho): press it to go back to walking
+# the way you were resting, and keep that while you use the panel; it lets go on a
+# second press, or once the cursor rests in the game image again.
 # L is left out: R does the aiming, and L keeps its keyboard key.
 
 bindings:

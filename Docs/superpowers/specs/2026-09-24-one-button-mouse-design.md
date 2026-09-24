@@ -84,14 +84,14 @@ cursor rests the stick follows it again from wherever the player put it. The hol
 when the ROM closes.
 
 **Last settled tilt.** The cursor settles when it stays within 8 px of an anchor point for
-9 consecutive polls (about 150 ms at 60 polls a second) inside the game image. At the poll
-where that count is reached, the gated stick is recorded as the settled tilt; the count
-then keeps rising without recording again until the cursor leaves the 8 px radius, which
-moves the anchor there and restarts the count. Leaving the game image resets the anchor
-and the count but keeps the recorded tilt. A slow drag to the panel never stays within
-8 px for 150 ms, so it never records the backward tilt; a flick does not either, and the
-flick gate already holds the stick during the jump. Before the first settle since the ROM
-opened the settled tilt is neutral.
+9 consecutive polls inside the game image (a poll is one of the game's controller reads:
+about 150 ms at 60 a second, 300 ms at 30). At the poll where that count is reached, the
+gated stick is recorded as the settled tilt; the count then keeps rising without recording
+again until the cursor leaves the 8 px radius, which moves the anchor there and restarts
+the count. Leaving the game image resets the anchor and the count but keeps the recorded
+tilt. A slow drag to the panel never stays within 8 px for 9 polls, so it never records
+the backward tilt; a flick does not either, and the flick gate already holds the stick
+during the jump. Before the first settle since the ROM opened the settled tilt is neutral.
 
 `PJ64_POINTER_SETTLE=<px>,<polls>` sets the radius and the count for players whose hands
 move more or less. `0` turns settling off: the hold then always gives neutral and ends only
@@ -264,9 +264,11 @@ No new framework; each suite already exists.
 
 ## Open risks
 
-- **The settle constants are a guess.** 8 px and 150 ms come from reasoning, not a player.
-  A tremor may never settle (the hold then only ends on a press, which is still safe), and
-  a very slow, deliberate move may settle on the way to the panel. `PJ64_POINTER_SETTLE`
-  exists for this; the manual run should try both a slow and a fast reach.
+- **The settle constants are a guess.** 8 px and 9 polls come from reasoning, not a
+  player, and a poll's length follows the game's controller rate, so the same setting is a
+  different time in different games. A tremor may never settle (the hold then only ends on
+  a press, which is still safe), and a very slow, deliberate move may settle on the way to
+  the panel. `PJ64_POINTER_SETTLE` exists for this; the manual run should try both a slow
+  and a fast reach.
 - **Game knowledge in the table.** The GoldenEye and Mario Kart assignments assume L is
   unused and that R is the button worth toggling; the manual run confirms or moves them.

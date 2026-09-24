@@ -19,7 +19,7 @@ enum
 #define POINTER_PANEL_HEIGHT 160   // rows below the game image, in launch-size pixels
 #define POINTER_FLICK_PX 24.0f     // cursor travel per poll above which the stick holds
 #define POINTER_SETTLE_PX 8.0f     // a cursor within this distance of its anchor is resting
-#define POINTER_SETTLE_POLLS 9     // polls it must rest for to settle (about 150 ms at 60 a second)
+#define POINTER_SETTLE_POLLS 9     // polls it must rest for to settle; a poll is one of the game's controller reads (about 150 ms at 60 a second, 300 ms at 30)
 
 // Zone order: the left cross, the right cross, the five middle slots, then the game image.
 inline const char * PointerZoneName(int Zone)
@@ -304,7 +304,7 @@ inline bool PointerParseSettle(const char * Text, float * Radius, int * Polls)
     float R = 0.0f;
     int P = 0;
     char Tail = '\0';
-    if (sscanf(Text, "%f,%d%c", &R, &P, &Tail) != 2 || R <= 0.0f || P <= 0)
+    if (sscanf(Text, "%f,%d%c", &R, &P, &Tail) != 2 || !(R > 0.0f) || !isfinite(R) || P <= 0)
     {
         return false;
     }

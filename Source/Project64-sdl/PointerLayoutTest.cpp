@@ -411,6 +411,8 @@ int main()
         CHECK(!PointerParseSettle("8,0", &R, &P));
         CHECK(!PointerParseSettle("-1,9", &R, &P));
         CHECK(!PointerParseSettle("8,9x", &R, &P));
+        CHECK(!PointerParseSettle("nan,9", &R, &P));
+        CHECK(!PointerParseSettle("inf,9", &R, &P));
         CHECK(R == 5.0f && P == 7);
     }
 
