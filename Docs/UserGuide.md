@@ -294,8 +294,9 @@ while on. In Super Mario 64:
 
 ### The menu
 
-The panel's `==` slot opens a menu: `pad-down` in the three shipped layouts, whose D-pad
-down now lives only on its keyboard key. A layout can put it anywhere with
+The panel's `==` slot opens a menu: `pad-down` in the three shipped layouts, which no
+longer list `DPadDown` there, so it keeps its built-in keyboard key (`K`) and gamepad
+D-pad down button — it is just off the panel now. A layout can put it anywhere with
 `Menu: {zone: <slot>}`, or on a gesture with `Menu: {face: <gesture>}`. Opening it pauses
 the game, and the panel shows the menu's items instead of the buttons:
 
