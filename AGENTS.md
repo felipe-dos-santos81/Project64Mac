@@ -164,6 +164,13 @@ labels, the latched zone and the lit quadrant back for `Overlay.cpp`, which read
 viewport to find the game rectangle and paints the panel below it in
 `CSdlRenderWindow::SwapWindow` before the flush.
 
+*The menu.* A `Menu:` key in a layout gives the panel an `==` slot (or a gesture) that opens
+the emulator actions menu. `Source/Project64-sdl/MenuHost.cpp` runs it on the main thread,
+because a paused game runs neither `GetKeys` nor the overlay: it reads clicks from the
+published `PointerSample`, applies the pure rules in `Source/Common/PointerMenu.h`, pauses
+and resumes the core with `ExternalEvent`, and waits on `PointerState::OverlayFrames` so it
+pauses only once the menu is on screen. While `MenuOpen` is set the plugin returns no input.
+
 Layouts are the `{zone:}`, `{face:}`, `{stick: pointer}` and `{stick: head|head-digital}`
 YAML forms, in `Config/mouse/` and `Config/face/`. `PJ64_FACE_INJECT=<gesture>[,<x>,<y>]`
 stands in for the tracker so `Scripts/face_selftest.sh` proves the path without a camera.
@@ -232,6 +239,11 @@ Only the `Aarch64` backend directory survives.
   the stick hold, `Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md`) exists so
   that no mouse mode is needed: the player reaches the panel with a free cursor. Relative
   mouse mode, a grab or a warp would take the panel away from a player who has nothing else.
+- **A paused game never redraws the panel.** The overlay is drawn by the emulation thread
+  when the game presents a frame, and GL never leaves that thread. Every change to the menu
+  is therefore shown by resuming the game until `OverlayFrames` moves, then pausing again;
+  never by drawing from the main thread. A soft reset does not call the plugin's
+  `RomClosed`, so anything that resets the game must bump `ClearClicks` as the menu does.
 - **The camera prompt is attributed to the launcher.** The binary is not an app bundle, so
   macOS asks for camera access on behalf of the terminal or IDE. A past denial there makes
   the tracker report `denied` without a new prompt; the fix is in System Settings.

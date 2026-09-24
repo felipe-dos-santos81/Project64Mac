@@ -159,17 +159,22 @@ published `PointerSample` (launch-size pixels, as AGENTS.md requires), evaluates
 reads the menu gesture's bit and the face status, and runs `PointerMenuStep` whenever it
 is closed or paused. Its phases:
 
-1. *Closed.* `OPEN` → set `MenuOpen`, note `OverlayFrames`, go to Drawing.
-2. *Drawing.* When `OverlayFrames` has moved on by two frames, or after 2 s, queue
-   `PauseCPU_FromMenu` and go to Pausing.
+1. *Closed.* `OPEN` → set `MenuOpen`, note `OverlayFrames`, go to Drawing. Also heals a
+   late pause: if `GameRunning_CPU_Paused` is true with `GameRunning_CPU_PausedType` ==
+   `PauseType_FromMenu`, it resumes (a resume sent before a queued pause lands is wiped
+   by `Pause()`).
+2. *Drawing.* Waits for `OverlayFrames` to move by two frames — a frame already in flight
+   when the menu opens may finish without it, so only the second one certainly drew the
+   menu — or 2 s, then queues `PauseCPU_FromMenu` and goes to Pausing.
 3. *Pausing.* When `GameRunning_CPU_Paused` is true, go to Paused. After 1 s, print one
    stderr line and go to Paused anyway (the game keeps running; every item still works).
 4. *Paused.* `REPAINT`, `FULLSCREEN`, `RECENTRE` → act, publish `MenuArmed`, resume, note
    `OverlayFrames`, go to Stepping. A closing action → queue its event (after setting
    `Game_CurrentSaveState` to 0 for Save and Load; after bumping `ClearClicks` for
    Reset), clear `MenuOpen` and `MenuArmed`, resume, go to Closed. `QUIT` → report quit.
-5. *Stepping.* When `OverlayFrames` has moved on, or after 500 ms, queue
-   `PauseCPU_FromMenu` and go to Pausing.
+5. *Stepping.* Queues the next pause once the CPU is running again (the paused flag reads
+   false, or `OverlayFrames` moved), and after 500 ms with the flag still true it resumes
+   again and restarts the wait.
 
 Presses during Drawing, Pausing and Stepping are ignored, but the button's state is still
 tracked, so a press that began then needs a release before it counts. With
@@ -218,6 +223,11 @@ and say what the menu holds.
   `g_Notify`, as it does for any save; the menu closes regardless.
 - Quit while paused: the plan's first task confirms that `CN64System::CloseSystem` ends a
   paused CPU; if it does not, Quit resumes before closing.
+- With `PJ64_MENU_SELFTEST` set, each phase change prints `menu: <phase>` on stderr, and
+  four more lines mark the cases above: `menu: drawn` and `menu: draw timed out` (Drawing's
+  two ways out), `menu: healed a late pause` (Closed undoing a pause that lost its race
+  with a resume), and `menu: resume retried` (Stepping resending a resume that has not
+  taken after 500 ms).
 
 ## Tests
 
@@ -241,7 +251,8 @@ added.
 - `wizard-draft` area: `Menu` round-trips; `SetZone` onto the menu slot takes it off.
 - `make pointer-selftest` gains a fifth run: the shipped Super Mario 64 layout, a static
   inject pressed on `pad-down` (80,608) and `PJ64_MENU_SELFTEST=1`; stderr must reach
-  `menu: paused`, which proves open → draw → pause end to end.
+  `menu: drawn` and `menu: paused`, which proves open → draw → pause end to end, and the
+  run fails on `menu: draw timed out` or `menu: the game did not pause`.
 - `make wizard-screenshots-check` passes with the pictures unchanged.
 - Manual, once, each game: every item, press-twice, the one-frame steps, Quit while
   paused.

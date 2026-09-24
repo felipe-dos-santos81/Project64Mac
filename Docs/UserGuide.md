@@ -292,6 +292,29 @@ while on. In Super Mario 64:
 - **Long jump:** run, press `Ho`, press `Z`, move up into the picture and click; press `Z`
   again to stand up.
 
+### The menu
+
+The panel's `==` slot opens a menu: `pad-down` in the three shipped layouts, whose D-pad
+down now lives only on its keyboard key. A layout can put it anywhere with
+`Menu: {zone: <slot>}`, or on a gesture with `Menu: {face: <gesture>}`. Opening it pauses
+the game, and the panel shows the menu's items instead of the buttons:
+
+| Slot | Item |
+|---|---|
+| middle slot, and `==` itself | `Go`: carry on playing |
+| first middle slot | `Fs`: full screen on or off |
+| second middle slot | `Fc`: recentre the face, while the camera runs |
+| fourth middle slot | `Sv`: save the game's state |
+| fifth middle slot | `Ld`: load the saved state |
+| left of the D-pad cross | `Rs`: reset the game |
+| right of the C cross | `Qt`: quit |
+
+`Sv`, `Ld`, `Rs` and `Qt` need two clicks: the first lights the slot, the second does it,
+and a click anywhere else lets go. There is one save slot, so `Sv` replaces the last save.
+The game gets no input while the menu is open. Each click that changes the menu lets the
+game run for a single frame so the panel can redraw; the character stands still for it.
+The click that closes the menu counts in the game only after you release it.
+
 ## 8. Playing with your face
 
 A layout can bind any button to a facial gesture and the stick to your head, so the
@@ -407,7 +430,7 @@ Environment variables. Unset means the default.
 | `PJ64_FRAME_DUMP_MIN_NONBLACK` | Wait for the first frame with at least this percent of non-black pixels instead. |
 | `PJ64_FRAME_DUMP_MAX` | Latest frame to wait until; the best seen is written then. |
 | `PJ64_VIEWPORT_OFFSET`, `PJ64_TILE_SIZE`, `PJ64_AUDIO_MUTE`, `PJ64_POINTER_FD`, `PJ64_GRID_KEYS_FD` | Set by the emulator for its own child processes and plugins. Never set by hand. |
-| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_GRID_SELFTEST` | Test hooks used by the `*-selftest` targets. |
+| `PJ64_POINTER_INJECT`, `PJ64_FACE_INJECT`, `PJ64_POINTER_SELFTEST`, `PJ64_MENU_SELFTEST`, `PJ64_GRID_SELFTEST` | Test hooks used by the `*-selftest` targets. |
 
 Make targets for players. `make help` also lists the self-tests; the build stages are
 hidden.
