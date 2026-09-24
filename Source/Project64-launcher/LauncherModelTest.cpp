@@ -5,9 +5,11 @@
 #include <Project64-sdl/UnitTest.h>
 
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 static std::vector<LauncherGame> Titled(const std::vector<const char *> & Titles)
@@ -154,9 +156,158 @@ static void ChildEnvironment()
     CHECK(Has(Env, "PJ64_INPUT_YAML=/mine.yaml") && CountPrefix(Env, "PJ64_INPUT_YAML=") == 1);
 }
 
+static void Settings()
+{
+    const std::string Root = TestMakeTempDir("pj64-launcher-settings");
+    const std::string Path = Root + "/launcher.yaml";
+    const std::string Odd = Root + "/N64: Games \"best\"";   // a colon and quotes survive
+    TestMakeDir(Odd);
+    TestTouch(Odd + "/a.z64");
+    TestTouch(Root + "/b.z64");
+
+    LauncherSettings S;
+    S.Folder = "stale";
+    CHECK(LauncherLoadSettings(Path.c_str(), &S) == LauncherLoad::Missing);
+    CHECK(S.Folder.empty() && !S.Face && S.Recent.empty());   // defaults: Face off
+
+    S.Folder = Odd;
+    S.Face = true;
+    S.Recent = { Odd + "/a.z64", Root + "/gone.z64", Root + "/b.z64" };
+    CHECK(LauncherSaveSettings(Path.c_str(), S));
+    CHECK(access((Path + ".tmp").c_str(), F_OK) != 0);        // renamed into place
+
+    LauncherSettings Back;
+    CHECK(LauncherLoadSettings(Path.c_str(), &Back) == LauncherLoad::Ok);
+    CHECK(Back.Folder == Odd && Back.Face);
+    CHECK(Back.Recent.size() == 2 && Back.Recent[0] == Odd + "/a.z64" && Back.Recent[1] == Root + "/b.z64");
+
+    S.Recent.clear();
+    CHECK(LauncherSaveSettings(Path.c_str(), S));
+    CHECK(LauncherLoadSettings(Path.c_str(), &Back) == LauncherLoad::Ok && Back.Recent.empty());
+
+    for (const char * Bad : { "folder: [1, 2]\n", "- a list\n", "recent: /not/a/list\n", "face: maybe\n", "{unclosed\n" })
+    {
+        FILE * F = fopen(Path.c_str(), "w");
+        fputs(Bad, F);
+        fclose(F);
+        Back.Folder = "stale";
+        CHECK(LauncherLoadSettings(Path.c_str(), &Back) == LauncherLoad::Malformed);
+        CHECK(Back.Folder.empty() && !Back.Face && Back.Recent.empty());
+    }
+}
+
+static LauncherState StateOf(int GameCount, int RecentCount)
+{
+    LauncherState S;
+    for (int i = 0; i < GameCount; i++)
+    {
+        LauncherGame G;
+        G.Title = std::string(1, (char)('A' + i % 26)) + std::to_string(i);
+        G.Path = "/roms/" + G.Title;
+        S.Games.push_back(G);
+    }
+    LauncherSort(&S.Games);
+    for (int i = 0; i < RecentCount; i++) S.Recent.push_back(S.Games.empty() ? LauncherGame() : S.Games[i]);
+    return S;
+}
+
+static LauncherTarget T(LauncherTargetKind Kind, int Index = 0)
+{
+    LauncherTarget Out;
+    Out.Kind = Kind;
+    Out.Index = Index;
+    return Out;
+}
+
+static LauncherTarget HitCentre(const LauncherState & S, LauncherTarget Target)
+{
+    const LauncherRect R = LauncherTargetRect(Target);
+    return LauncherHit(S, R.X + R.W / 2, R.Y + R.H / 2);
+}
+
+static void Screen()
+{
+    // Every target lies inside the window, and no two overlap except Choose, which only
+    // exists when there are no rows.
+    const std::vector<LauncherTarget> & All = LauncherTargets();
+    CHECK(All.size() == 3 + 1 + 26 + LAUNCHER_ROWS + 2 + 1);
+    for (size_t i = 0; i < All.size(); i++)
+    {
+        const LauncherRect A = LauncherTargetRect(All[i]);
+        CHECK(A.X >= 0 && A.Y >= 0 && A.X + A.W <= LAUNCHER_WIDTH && A.Y + A.H <= LAUNCHER_HEIGHT && A.W > 0 && A.H > 0);
+        for (size_t j = i + 1; j < All.size(); j++)
+        {
+            if (All[i].Kind == LauncherTargetKind::Choose || All[j].Kind == LauncherTargetKind::Choose) continue;
+            const LauncherRect B = LauncherTargetRect(All[j]);
+            CHECK(A.X + A.W <= B.X || B.X + B.W <= A.X || A.Y + A.H <= B.Y || B.Y + B.H <= A.Y);
+        }
+    }
+
+    // 25 games, no recent games: three pages, opening on page 1.
+    LauncherState S = StateOf(25, 0);
+    CHECK(LauncherInitialView(S) == 0);
+    for (const LauncherTarget & Each : All) CHECK(!LauncherEnabled(S, Each) || HitCentre(S, Each) == Each);
+    CHECK(LauncherHit(S, 2, 2).Kind == LauncherTargetKind::None);        // the corner is no target
+    CHECK(LauncherHit(S, 300, 20).Kind == LauncherTargetKind::None);     // beside the title
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Prev)));             // page 1, no recent games
+    CHECK(HitCentre(S, T(LauncherTargetKind::Prev)).Kind == LauncherTargetKind::None);
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Recent)));
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Choose)));
+    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Letter, 24)));        // Y24, the last title
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Letter, 25)));       // no title starts with Z
+
+    const LauncherGame * G = nullptr;
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 1);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
+    CHECK(LauncherRowCount(S) == 5);
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));             // last page
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Row, 5)));           // beyond the page's games
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 4), &G) == LauncherCommand::Start);
+    CHECK(G == &S.Games[24]);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Letter, 0), &G) == LauncherCommand::None && S.View == 0);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Face), &G) == LauncherCommand::ToggleFace);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Folder), &G) == LauncherCommand::PickFolder);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Quit), &G) == LauncherCommand::Quit);
+
+    // With recent games: opens on Recent; < on page 1 goes there; > from it goes to page 1.
+    S = StateOf(25, 2);
+    CHECK(LauncherInitialView(S) == LAUNCHER_VIEW_RECENT);
+    S.View = 0;
+    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Prev), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
+    CHECK(LauncherRowCount(S) == 2 && !LauncherEnabled(S, T(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 1), &G) == LauncherCommand::Start && G == &S.Recent[1]);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 0);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Recent), &G) == LauncherCommand::None && S.View == LAUNCHER_VIEW_RECENT);
+
+    // No games: Choose in place of the rows, and a disabled target does nothing.
+    S = StateOf(0, 0);
+    CHECK(LauncherEmpty(S) && LauncherRowCount(S) == 0);
+    CHECK(HitCentre(S, T(LauncherTargetKind::Choose)).Kind == LauncherTargetKind::Choose);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Choose), &G) == LauncherCommand::PickFolder);
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Row, 0), &G) == LauncherCommand::None);
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));
+    for (int L = 0; L < 26; L++) CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Letter, L)));
+
+    // No games but recent ones (a folder that vanished): Recent still works.
+    S = StateOf(0, 0);
+    S.Recent.push_back(LauncherGame());
+    CHECK(LauncherEnabled(S, T(LauncherTargetKind::Prev)));
+    CHECK(LauncherAct(&S, T(LauncherTargetKind::Prev), &G) == LauncherCommand::None && !LauncherEmpty(S));
+    CHECK(!LauncherEnabled(S, T(LauncherTargetKind::Next)));
+
+    // No emulator: only Quit.
+    S = StateOf(25, 2);
+    S.EmulatorFound = false;
+    for (const LauncherTarget & Each : All) CHECK(LauncherEnabled(S, Each) == (Each.Kind == LauncherTargetKind::Quit));
+}
+
 void RunLauncherTests()
 {
     GamesAndPages();
     ScanAndEmulator();
     ChildEnvironment();
+    Settings();
+    Screen();
 }

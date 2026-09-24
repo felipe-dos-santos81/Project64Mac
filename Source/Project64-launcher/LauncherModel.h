@@ -53,3 +53,78 @@ bool LauncherFindEmulator(const char * LauncherPath, std::string * Dir);
 // PJ64_MENU_AUTO=1; and PJ64_FACE=0 when Face is off.
 std::vector<std::string> LauncherChildEnv(const char * const * Environ, const std::string & EmulatorDir,
                                           bool Generic, bool FaceOn);
+
+#define LAUNCHER_VIEW_RECENT -1   // LauncherState::View of the recent games; pages are 0 … N-1
+#define LAUNCHER_WIDTH 800
+#define LAUNCHER_HEIGHT 640
+
+// launcher.yaml: the folder, Face, and the recent games' paths, newest first.
+struct LauncherSettings
+{
+    std::string Folder;
+    bool Face = false;   // off until someone turns it on: the camera never opens unasked
+    std::vector<std::string> Recent;
+};
+
+enum class LauncherLoad { Ok, Missing, Malformed };
+
+// Out gets the file's settings, dropping recent paths whose file is gone; on Missing or
+// Malformed it gets the defaults.
+LauncherLoad LauncherLoadSettings(const char * Path, LauncherSettings * Out);
+
+// Written to Path.tmp and renamed over Path, so a crash never leaves half a file.
+bool LauncherSaveSettings(const char * Path, const LauncherSettings & In);
+
+// What the screen shows.
+struct LauncherState
+{
+    std::vector<LauncherGame> Games;    // the folder's, sorted
+    std::vector<LauncherGame> Recent;   // newest first
+    int View = 0;                       // LAUNCHER_VIEW_RECENT or a page
+    bool EmulatorFound = true;          // false: only Quit
+};
+
+enum class LauncherTargetKind { None, Face, Folder, Quit, Recent, Letter, Row, Prev, Next, Choose };
+
+struct LauncherTarget
+{
+    LauncherTargetKind Kind = LauncherTargetKind::None;
+    int Index = 0;   // Letter: 0 = A … 25 = Z; Row: 0 … LAUNCHER_ROWS - 1
+};
+
+inline bool operator==(LauncherTarget A, LauncherTarget B)
+{
+    return A.Kind == B.Kind && A.Index == B.Index;
+}
+
+struct LauncherRect
+{
+    float X, Y, W, H;
+};
+
+// Every target, in drawing order: the top bar, Recent, the letters, the rows, < and >, Choose.
+const std::vector<LauncherTarget> & LauncherTargets();
+
+LauncherRect LauncherTargetRect(LauncherTarget T);
+
+// The rows the current view shows, and the game on one (null past the last).
+int LauncherRowCount(const LauncherState & S);
+const LauncherGame * LauncherRowGame(const LauncherState & S, int Row);
+
+// A page view with no games at all: Choose a folder is shown in place of the rows.
+bool LauncherEmpty(const LauncherState & S);
+
+// Whether T does anything now; a disabled target is drawn dimmed and never hit.
+bool LauncherEnabled(const LauncherState & S, LauncherTarget T);
+
+// The enabled target under a point in window coordinates, or None.
+LauncherTarget LauncherHit(const LauncherState & S, float X, float Y);
+
+// Recent when there are recent games, else page 1.
+int LauncherInitialView(const LauncherState & S);
+
+enum class LauncherCommand { None, ToggleFace, PickFolder, Quit, Start };
+
+// What a click on T does. Navigation changes S->View here and returns None; the rest is the
+// caller's. Start sets *Game to the row's game, which points into S and is valid until S changes.
+LauncherCommand LauncherAct(LauncherState * S, LauncherTarget T, const LauncherGame ** Game);

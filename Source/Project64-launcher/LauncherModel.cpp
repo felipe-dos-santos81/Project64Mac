@@ -8,11 +8,13 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <yaml-cpp/yaml.h>
 
 static const char * BaseName(const char * Path)
 {
@@ -157,4 +159,187 @@ std::vector<std::string> LauncherChildEnv(const char * const * Environ, const st
     Out.push_back("PJ64_MENU_AUTO=1");
     if (!FaceOn) Out.push_back("PJ64_FACE=0");
     return Out;
+}
+
+LauncherLoad LauncherLoadSettings(const char * Path, LauncherSettings * Out)
+{
+    *Out = LauncherSettings();
+    if (access(Path, F_OK) != 0) return LauncherLoad::Missing;
+    LauncherSettings S;
+    try
+    {
+        const YAML::Node Root = YAML::LoadFile(Path);
+        if (!Root.IsMap()) return LauncherLoad::Malformed;
+        if (Root["folder"]) S.Folder = Root["folder"].as<std::string>();
+        if (Root["face"])
+        {
+            const YAML::Node Face = Root["face"];
+            if (!Face.IsScalar()) return LauncherLoad::Malformed;
+            const std::string Text = Face.as<std::string>();
+            if (Text == "true") S.Face = true;
+            else if (Text == "false") S.Face = false;
+            else return LauncherLoad::Malformed;
+        }
+        const YAML::Node Recent = Root["recent"];
+        if (Recent)
+        {
+            if (!Recent.IsSequence()) return LauncherLoad::Malformed;
+            for (const YAML::Node & Item : Recent)
+            {
+                const std::string P = Item.as<std::string>();
+                if (access(P.c_str(), F_OK) == 0 && S.Recent.size() < LAUNCHER_RECENT_MAX) S.Recent.push_back(P);
+            }
+        }
+    }
+    catch (const YAML::Exception &)
+    {
+        return LauncherLoad::Malformed;
+    }
+    *Out = S;
+    return LauncherLoad::Ok;
+}
+
+bool LauncherSaveSettings(const char * Path, const LauncherSettings & In)
+{
+    YAML::Emitter E;
+    E << YAML::BeginMap;
+    E << YAML::Key << "folder" << YAML::Value << In.Folder;
+    E << YAML::Key << "face" << YAML::Value << In.Face;
+    E << YAML::Key << "recent" << YAML::Value << YAML::BeginSeq;
+    for (const std::string & P : In.Recent) E << P;
+    E << YAML::EndSeq << YAML::EndMap;
+
+    const std::string Temp = std::string(Path) + ".tmp";
+    FILE * F = fopen(Temp.c_str(), "w");
+    if (F == nullptr) return false;
+    const bool Wrote = fprintf(F, "%s\n", E.c_str()) > 0;
+    const bool Closed = fclose(F) == 0;
+    if (!Wrote || !Closed || rename(Temp.c_str(), Path) != 0)
+    {
+        unlink(Temp.c_str());
+        return false;
+    }
+    return true;
+}
+
+// The screen, in window points (800x640, fixed). Two letter rows of fourteen 50-point cells
+// on a 54-point pitch: Recent spans the first two cells of the top row, A-L the other twelve,
+// M-Z the bottom row. Ten 40-point game rows below them, then < and >.
+static const float kLetterLeft = 24.0f, kLetterPitch = 54.0f, kLetterWidth = 50.0f;
+static const float kLetterTop = 56.0f, kLetterHeight = 40.0f, kLetterGap = 4.0f;
+static const float kRowTop = 148.0f, kRowHeight = 40.0f;
+
+const std::vector<LauncherTarget> & LauncherTargets()
+{
+    static std::vector<LauncherTarget> All;
+    if (All.empty())
+    {
+        const LauncherTargetKind Fixed[] = { LauncherTargetKind::Face, LauncherTargetKind::Folder, LauncherTargetKind::Quit,
+                                             LauncherTargetKind::Recent };
+        for (LauncherTargetKind K : Fixed) All.push_back(LauncherTarget{ K, 0 });
+        for (int i = 0; i < 26; i++) All.push_back(LauncherTarget{ LauncherTargetKind::Letter, i });
+        for (int i = 0; i < LAUNCHER_ROWS; i++) All.push_back(LauncherTarget{ LauncherTargetKind::Row, i });
+        All.push_back(LauncherTarget{ LauncherTargetKind::Prev, 0 });
+        All.push_back(LauncherTarget{ LauncherTargetKind::Next, 0 });
+        All.push_back(LauncherTarget{ LauncherTargetKind::Choose, 0 });
+    }
+    return All;
+}
+
+LauncherRect LauncherTargetRect(LauncherTarget T)
+{
+    switch (T.Kind)
+    {
+    case LauncherTargetKind::Face: return LauncherRect{ 360, 8, 160, 36 };
+    case LauncherTargetKind::Folder: return LauncherRect{ 536, 8, 120, 36 };
+    case LauncherTargetKind::Quit: return LauncherRect{ 672, 8, 112, 36 };
+    case LauncherTargetKind::Recent: return LauncherRect{ kLetterLeft, kLetterTop, kLetterPitch + kLetterWidth, kLetterHeight };
+    case LauncherTargetKind::Letter:
+    {
+        const bool Top = T.Index < 12;
+        const int Column = Top ? T.Index + 2 : T.Index - 12;
+        const float Y = Top ? kLetterTop : kLetterTop + kLetterHeight + kLetterGap;
+        return LauncherRect{ kLetterLeft + Column * kLetterPitch, Y, kLetterWidth, kLetterHeight };
+    }
+    case LauncherTargetKind::Row: return LauncherRect{ 16, kRowTop + T.Index * kRowHeight, 768, kRowHeight - 2 };
+    case LauncherTargetKind::Prev: return LauncherRect{ 16, 556, 160, 48 };
+    case LauncherTargetKind::Next: return LauncherRect{ 624, 556, 160, 48 };
+    case LauncherTargetKind::Choose: return LauncherRect{ 250, 320, 300, 56 };
+    case LauncherTargetKind::None: break;
+    }
+    return LauncherRect{ 0, 0, 0, 0 };
+}
+
+int LauncherRowCount(const LauncherState & S)
+{
+    if (S.View == LAUNCHER_VIEW_RECENT) return (int)S.Recent.size();
+    const int Left = (int)S.Games.size() - S.View * LAUNCHER_ROWS;
+    return Left < 0 ? 0 : (Left > LAUNCHER_ROWS ? LAUNCHER_ROWS : Left);
+}
+
+const LauncherGame * LauncherRowGame(const LauncherState & S, int Row)
+{
+    if (Row < 0 || Row >= LauncherRowCount(S)) return nullptr;
+    return S.View == LAUNCHER_VIEW_RECENT ? &S.Recent[Row] : &S.Games[S.View * LAUNCHER_ROWS + Row];
+}
+
+bool LauncherEmpty(const LauncherState & S)
+{
+    return S.View != LAUNCHER_VIEW_RECENT && S.Games.empty();
+}
+
+bool LauncherEnabled(const LauncherState & S, LauncherTarget T)
+{
+    if (!S.EmulatorFound) return T.Kind == LauncherTargetKind::Quit;
+    switch (T.Kind)
+    {
+    case LauncherTargetKind::Face:
+    case LauncherTargetKind::Folder:
+    case LauncherTargetKind::Quit: return true;
+    case LauncherTargetKind::Recent: return !S.Recent.empty();
+    case LauncherTargetKind::Letter: return T.Index >= 0 && T.Index < 26 && LauncherLetterPage(S.Games, T.Index) >= 0;
+    case LauncherTargetKind::Row: return T.Index >= 0 && T.Index < LauncherRowCount(S);
+    case LauncherTargetKind::Prev: return S.View == 0 ? !S.Recent.empty() : S.View > 0;
+    case LauncherTargetKind::Next:
+        return S.View == LAUNCHER_VIEW_RECENT ? !S.Games.empty() : S.View + 1 < LauncherPageCount((int)S.Games.size());
+    case LauncherTargetKind::Choose: return LauncherEmpty(S);
+    case LauncherTargetKind::None: break;
+    }
+    return false;
+}
+
+LauncherTarget LauncherHit(const LauncherState & S, float X, float Y)
+{
+    for (const LauncherTarget & T : LauncherTargets())
+    {
+        const LauncherRect R = LauncherTargetRect(T);
+        if (X >= R.X && X < R.X + R.W && Y >= R.Y && Y < R.Y + R.H && LauncherEnabled(S, T)) return T;
+    }
+    return LauncherTarget();
+}
+
+int LauncherInitialView(const LauncherState & S)
+{
+    return S.Recent.empty() ? 0 : LAUNCHER_VIEW_RECENT;
+}
+
+LauncherCommand LauncherAct(LauncherState * S, LauncherTarget T, const LauncherGame ** Game)
+{
+    if (!LauncherEnabled(*S, T)) return LauncherCommand::None;
+    switch (T.Kind)
+    {
+    case LauncherTargetKind::Face: return LauncherCommand::ToggleFace;
+    case LauncherTargetKind::Folder:
+    case LauncherTargetKind::Choose: return LauncherCommand::PickFolder;
+    case LauncherTargetKind::Quit: return LauncherCommand::Quit;
+    case LauncherTargetKind::Recent: S->View = LAUNCHER_VIEW_RECENT; break;
+    case LauncherTargetKind::Letter: S->View = LauncherLetterPage(S->Games, T.Index); break;
+    case LauncherTargetKind::Prev: S->View = S->View == 0 ? LAUNCHER_VIEW_RECENT : S->View - 1; break;
+    case LauncherTargetKind::Next: S->View = S->View == LAUNCHER_VIEW_RECENT ? 0 : S->View + 1; break;
+    case LauncherTargetKind::Row:
+        *Game = LauncherRowGame(*S, T.Index);
+        return LauncherCommand::Start;
+    case LauncherTargetKind::None: break;
+    }
+    return LauncherCommand::None;
 }
