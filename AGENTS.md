@@ -31,7 +31,7 @@ make wizard-selftest                     # the wizard's screens, driven by synth
 make wizard-screenshots                  # render the user guide's wizard pictures into Docs/img/wizard
 make wizard-screenshots-check            # fail if those pictures no longer match what the wizard draws
 make run-wizard                          # launch the binding wizard window
-make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # camera starts; face=0 stops it
+make run rom=Roms/game.z64 input=Config/mouse/super_mario_64_usa.yaml  # one-button mouse; no camera
 make run rom=Roms/game.z64
 make grid roms="Roms/a.z64 Roms/b.z64"   # 1-16 ROMs, one window each
 make grid-selftest rom=Roms/game.z64     # prove key broadcast across four tiles
@@ -156,11 +156,13 @@ gap, outer-lip width, each eye's aperture) and feeds them to the pure classifier
 `FaceGestures.{h,cpp}`: one rest baseline per measure, one hysteresis-and-debounce channel
 per gesture bit (eleven, in `PointerState.h`'s order), and the head stick from the yaw and
 pitch baselines. The tracker writes the bits and the stick (`HeadX`, `HeadY`) into the
-struct. The plugin's `GetKeys` evaluates slots, the flick gate, gestures, the pointer stick
-and the head stick (`{stick: head}` copies, `head-digital` snaps by quadrant) using the
-pure geometry in `Source/Common/PointerLayout.h`, then writes the labels, the latched zone
-and the lit quadrant back for `Overlay.cpp`, which reads the GL viewport to find the game
-rectangle and paints the panel below it in `CSdlRenderWindow::SwapWindow` before the flush.
+struct. The plugin's `GetKeys` evaluates slots, the flick gate, the rest and the one button
+(`PointerSettleStep`, `PointerClickStep`: latch, toggle slots, the stick hold), gestures,
+the pointer stick and the head stick (`{stick: head}` copies, `head-digital` snaps by
+quadrant) using the pure geometry in `Source/Common/PointerLayout.h`, then writes the
+labels, the latched zone and the lit quadrant back for `Overlay.cpp`, which reads the GL
+viewport to find the game rectangle and paints the panel below it in
+`CSdlRenderWindow::SwapWindow` before the flush.
 
 Layouts are the `{zone:}`, `{face:}`, `{stick: pointer}` and `{stick: head|head-digital}`
 YAML forms, in `Config/mouse/` and `Config/face/`. `PJ64_FACE_INJECT=<gesture>[,<x>,<y>]`
@@ -218,6 +220,10 @@ Only the `Aarch64` backend directory survives.
   comment explains.
 - **SDL3 mouse state is main-thread only.** `SDL_GetMouseState` and friends must stay in
   `main.cpp`'s loop; the plugin reads the published `PointerState` instead.
+- **The cursor is never captured, confined or warped.** One-button play (toggle slots and
+  the stick hold, `Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md`) exists so
+  that no mouse mode is needed: the player reaches the panel with a free cursor. Relative
+  mouse mode, a grab or a warp would take the panel away from a player who has nothing else.
 - **The camera prompt is attributed to the launcher.** The binary is not an app bundle, so
   macOS asks for camera access on behalf of the terminal or IDE. A past denial there makes
   the tracker report `denied` without a new prompt; the fix is in System Settings.

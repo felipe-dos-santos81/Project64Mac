@@ -227,11 +227,11 @@ reason if it objects. The message line reads "Saved. Escape to quit." when it is
 
 A layout can put every N64 button on a panel under the game and make the game image the
 stick, so a one-button mouse plays on its own. Three ship under `Config/mouse/`, one each
-for Super Mario 64, GoldenEye 007 and Mario Kart 64:
+for Super Mario 64, GoldenEye 007 and Mario Kart 64. They use the left button only and
+never start the camera:
 
 ```sh
-make run rom=Roms/super_mario_64.z64 input=Config/mouse/super_mario_64_usa.yaml         # camera starts
-make run rom=Roms/super_mario_64.z64 input=Config/mouse/super_mario_64_usa.yaml face=0  # mouse only
+make run rom=Roms/super_mario_64.z64 input=Config/mouse/super_mario_64_usa.yaml
 ```
 
 The window opens at 640x640: the game in the top 640x480, a panel in the 160 rows below.
@@ -256,9 +256,37 @@ the arrows); the panel always draws. The cursor is never captured.
 
 In a layout file the forms are `{zone: <name>}` for a slot and `{stick: pointer}` for the
 stick. The slots are `game`, `pad-up`, `pad-down`, `pad-left`, `pad-right`, `c-up`,
-`c-down`, `c-left`, `c-right` and `mid1` to `mid5`; any control can take any slot. The
-shipped layouts also move three buttons onto face gestures — `eyebrows`, `head-left` and
-`head-right` in all three — which is why the camera starts (next section).
+`c-down`, `c-left`, `c-right` and `mid1` to `mid5`; any control can take any slot, and two
+controls on one slot are both pressed. A button can be a face gesture instead (next
+section), so your own layout can mix the two.
+
+### Toggle slots and the stick hold
+
+One button can only press one slot at a time, and the stick lets go whenever the cursor
+leaves the game image. Two forms get around both, and the shipped layouts use them:
+
+- **A toggle slot**, `Z: {zone: mid2, toggle: true}`. One press turns Z on, the next turns
+  it off, and in between the button is free: with Z on, a click in the game image is Z and
+  A together. Any slot can be a toggle, the game image included (Mario Kart's accelerate).
+  Every control on one slot must agree on `toggle`. Toggles clear when the game closes.
+- **The stick hold**, `Stick: {stick: pointer, hold: mid5}`. The slot shows `Ho`. Press it
+  and the stick keeps the tilt the cursor last *rested* at in the game image, while you
+  reach for any other slot. It lets go on a second press, or once the cursor rests in the
+  game image again, so you can click in the picture on the way back up and still have the
+  held tilt.
+
+"Rested" means staying within 8 px for 9 polls, about 150 ms. A slow move down to the
+panel never rests, so the hold never picks up the backward tilt the bottom of the picture
+reads as. `PJ64_POINTER_SETTLE=<px>,<polls>` changes both numbers for a hand that moves
+more or less; `0` turns resting off, and the hold then gives a centred stick and ends only
+on a second press.
+
+Toggle slots and the hold slot have a mark across their top-right corner, and are bright
+while on. In Super Mario 64:
+
+- **Dive:** run with the cursor, press `Ho`, press `B`.
+- **Long jump:** run, press `Ho`, press `Z`, move up into the picture and click; press `Z`
+  again to stand up.
 
 ## 8. Playing with your face
 
@@ -363,6 +391,7 @@ Environment variables. Unset means the default.
 | `PJ64_FACE_BROW`, `PJ64_FACE_YAW`, `PJ64_FACE_PITCH`, `PJ64_FACE_ROLL`, `PJ64_FACE_MOUTH`, `PJ64_FACE_SMILE`, `PJ64_FACE_EYE` | Gesture thresholds (section 8). |
 | `PJ64_FACE_STICK_YAW`, `PJ64_FACE_STICK_PITCH` | Full-tilt angles of the head stick, in radians. |
 | `PJ64_POINTER_FLICK` | Pixels per poll above which a cursor jump holds the stick; `0` disables. Default 24. |
+| `PJ64_POINTER_SETTLE` | `<px>,<polls>`: how close, and for how many polls, the cursor must stay in the game image to count as resting, for the stick hold; `0` never rests. Default `8,9`. |
 | `PJ64_OVERLAY` | `0` hides the guide over the game image: quadrant lines, ring and arrows. |
 | `PJ64_TRACE` | Trace levels, a bare level for everything or `Module=level,…`, echoed to stderr. |
 | `PJ64_FRAME_DUMP` | Path of a PPM to write one frame to. |
