@@ -4,6 +4,7 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "Overlay.h"
 #include <Common/PointerLayout.h>
+#include <Common/PointerMenu.h>
 #include <Common/PointerState.h>
 #include <Common/Trace.h>
 #include <Project64-core/TraceModulesProject64.h>
@@ -18,8 +19,8 @@ static const float kWedge = 0.08f;     // fill of the lit quadrant
 static const float kPanelGrey = 0.12f; // the panel's opaque ground
 static const int kScale = 3;           // font pixel size; a glyph is 15x21 window pixels
 
-// 5x7 glyphs, one byte per row, bit 4 is the left column. The slot labels, the guide arrows
-// and the gesture tags.
+// 5x7 glyphs, one byte per row, bit 4 is the left column. The slot labels, the guide arrows,
+// the gesture tags and the menu's items.
 struct Glyph { char C; unsigned char Rows[7]; };
 static const Glyph kGlyphs[] = {
     { 'A', { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 } },
@@ -43,6 +44,12 @@ static const Glyph kGlyphs[] = {
     { 'o', { 0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E } },
     { 'r', { 0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10 } },
     { '=', { 0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00 } },
+    { 'G', { 0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F } },
+    { 'F', { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 } },
+    { 'Q', { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D } },
+    { 'c', { 0x00, 0x00, 0x0E, 0x10, 0x10, 0x11, 0x0E } },
+    { 'd', { 0x01, 0x01, 0x0D, 0x13, 0x11, 0x11, 0x0F } },
+    { 's', { 0x00, 0x00, 0x0F, 0x10, 0x0E, 0x01, 0x1E } },
 };
 
 static const Glyph * FindGlyph(char C)
@@ -169,10 +176,8 @@ static void DrawFaceStatus(const PointerState * State, float Cx, float Cy)
     }
 }
 
-// The panel: an opaque ground over the rows below the game, every slot with its label, the
-// lit ones bright (latched, toggled on, or the hold slot while holding), a mark across the
-// top-right corner of each toggle and hold slot, and the tracker under the middle slots.
-static void DrawPanel(const PointerState * State, int W, int H, int GameH, uint32_t Lit, uint32_t Toggles)
+// The panel's opaque ground over the rows below the game.
+static void DrawPanelGround(int W, int H, int GameH)
 {
     glColor4f(kPanelGrey, kPanelGrey, kPanelGrey, 1.0f);
     glBegin(GL_QUADS);
@@ -181,6 +186,14 @@ static void DrawPanel(const PointerState * State, int W, int H, int GameH, uint3
     glVertex2f((float)W, (float)H);
     glVertex2f(0.0f, (float)H);
     glEnd();
+}
+
+// The panel: an opaque ground over the rows below the game, every slot with its label, the
+// lit ones bright (latched, toggled on, or the hold slot while holding), a mark across the
+// top-right corner of each toggle and hold slot, and the tracker under the middle slots.
+static void DrawPanel(const PointerState * State, int W, int H, int GameH, uint32_t Lit, uint32_t Toggles)
+{
+    DrawPanelGround(W, H, GameH);
     for (int Zone = 0; Zone < POINTER_ZONE_GAME; Zone++)
     {
         const float Alpha = (Lit & (1u << Zone)) != 0 ? kBright : kDim;
@@ -194,6 +207,26 @@ static void DrawPanel(const PointerState * State, int W, int H, int GameH, uint3
         DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
     }
     DrawFaceStatus(State, 178.0f, (float)H - 88.0f);
+}
+
+// The emulator actions menu in place of the panel: each item's label in its slot, the armed
+// item bright, blank slots not drawn, no corner marks and no tracker strip.
+static void DrawMenuPanel(const PointerState * State, int W, int H, int GameH)
+{
+    DrawPanelGround(W, H, GameH);
+    const int MenuZone = State->MenuZone.load(std::memory_order_relaxed);
+    const int Armed = State->MenuArmed.load(std::memory_order_relaxed);
+    const bool FaceOn = PointerMenuFaceOn(State->Face.load(std::memory_order_relaxed));
+    for (int Zone = 0; Zone < POINTER_ZONE_GAME; Zone++)
+    {
+        const char * Label = PointerMenuLabel(PointerMenuItemAt(Zone, MenuZone, FaceOn));
+        if (Label[0] == '\0') continue;
+        const float Alpha = Zone == Armed ? kBright : kDim;
+        float X0, Y0, X1, Y1;
+        PointerZoneRect(Zone, W, H, &X0, &Y0, &X1, &Y1);
+        DrawRect(X0, Y0, X1, Y1, Alpha);
+        DrawText(Label, (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
+    }
 }
 
 // The guide over the game: the lit quadrant's wedge, the four 45-degree rays, the ring and
@@ -232,7 +265,7 @@ static void DrawGuide(const PointerState * State, int W, int H, int GameH, bool 
     DrawText("<", 24.0f, Cy, Quadrant == 3 ? kBright : kDim);
 }
 
-void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHidden)
+void OverlayDraw(PointerState * State, const int Viewport[4], bool GuideHidden)
 {
     if (State == nullptr || Viewport == nullptr) return;
 
@@ -303,13 +336,23 @@ void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHi
     {
         Lit |= 1u << Latched;
     }
-    if (H > GameH)
+    if (State->MenuOpen.load(std::memory_order_acquire) != 0)
     {
-        DrawPanel(State, W, H, GameH, Lit, State->ToggleMarkZones.load(std::memory_order_relaxed));
+        if (H > GameH)
+        {
+            DrawMenuPanel(State, W, H, GameH);
+        }
     }
-    if (!GuideHidden)
+    else
     {
-        DrawGuide(State, W, H, GameH, (Lit & (1u << POINTER_ZONE_GAME)) != 0, Quadrant);
+        if (H > GameH)
+        {
+            DrawPanel(State, W, H, GameH, Lit, State->ToggleMarkZones.load(std::memory_order_relaxed));
+        }
+        if (!GuideHidden)
+        {
+            DrawGuide(State, W, H, GameH, (Lit & (1u << POINTER_ZONE_GAME)) != 0, Quadrant);
+        }
     }
 
     glMatrixMode(GL_MODELVIEW);
@@ -318,4 +361,7 @@ void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHi
     glPopMatrix();
     glPopAttrib();
     glUseProgram((GLuint)Program);
+
+    // The menu host waits for this before it pauses the game: the menu is now on screen.
+    State->OverlayFrames.fetch_add(1u, std::memory_order_release);
 }

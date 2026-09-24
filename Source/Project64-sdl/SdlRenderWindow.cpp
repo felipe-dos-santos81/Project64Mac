@@ -13,7 +13,7 @@
 // Reading every frame would slow the emulation being waited on.
 static const uint32_t DumpCheckInterval = 30;
 
-CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, const PointerState * Pointer) :
+CSdlRenderWindow::CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, PointerState * Pointer) :
     m_Window(Window),
     m_Context(Context),
     m_Cgl(Cgl),

@@ -13,7 +13,7 @@ struct PointerState;
 class CSdlRenderWindow : public RenderWindow
 {
 public:
-    CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, const PointerState * Pointer);
+    CSdlRenderWindow(SDL_Window * Window, SDL_GLContext Context, CGLContextObj Cgl, PointerState * Pointer);
 
     void GfxThreadInit();
     void GfxThreadDone();
@@ -34,7 +34,7 @@ private:
     // The overlay's data, owned by main(); null under a failed shm setup. PJ64_OVERLAY=0
     // hides the guide over the game for a player who has memorised it; the panel is the
     // controls and always draws.
-    const PointerState * m_Pointer;
+    PointerState * m_Pointer;
     bool m_OverlayHidden;
     // Frame dumping, driven by PJ64_FRAME_DUMP; see DumpFrame. Both environment
     // variables are read once at construction - they cannot change mid-run, and

@@ -11,4 +11,4 @@ struct PointerState;
 // is that rectangle and the window is (x + w) by (y + h), so the y rows below the game are
 // the panel. GuideHidden skips the guide over the game (PJ64_OVERLAY=0); the panel is the
 // controls and always draws.
-void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHidden);
+void OverlayDraw(PointerState * State, const int Viewport[4], bool GuideHidden);
