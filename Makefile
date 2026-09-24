@@ -295,7 +295,7 @@ FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRende
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
 WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp Screenshots.cpp)
-LAUNCHER_SRC = $(addprefix Project64-launcher/, LauncherModel.cpp)
+LAUNCHER_SRC = $(addprefix Project64-launcher/, main.cpp Screens.cpp LauncherModel.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
@@ -349,7 +349,7 @@ $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 $(LAUNCHER_OBJS): CPPFLAGS += $(SDL_CFLAGS) $(YAML_CFLAGS)
 $(LAUNCHER_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard launcher config all run grid run-wizard run-launcher rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -441,6 +441,15 @@ $(BIN)/Project64-wizard: $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfig.o $(B
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS) -framework Foundation -framework AVFoundation -framework Vision -framework CoreMedia -framework CoreVideo -lobjc -lpthread
 
+# ── Stage 7d · Launcher ───────────────────────────────────────────────────────
+
+# A third binary, with no ROM, no core and no OpenGL: it lists a ROM folder with SDL_Renderer
+# and the debug font, and runs each game as a child Project64 found beside it.
+launcher: $(BIN)/Project64-launcher # Build the launcher
+$(BIN)/Project64-launcher: $(LAUNCHER_OBJS) $(BUILD)/Project64-sdl/GameConfig.o
+	@mkdir -p $(dir $@)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
+
 # ── Stage 7b · Data files ─────────────────────────────────────────────────────
 
 # The core reads its ROM database, enhancement and language data from the base directory
@@ -469,7 +478,7 @@ config: # Install ROM database, enhancements, input mappings and language files 
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend wizard config ## [STEP 0-7c] deps, common, core, rsp, video, audio, input, frontend, wizard, config: build everything
+all: deps common core rsp video audio input frontend wizard launcher config ## [STEP 0-7c] deps, common, core, rsp, video, audio, input, frontend, wizard, launcher, config: build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
@@ -483,6 +492,9 @@ grid: all ## Run 1-16 ROMs in a grid (usage: make grid roms="a.z64 b.z64")
 
 run-wizard: wizard ## Launch the binding wizard (writes a YAML next to the ROM or under Config/)
 	./$(BIN)/Project64-wizard
+
+run-launcher: all ## Open the launcher: pick a ROM folder, then click a game to play it
+	./$(BIN)/Project64-launcher
 
 rom-test: ## Run the ROM pack test harness (see Scripts/run_rom_pack.py --help)
 	python3 Scripts/run_rom_pack.py
