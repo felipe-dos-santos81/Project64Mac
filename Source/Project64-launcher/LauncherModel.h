@@ -48,6 +48,9 @@ void LauncherPushRecent(std::vector<std::string> * Recent, const std::string & P
 // Dir gets the resolved path.
 bool LauncherFindEmulator(const char * LauncherPath, std::string * Dir);
 
+// True when an executable Project64-wizard sits in EmulatorDir, the layout editor Edit runs.
+bool LauncherHasEditor(const std::string & EmulatorDir);
+
 // A game's environment, and whether it kept the launcher's own PJ64_INPUT_YAML, which then
 // wins over the game's layout.
 struct LauncherEnv
@@ -95,9 +98,10 @@ struct LauncherState
     std::vector<LauncherGame> Recent;   // newest first
     int View = 0;                       // LAUNCHER_VIEW_RECENT or a page
     bool EmulatorFound = true;          // false: only Quit
+    bool EditorFound = false;           // Project64-wizard sits beside the emulator: Edit works
 };
 
-enum class LauncherTargetKind { None, Face, Folder, Quit, Recent, Letter, Row, Prev, Next, Choose };
+enum class LauncherTargetKind { None, Face, Folder, Quit, Recent, Letter, Row, Edit, Prev, Next, Choose };
 
 struct LauncherTarget
 {
@@ -136,8 +140,9 @@ LauncherTarget LauncherHit(const LauncherState & S, float X, float Y);
 // Recent when there are recent games, else page 1.
 int LauncherInitialView(const LauncherState & S);
 
-enum class LauncherCommand { None, ToggleFace, PickFolder, Quit, Start };
+enum class LauncherCommand { None, ToggleFace, PickFolder, Quit, Start, Edit };
 
 // What a click on T does. Navigation changes S->View here and returns None; the rest is the
-// caller's. Start sets *Game to the row's game, which points into S and is valid until S changes.
+// caller's. Start and Edit set *Game to the row's game, which points into S and is valid until
+// S changes.
 LauncherCommand LauncherAct(LauncherState * S, LauncherTarget T, const LauncherGame ** Game);

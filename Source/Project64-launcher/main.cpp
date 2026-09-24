@@ -65,10 +65,12 @@ struct Launcher
     LauncherSettings Settings;
     LauncherState State;
     std::string Status;           // the last game's error, or ""
-    pid_t Child = 0;              // the running game, or 0
+    pid_t Child = 0;              // the running game or editor, or 0
     LauncherGame ChildGame;
+    bool ChildIsEditor = false;
     Uint64 KillAt = 0;            // PJ64_LAUNCHER_SELFTEST: when to stop the game
     int GamesEnded = 0;
+    int EditorsEnded = 0;
     FolderPick Pick;
 };
 
@@ -136,14 +138,20 @@ bool TakePick(Launcher & L)
     return true;
 }
 
-void StartGame(Launcher & L, const LauncherGame & Game)
+// Editor false: a game, "Project64" with the ROM's path. Editor true: the layout editor,
+// "Project64-wizard --edit <rom>". Same environment and posix_spawn path either way.
+void StartChild(Launcher & L, const LauncherGame & Game, bool Editor)
 {
     const LauncherEnv Child = LauncherChildEnv(environ, L.EmulatorDir, Game, L.Settings.Face);
     std::vector<char *> Envp;
     for (const std::string & E : Child.Vars) Envp.push_back(const_cast<char *>(E.c_str()));
     Envp.push_back(nullptr);
-    const std::string Exe = L.EmulatorDir + "/Project64";
-    char * Argv[] = { const_cast<char *>(Exe.c_str()), const_cast<char *>(Game.Path.c_str()), nullptr };
+    const std::string Exe = L.EmulatorDir + (Editor ? "/Project64-wizard" : "/Project64");
+    std::vector<char *> Argv;
+    Argv.push_back(const_cast<char *>(Exe.c_str()));
+    if (Editor) Argv.push_back(const_cast<char *>("--edit"));
+    Argv.push_back(const_cast<char *>(Game.Path.c_str()));
+    Argv.push_back(nullptr);
 
     // posix_spawn, not fork then setenv: SDL runs threads by now, and only async-signal-safe
     // calls are allowed between fork and exec in a threaded process.
@@ -159,18 +167,23 @@ void StartGame(Launcher & L, const LauncherGame & Game)
     posix_spawn_file_actions_addchdir_np(&Actions, L.EmulatorDir.c_str());
 #pragma clang diagnostic pop
     pid_t Pid = 0;
-    const int Err = posix_spawn(&Pid, Exe.c_str(), &Actions, nullptr, Argv, Envp.data());
+    const int Err = posix_spawn(&Pid, Exe.c_str(), &Actions, nullptr, Argv.data(), Envp.data());
     posix_spawn_file_actions_destroy(&Actions);
     if (Err != 0)
     {
-        L.Status = Game.Title + " could not start: " + strerror(Err);
+        L.Status = Editor ? Game.Title + ": the layout editor could not start: " + strerror(Err)
+                           : Game.Title + " could not start: " + strerror(Err);
         fprintf(stderr, "launcher: cannot start %s: %s\n", Exe.c_str(), strerror(Err));
         return;
+    }
+    if (Editor)
+    {
+        fprintf(stderr, "launcher: editing %s\n", Game.Path.c_str());
     }
     // A PJ64_INPUT_YAML LauncherChildEnv kept from the launcher's own environment wins for
     // every game, so say that instead of "the generic layout", whether or not this particular
     // ROM has its own layout.
-    if (Child.InheritedLayout)
+    else if (Child.InheritedLayout)
     {
         fprintf(stderr, "launcher: started %s with $PJ64_INPUT_YAML\n", Game.Path.c_str());
     }
@@ -180,14 +193,22 @@ void StartGame(Launcher & L, const LauncherGame & Game)
     }
     L.Child = Pid;
     L.ChildGame = Game;
+    L.ChildIsEditor = Editor;
     L.Status.clear();
-    const char * Selftest = getenv("PJ64_LAUNCHER_SELFTEST");
-    const int Seconds = Selftest != nullptr ? atoi(Selftest) : 0;
-    L.KillAt = Seconds > 0 ? SDL_GetTicks() + (Uint64)Seconds * 1000 : 0;
+    if (Editor)
+    {
+        L.KillAt = 0;
+    }
+    else
+    {
+        const char * Selftest = getenv("PJ64_LAUNCHER_SELFTEST");
+        const int Seconds = Selftest != nullptr ? atoi(Selftest) : 0;
+        L.KillAt = Seconds > 0 ? SDL_GetTicks() + (Uint64)Seconds * 1000 : 0;
+    }
     SDL_HideWindow(L.Window);
 }
 
-// Reaps the game once it ends and brings the window back. True when it did.
+// Reaps the game or editor once it ends and brings the window back. True when it did.
 bool PollChild(Launcher & L)
 {
     if (L.Child == 0) return false;
@@ -200,17 +221,28 @@ bool PollChild(Launcher & L)
     const pid_t Done = waitpid(L.Child, &Status, WNOHANG);
     if (Done == 0) return false;
     L.Child = 0;
-    L.GamesEnded++;
     char How[32];
     if (Done < 0) snprintf(How, sizeof(How), "exit -1");
     else if (WIFSIGNALED(Status)) snprintf(How, sizeof(How), "signal %d", WTERMSIG(Status));
     else snprintf(How, sizeof(How), "exit %d", WEXITSTATUS(Status));
-    fprintf(stderr, "launcher: game ended (%s)\n", How);
     const bool Clean = Done > 0 && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
-    L.Status = Clean ? std::string() : L.ChildGame.Title + " ended with an error (" + How + ")";
-    LauncherPushRecent(&L.Settings.Recent, L.ChildGame.Path);
-    RebuildRecent(L);
-    Save(L);
+    if (L.ChildIsEditor)
+    {
+        L.EditorsEnded++;
+        fprintf(stderr, "launcher: editor ended (%s)\n", How);
+        L.Status = Clean ? std::string() : L.ChildGame.Title + ": the layout editor ended with an error (" + How + ")";
+        Rescan(L);
+        RebuildRecent(L);
+    }
+    else
+    {
+        L.GamesEnded++;
+        fprintf(stderr, "launcher: game ended (%s)\n", How);
+        L.Status = Clean ? std::string() : L.ChildGame.Title + " ended with an error (" + How + ")";
+        LauncherPushRecent(&L.Settings.Recent, L.ChildGame.Path);
+        RebuildRecent(L);
+        Save(L);
+    }
     SDL_ShowWindow(L.Window);
     SDL_RaiseWindow(L.Window);
     fprintf(stderr, "launcher: window back\n");
@@ -233,7 +265,14 @@ bool ActOnClick(Launcher & L, LauncherTarget T)
         if (Game != nullptr)
         {
             const LauncherGame Copy = *Game;   // State may change while the game runs
-            StartGame(L, Copy);
+            StartChild(L, Copy, false);
+        }
+        break;
+    case LauncherCommand::Edit:
+        if (Game != nullptr)
+        {
+            const LauncherGame Copy = *Game;
+            StartChild(L, Copy, true);
         }
         break;
     case LauncherCommand::None: break;
@@ -259,8 +298,8 @@ void PushClick(LauncherTarget T)
 }
 
 // --selftest (Scripts/launcher_selftest.sh): click the first row, wait for the window to
-// come back, click the second, wait again, then check the recent games. Returns -1 while
-// running, else the exit code.
+// come back, click the second, wait again, check the recent games, then click Edit on the
+// first row and wait once more. Returns -1 while running, else the exit code.
 int SelftestStep(Launcher & L, int * Step)
 {
     if (L.Child != 0) return -1;
@@ -282,12 +321,27 @@ int SelftestStep(Launcher & L, int * Step)
     else if (*Step == 2 && L.GamesEnded == 2)
     {
         const std::vector<std::string> & R = L.Settings.Recent;
-        if (R.size() >= 2 && R[0] == L.State.Games[1].Path && R[1] == L.State.Games[0].Path)
+        if (R.size() < 2 || R[0] != L.State.Games[1].Path || R[1] != L.State.Games[0].Path)
+        {
+            fprintf(stderr, "launcher: selftest failed: the recent games are not the two played, newest first\n");
+            return 1;
+        }
+        if (!L.State.EditorFound)
+        {
+            fprintf(stderr, "launcher: selftest failed: no Project64-wizard beside the emulator\n");
+            return 1;
+        }
+        PushClick(LauncherTarget{ LauncherTargetKind::Edit, 0 });
+        *Step = 3;
+    }
+    else if (*Step == 3 && L.EditorsEnded == 1)
+    {
+        if (!L.State.Games.empty() && !L.State.Games[0].Generic)
         {
             fprintf(stderr, "launcher: selftest ok\n");
             return 0;
         }
-        fprintf(stderr, "launcher: selftest failed: the recent games are not the two played, newest first\n");
+        fprintf(stderr, "launcher: selftest failed: the edited game still has no layout of its own\n");
         return 1;
     }
     return -1;
@@ -316,6 +370,7 @@ int main(int argc, char ** argv)
     L.State.EmulatorFound = LauncherFindEmulator(ExecutablePath().c_str(), &L.EmulatorDir);
     if (L.State.EmulatorFound) fprintf(stderr, "launcher: emulator %s\n", L.EmulatorDir.c_str());
     else fprintf(stderr, "launcher: Project64 not found beside the app\n");
+    L.State.EditorFound = L.State.EmulatorFound && LauncherHasEditor(L.EmulatorDir);
     L.SettingsFile = SettingsPath();
     if (LauncherLoadSettings(L.SettingsFile.c_str(), &L.Settings) == LauncherLoad::Malformed)
     {

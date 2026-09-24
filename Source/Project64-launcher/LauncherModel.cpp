@@ -109,9 +109,9 @@ void LauncherPushRecent(std::vector<std::string> * Recent, const std::string & P
     if (Recent->size() > LAUNCHER_RECENT_MAX) Recent->resize(LAUNCHER_RECENT_MAX);
 }
 
-static bool HoldsEmulator(const std::string & Dir)
+static bool HoldsExecutable(const std::string & Dir, const char * Name)
 {
-    const std::string Exe = Dir + "/Project64";
+    const std::string Exe = Dir + "/" + Name;
     struct stat St;
     return stat(Exe.c_str(), &St) == 0 && S_ISREG(St.st_mode) && access(Exe.c_str(), X_OK) == 0;
 }
@@ -125,13 +125,18 @@ bool LauncherFindEmulator(const char * LauncherPath, std::string * Dir)
     for (const std::string & C : Candidates)
     {
         char Resolved[PATH_MAX];
-        if (HoldsEmulator(C) && realpath(C.c_str(), Resolved) != nullptr)
+        if (HoldsExecutable(C, "Project64") && realpath(C.c_str(), Resolved) != nullptr)
         {
             *Dir = Resolved;
             return true;
         }
     }
     return false;
+}
+
+bool LauncherHasEditor(const std::string & EmulatorDir)
+{
+    return HoldsExecutable(EmulatorDir, "Project64-wizard");
 }
 
 static bool HasPrefix(const char * S, const char * Prefix)
@@ -243,6 +248,7 @@ const std::vector<LauncherTarget> & LauncherTargets()
         for (LauncherTargetKind K : Fixed) Targets.push_back(LauncherTarget{ K, 0 });
         for (int i = 0; i < 26; i++) Targets.push_back(LauncherTarget{ LauncherTargetKind::Letter, i });
         for (int i = 0; i < LAUNCHER_ROWS; i++) Targets.push_back(LauncherTarget{ LauncherTargetKind::Row, i });
+        for (int i = 0; i < LAUNCHER_ROWS; i++) Targets.push_back(LauncherTarget{ LauncherTargetKind::Edit, i });
         Targets.push_back(LauncherTarget{ LauncherTargetKind::Prev, 0 });
         Targets.push_back(LauncherTarget{ LauncherTargetKind::Next, 0 });
         Targets.push_back(LauncherTarget{ LauncherTargetKind::Choose, 0 });
@@ -266,7 +272,8 @@ LauncherRect LauncherTargetRect(LauncherTarget T)
         const float Y = Top ? kLetterTop : kLetterTop + kLetterHeight + kLetterGap;
         return LauncherRect{ kLetterLeft + Column * kLetterPitch, Y, kLetterWidth, kLetterHeight };
     }
-    case LauncherTargetKind::Row: return LauncherRect{ 16, kRowTop + T.Index * kRowHeight, 768, kRowHeight - 2 };
+    case LauncherTargetKind::Row: return LauncherRect{ 16, kRowTop + T.Index * kRowHeight, 676, kRowHeight - 2 };
+    case LauncherTargetKind::Edit: return LauncherRect{ 700, kRowTop + T.Index * kRowHeight, 84, kRowHeight - 2 };
     case LauncherTargetKind::Prev: return LauncherRect{ 16, 556, 160, 48 };
     case LauncherTargetKind::Next: return LauncherRect{ 624, 556, 160, 48 };
     case LauncherTargetKind::Choose: return LauncherRect{ 250, 320, 300, 56 };
@@ -304,6 +311,7 @@ bool LauncherEnabled(const LauncherState & S, LauncherTarget T)
     case LauncherTargetKind::Recent: return !S.Recent.empty();
     case LauncherTargetKind::Letter: return T.Index >= 0 && T.Index < 26 && LauncherLetterPage(S.Games, T.Index) >= 0;
     case LauncherTargetKind::Row: return T.Index >= 0 && T.Index < LauncherRowCount(S);
+    case LauncherTargetKind::Edit: return S.EditorFound && T.Index >= 0 && T.Index < LauncherRowCount(S);
     case LauncherTargetKind::Prev: return S.View == 0 ? !S.Recent.empty() : S.View > 0;
     case LauncherTargetKind::Next:
         return S.View == LAUNCHER_VIEW_RECENT ? !S.Games.empty() : S.View + 1 < LauncherPageCount((int)S.Games.size());
@@ -344,6 +352,9 @@ LauncherCommand LauncherAct(LauncherState * S, LauncherTarget T, const LauncherG
     case LauncherTargetKind::Row:
         *Game = LauncherRowGame(*S, T.Index);
         return LauncherCommand::Start;
+    case LauncherTargetKind::Edit:
+        *Game = LauncherRowGame(*S, T.Index);
+        return LauncherCommand::Edit;
     case LauncherTargetKind::None: break;
     }
     return LauncherCommand::None;

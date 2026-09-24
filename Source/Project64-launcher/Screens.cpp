@@ -12,8 +12,8 @@
 
 static const int kScale = 2;
 static const float kGlyph = (float)(SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE * kScale);   // 16
-static const int kRowChars = 47;      // a row's title with nothing beside it: 752 of 768 points
-static const int kTitleChars = 39;    // a row's title leaving room for "generic"
+static const int kRowChars = 41;      // a row's title with nothing beside it: 656 of the row's 676 points
+static const int kTitleChars = 33;    // a row's title leaving room for "generic"
 static const int kLineChars = 48;     // a full-width line at kScale
 
 static void Fill(SDL_Renderer * R, LauncherRect Rect, Uint8 Red, Uint8 Green, Uint8 Blue)
@@ -93,6 +93,9 @@ void LauncherDraw(SDL_Renderer * R, const LauncherState & S, LauncherTarget Hove
             if (G != nullptr) Row(R, Rect, *G, Hot);
             break;
         }
+        case LauncherTargetKind::Edit:
+            if (LauncherRowGame(S, T.Index) != nullptr) Button(R, Rect, "Edit", On, Hot);
+            break;
         case LauncherTargetKind::Prev: Button(R, Rect, "<", On, Hot); break;
         case LauncherTargetKind::Next: Button(R, Rect, ">", On, Hot); break;
         case LauncherTargetKind::Choose:

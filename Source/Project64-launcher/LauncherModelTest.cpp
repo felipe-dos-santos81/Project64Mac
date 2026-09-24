@@ -118,6 +118,10 @@ static void ScanAndEmulator()
     CHECK(LauncherFindEmulator(Bundled.c_str(), &Dir) && Dir == Real);
     Dir.clear();
     CHECK(LauncherFindEmulator((Emu + "/Project64-launcher").c_str(), &Dir) && Dir == Real);
+
+    CHECK(!LauncherHasEditor(Real));
+    TestTouch(Emu + "/Project64-wizard", 0755);
+    CHECK(LauncherHasEditor(Real));
 }
 
 static bool Has(const std::vector<std::string> & Env, const std::string & Entry)
@@ -250,7 +254,7 @@ static void Screen()
     // Every target lies inside the window, and no two overlap except Choose, which only
     // exists when there are no rows.
     const std::vector<LauncherTarget> & All = LauncherTargets();
-    CHECK(All.size() == 3 + 1 + 26 + LAUNCHER_ROWS + 2 + 1);
+    CHECK(All.size() == 3 + 1 + 26 + LAUNCHER_ROWS + LAUNCHER_ROWS + 2 + 1);
     for (size_t i = 0; i < All.size(); i++)
     {
         const LauncherRect A = LauncherTargetRect(All[i]);
@@ -265,6 +269,7 @@ static void Screen()
 
     // 25 games, no recent games: three pages, opening on page 1.
     LauncherState S = StateOf(25, 0);
+    const LauncherGame * G = nullptr;
     CHECK(LauncherInitialView(S) == 0);
     for (const LauncherTarget & Each : All) CHECK(!LauncherEnabled(S, Each) || HitCentre(S, Each) == Each);
     CHECK(LauncherHit(S, 2, 2).Kind == LauncherTargetKind::None);        // the corner is no target
@@ -279,7 +284,20 @@ static void Screen()
     CHECK(LauncherEnabled(S, Target(LauncherTargetKind::Letter, 24)));        // Y24, the last title
     CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Letter, 25)));       // no title starts with Z
 
-    const LauncherGame * G = nullptr;
+    // Edit: its own target beside each row's title, dimmed without a wizard.
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Edit, 0)));
+    S.EditorFound = true;
+    CHECK(LauncherEnabled(S, Target(LauncherTargetKind::Edit, 0)));
+    CHECK(!LauncherEnabled(S, Target(LauncherTargetKind::Edit, LauncherRowCount(S))));
+    const LauncherRect Title = LauncherTargetRect(Target(LauncherTargetKind::Row, 3));
+    const LauncherRect Edit = LauncherTargetRect(Target(LauncherTargetKind::Edit, 3));
+    CHECK(Title.Y == Edit.Y && Title.H == Edit.H && Title.X + Title.W < Edit.X);
+    CHECK(LauncherHit(S, Title.X + Title.W - 1, Title.Y + 10) == Target(LauncherTargetKind::Row, 3));
+    CHECK(LauncherHit(S, Edit.X + 1, Edit.Y + 10) == Target(LauncherTargetKind::Edit, 3));
+    CHECK(LauncherHit(S, Title.X + Title.W + 2, Title.Y + 10).Kind == LauncherTargetKind::None);
+    CHECK(LauncherAct(&S, Target(LauncherTargetKind::Edit, 3), &G) == LauncherCommand::Edit && G == &S.Games[3]);
+    S.EditorFound = false;
+
     CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 1);
     CHECK(LauncherAct(&S, Target(LauncherTargetKind::Next), &G) == LauncherCommand::None && S.View == 2);
     CHECK(LauncherRowCount(S) == 5);

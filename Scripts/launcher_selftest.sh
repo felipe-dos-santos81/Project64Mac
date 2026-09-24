@@ -5,9 +5,11 @@
 # a layout with no menu, which must get one on mid5 (PJ64_MENU_AUTO). The launcher clicks
 # each row in turn with synthetic events (--selftest), stops each game after
 # PJ64_LAUNCHER_SELFTEST seconds, and must come back after each and list both as recent,
-# newest first. The camera never opens: launcher.yaml has Face off, which makes the launcher
-# give each game PJ64_FACE=0. The PJ64_FACE=0 below follows AGENTS.md's rule for unattended
-# runs, but the launcher drops an inherited PJ64_FACE, so it is not what keeps the camera shut.
+# newest first. A third step then clicks Edit on the first row: PJ64_EDIT_SELFTEST=1 makes
+# the editor script and save nolayout.yaml beside its ROM with no window. The camera never
+# opens: launcher.yaml has Face off, which makes the launcher give each game PJ64_FACE=0. The
+# PJ64_FACE=0 below follows AGENTS.md's rule for unattended runs, but the launcher drops an
+# inherited PJ64_FACE, so it is not what keeps the camera shut.
 # Design: Docs/superpowers/specs/2026-09-24-launcher-design.md
 set -eu
 
@@ -17,6 +19,7 @@ APP_BIN="$ROOT/Bin/macOS/Project64.app/Contents/MacOS/Project64-launcher"
 
 [ -x "$APP_BIN" ] || { echo "app not built: $APP_BIN (make all)" >&2; exit 1; }
 [ -x "$ROOT/Bin/macOS/Project64" ] || { echo "frontend not built (make all)" >&2; exit 1; }
+[ -x "$ROOT/Bin/macOS/Project64-wizard" ] || { echo "wizard not built (make all)" >&2; exit 1; }
 [ -f "$ROM" ] || { echo "no such ROM: $ROM" >&2; exit 1; }
 case "$ROM" in /*) ;; *) ROM="$(pwd)/$ROM" ;; esac
 
@@ -37,7 +40,7 @@ YAML
 
 LOG="$WORK/log"
 unset PJ64_INPUT_YAML PJ64_MENU_AUTO
-if ! PJ64_FACE=0 PJ64_LAUNCHER_HOME="$WORK/home" PJ64_LAUNCHER_SELFTEST=6 \
+if ! PJ64_FACE=0 PJ64_LAUNCHER_HOME="$WORK/home" PJ64_LAUNCHER_SELFTEST=6 PJ64_EDIT_SELFTEST=1 \
     perl -e 'alarm 90; exec @ARGV' -- "$APP_BIN" --selftest >"$LOG" 2>&1; then
     cat "$LOG" >&2
     echo "launcher-selftest: the launcher did not finish cleanly" >&2
@@ -63,6 +66,10 @@ count "^menu: added on mid5\$" 1
 # normal cleanup path rather than dying by the raw signal; verified with a bare `./Project64`
 # run outside the launcher too. "exit 0", not "signal 15", is what a clean stop looks like.
 count "^launcher: game ended (exit 0)\$" 2
-count "^launcher: window back\$" 2
+need "^launcher: editing $WORK/games/nolayout.z64\$"
+need "^launcher: editor ended (exit 0)\$"
+count "^launcher: window back\$" 3
+[ -f "$WORK/games/nolayout.yaml" ] || fail "the editor did not save nolayout.yaml beside the ROM"
+grep -q '^  Menu:' "$WORK/games/nolayout.yaml" || fail "the edited layout has no Menu line"
 need "^launcher: selftest ok\$"
 echo "ok: launcher selftest"
