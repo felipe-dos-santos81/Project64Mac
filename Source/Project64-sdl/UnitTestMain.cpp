@@ -19,6 +19,7 @@ const Area kAreas[] = {
     { "game-config", RunGameConfigTests },
     { "input-config", RunInputConfigTests },
     { "wizard-draft", RunWizardDraftTests },
+    { "launcher", RunLauncherTests },
 };
 }
 

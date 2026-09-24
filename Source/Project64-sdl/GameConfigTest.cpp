@@ -12,28 +12,15 @@
 #include <unistd.h>
 #include <string>
 
-static void Touch(const std::string & Path)
-{
-    FILE * F = fopen(Path.c_str(), "w");
-    if (F == nullptr) { perror(Path.c_str()); exit(2); }
-    fclose(F);
-}
-
-static void MakeDir(const std::string & Path)
-{
-    if (mkdir(Path.c_str(), 0700) != 0) { perror(Path.c_str()); exit(2); }
-}
-
 void RunGameConfigTests()
 {
-    char Root[] = "/tmp/pj64-gamecfg-XXXXXX";
-    if (mkdtemp(Root) == nullptr) { perror("mkdtemp"); TestFailures()++; return; }
-    const std::string Roms = std::string(Root) + "/roms";
-    const std::string Exe = std::string(Root) + "/bin";
-    MakeDir(Roms);
-    MakeDir(Exe);
-    MakeDir(Exe + "/Config");
-    MakeDir(Exe + "/Config/mouse");
+    const std::string Root = TestMakeTempDir("pj64-gamecfg");
+    const std::string Roms = Root + "/roms";
+    const std::string Exe = Root + "/bin";
+    TestMakeDir(Roms);
+    TestMakeDir(Exe);
+    TestMakeDir(Exe + "/Config");
+    TestMakeDir(Exe + "/Config/mouse");
     const std::string Rom = Roms + "/game.z64";   // the ROM itself need not exist
     char Out[PATH_MAX];
 
@@ -43,12 +30,12 @@ void RunGameConfigTests()
     CHECK(strcmp(Out, "untouched") == 0);
 
     // Only the installed copy under Config/mouse.
-    Touch(Exe + "/Config/mouse/game.yaml");
+    TestTouch(Exe + "/Config/mouse/game.yaml");
     CHECK(GameConfigPath(Rom.c_str(), Exe.c_str(), Out, sizeof(Out)));
     CHECK(std::string(Out) == Exe + "/Config/mouse/game.yaml");
 
     // The sibling wins when both exist.
-    Touch(Roms + "/game.yaml");
+    TestTouch(Roms + "/game.yaml");
     CHECK(GameConfigPath(Rom.c_str(), Exe.c_str(), Out, sizeof(Out)));
     CHECK(std::string(Out) == Roms + "/game.yaml");
 
@@ -57,7 +44,7 @@ void RunGameConfigTests()
     CHECK(std::string(Out) == Roms + "/game.yaml");
 
     // A ROM with no extension uses its whole name.
-    Touch(Roms + "/plain.yaml");
+    TestTouch(Roms + "/plain.yaml");
     CHECK(GameConfigPath((Roms + "/plain").c_str(), Exe.c_str(), Out, sizeof(Out)));
     CHECK(std::string(Out) == Roms + "/plain.yaml");
 

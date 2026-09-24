@@ -295,6 +295,7 @@ FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRende
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
 WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp Screenshots.cpp)
+LAUNCHER_SRC = $(addprefix Project64-launcher/, LauncherModel.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
 SETTINGS_OBJS = $(call objs,$(SETTINGS_SRC))
@@ -310,9 +311,10 @@ INPUT_OBJS    = $(call objs,$(INPUT_SRC))
 FRONTEND_OBJS = $(call objs,$(FRONTEND_SRC))
 FRONTEND_MM_OBJS = $(call objs,$(FRONTEND_MM_SRC))
 WIZARD_OBJS = $(call objs,$(WIZARD_SRC))
+LAUNCHER_OBJS = $(call objs,$(LAUNCHER_SRC))
 ALL_OBJS      = $(COMMON_OBJS) $(SETTINGS_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) $(ASMJIT_OBJS) \
   $(SOFTFLOAT_OBJS) $(CORE_OBJS) $(RSP_OBJS) $(VIDEO_OBJS) $(AUDIO_OBJS) $(INPUT_OBJS) \
-  $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS)
+  $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) $(LAUNCHER_OBJS)
 
 # The four plugin dylibs, named once: the build rules and the smoke test both use this.
 PLUGIN_DYLIBS = $(PLUGINS)/GFX/Project64-video.dylib $(PLUGINS)/Audio/Project64-audio.dylib \
@@ -344,6 +346,8 @@ $(VIDEO_OBJS): CPPFLAGS += -DNOSSE
 $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(SDL_CFLAGS)
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
+$(LAUNCHER_OBJS): CPPFLAGS += $(SDL_CFLAGS) $(YAML_CFLAGS)
+$(LAUNCHER_OBJS): WARN = -Wall
 
 .PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
 
@@ -512,7 +516,8 @@ wizard-screenshots-check: wizard ## Prove the committed wizard pictures match wh
 UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o PointerMenuTest.o \
                    FaceGesturesTest.o FaceGestures.o GameConfigTest.o GameConfig.o \
                    InputConfigTest.o InputConfig.o) \
-                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o)
+                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o) \
+                 $(addprefix $(BUILD)/Project64-launcher/, LauncherModelTest.o LauncherModel.o)
 
 $(BUILD)/unit-tests: $(UNIT_TEST_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)

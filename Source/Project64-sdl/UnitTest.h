@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 
 // Failures so far, across every area; main reads it before and after each one.
@@ -39,9 +40,34 @@ inline bool TestHas(const std::string & Text, const char * Needle)
     return Text.find(Needle) != std::string::npos;
 }
 
+// Creates an empty file (Mode applied with chmod), exiting on failure: a test tree that
+// cannot be built is not a test failure but a broken machine.
+inline void TestTouch(const std::string & Path, mode_t Mode = 0644)
+{
+    FILE * F = fopen(Path.c_str(), "w");
+    if (F == nullptr) { perror(Path.c_str()); exit(2); }
+    fclose(F);
+    chmod(Path.c_str(), Mode);
+}
+
+inline void TestMakeDir(const std::string & Path)
+{
+    if (mkdir(Path.c_str(), 0700) != 0) { perror(Path.c_str()); exit(2); }
+}
+
+// A new empty directory under /tmp named /tmp/<Prefix>-XXXXXX.
+inline std::string TestMakeTempDir(const char * Prefix)
+{
+    char Path[128];
+    snprintf(Path, sizeof(Path), "/tmp/%s-XXXXXX", Prefix);
+    if (mkdtemp(Path) == nullptr) { perror("mkdtemp"); exit(2); }
+    return Path;
+}
+
 void RunPointerLayoutTests();
 void RunPointerMenuTests();
 void RunFaceGesturesTests();
 void RunGameConfigTests();
 void RunInputConfigTests();
 void RunWizardDraftTests();
+void RunLauncherTests();
