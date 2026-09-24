@@ -130,13 +130,15 @@ into calls on it.
 - **Hold** exists only while the stick is the pointer. Placing it elsewhere moves it;
   `Nothing` on its slot removes it.
 - **The menu always has a place.** `Menu` on a slot moves it there. Anything else placed on
-  the menu's slot, `Nothing` included, moves the menu to the first free place by the play-time
-  order (`mid5`…`mid1`, then `pad-down`, or `pad-up` when `pad-down` is the hold), and the
-  status line says where. With no free place the click is refused: `The panel is full: free a
-  slot for the menu first`. The order is one function in `InputConfig.h`, used by
-  `ApplyAutoMenu` and by the draft, so play and editing cannot disagree. A loaded layout whose
-  menu is a gesture shows it as `==` in the gesture list; replacing it moves the menu to a slot
-  by the same order.
+  the menu's slot, `Nothing` included, first tries the play-time order (`mid5`…`mid1`, then
+  `pad-down`, or `pad-up` when `pad-down` is the hold — one function in `InputConfig.h`, used
+  by `ApplyAutoMenu` and by the draft, so play and editing cannot disagree); when that slot is
+  itself taken, editing (unlike play, which would take it from its control) falls back to the
+  first free slot on the panel in zone order, never the picture, and the status line says
+  where. Only when every one of the thirteen panel slots is taken is the click refused: `The
+  panel is full: free a slot for the menu first`. A loaded layout whose menu is a gesture
+  shows it as `==` in the gesture list; replacing it moves the menu to a slot by the same
+  rule.
 - **Gestures** hold one control or nothing. While the stick is `head` or `head-digital`, the
   four head-direction gestures are dimmed (the head moves the stick). Switching the stick to a
   head form clears what those four held and removes the hold; the status line names what was

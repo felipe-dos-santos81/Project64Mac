@@ -292,6 +292,7 @@ EditCommand EditAct(EditState * S, WizardDraft * D, EditTarget T)
         return EditCommand::None;
     case EditTargetKind::Choice:
     {
+        const std::string Before = D->Emit("");
         bool Ok;
         if (T.Index < EDIT_CHOICE_MENU) Ok = D->PlaceControl(S->Place, (N64Control)T.Index, &Note);
         else if (T.Index == EDIT_CHOICE_MENU) Ok = D->PlaceMenu(S->Place.Index, &Note);
@@ -302,33 +303,36 @@ EditCommand EditAct(EditState * S, WizardDraft * D, EditTarget T)
             S->Status = Note;
             return EditCommand::None;
         }
-        S->Dirty = true;
+        if (D->Emit("") != Before) S->Dirty = true;
         S->Status = EditHeader(*S, *D) + (Note.empty() ? "" : "; " + Note);
         S->View = S->Place.Gesture ? EditView::Gestures : EditView::Panel;
         return EditCommand::None;
     }
     case EditTargetKind::Toggle:
+    {
+        const std::string Before = D->Emit("");
         if (!D->SetToggle(S->Place.Index, !D->Toggled(S->Place.Index), &Note))
         {
             S->Status = Note;
             return EditCommand::None;
         }
-        S->Dirty = true;
+        if (D->Emit("") != Before) S->Dirty = true;
         S->Status = EditHeader(*S, *D);
         return EditCommand::None;
+    }
     case EditTargetKind::Back:
         S->View = (S->View == EditView::Chooser && S->Place.Gesture) ? EditView::Gestures : EditView::Panel;
         S->Status.clear();
         return EditCommand::None;
     case EditTargetKind::StickForm:
     {
-        const EditStick Before = D->StickForm();
+        const std::string Before = D->Emit("");
         if (!D->SetStickForm(kForms[T.Index], &Note))
         {
             S->Status = Note;
             return EditCommand::None;
         }
-        if (D->StickForm() != Before) S->Dirty = true;
+        if (D->Emit("") != Before) S->Dirty = true;
         S->Status = std::string("The stick is ") + StickName(D->StickForm()) + (Note.empty() ? "" : "; " + Note);
         S->View = EditView::Panel;
         return EditCommand::None;

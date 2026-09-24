@@ -320,11 +320,14 @@ in the slot").
 **The rules.** A slot, or a gesture, holds one thing: choosing a control for it moves that
 control off wherever it was, and whatever it displaces is not placed any more, keeping its
 built-in key and gamepad pair — the same thing `Clear` does in the step-by-step wizard. The
-menu always has a place: taking its slot for something else moves the menu instead, by the
-same order as a new game from the launcher (section 3) — `mid5` down to `mid1`, then
-`pad-down`, or `pad-up` instead when `pad-down` is the stick's hold — and when every slot
-is already taken, the move is refused ("The panel is full: free a slot for the menu
-first") rather than losing the menu. The hold only works with the pointer stick. Switching
+menu always has a place: taking its slot for something else moves the menu instead, first
+trying the same order as a new game from the launcher (section 3) — `mid5` down to `mid1`,
+then `pad-down`, or `pad-up` instead when `pad-down` is the stick's hold — and, when that
+slot is itself taken, falling back to the first free slot on the panel in reading order
+(`pad-up`, `pad-down`, `pad-left`, `pad-right`, `c-up`, `c-down`, `c-left`, `c-right`,
+`mid1` ... `mid5`), never the picture. Only when every one of those thirteen slots is
+taken is the move refused ("The panel is full: free a slot for the menu first") rather
+than losing the menu. The hold only works with the pointer stick. Switching
 the stick to `head` or `head-digital` clears any control, or the menu, from the four
 head-turn gestures and dims those four rows in the gesture list, since the head now moves
 the stick instead of them.

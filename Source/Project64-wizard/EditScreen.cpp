@@ -68,6 +68,24 @@ void Panel(SDL_Renderer * R, const EditState & S, const WizardDraft & D, EditTar
 }
 }
 
+// What the camera is doing, in one line for a gesture list: "tracking", "camera off: …".
+// Declared in Screens.h (Screens.cpp calls it too, for the step-by-step wizard's own gesture
+// screen) but defined here: EditDraw is its only caller in this file, and keeping it beside
+// its one real use lets the unit tests link EditScreen.o for EditHandleEvent without also
+// linking Screens.o and the rest of the step-by-step wizard's screen-drawing code.
+const char * WizardFaceStatus(uint32_t Face)
+{
+    switch (Face)
+    {
+    case FACE_OFF: return "camera off: the list still works, unlit";
+    case FACE_STARTING: return "camera starting";
+    case FACE_TRACKING: return "tracking";
+    case FACE_NO_FACE: return "no face found";
+    case FACE_DENIED: return "camera denied in Settings > Privacy & Security";
+    default: return "camera unavailable";
+    }
+}
+
 void EditDraw(SDL_Renderer * R, const EditState & S, const WizardDraft & D, const char * Title,
               EditTarget Hover, uint32_t Gestures, uint32_t Face)
 {

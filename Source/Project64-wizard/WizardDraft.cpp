@@ -570,11 +570,23 @@ bool WizardDraft::MoveMenu(int Avoid, std::string * Note)
     const int Hold = HoldZone();
     if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
     if (Avoid != POINTER_ZONE_NONE) Used[Avoid] = true;
-    const int Slot = AutoMenuSlot(Used, Hold);
+    int Slot = AutoMenuSlot(Used, Hold);
     if (Used[Slot])
     {
-        *Note = kFullPanel;
-        return false;
+        // AutoMenuSlot's own answer is taken: this is editor-only, so unlike play time the
+        // menu does not have to take it from its control. Try every panel slot in zone order
+        // instead, the picture (POINTER_ZONE_GAME) never among them, and refuse only once
+        // none of the thirteen is free.
+        Slot = POINTER_ZONE_NONE;
+        for (int Zone = 0; Zone < POINTER_ZONE_GAME; Zone++)
+        {
+            if (!Used[Zone]) { Slot = Zone; break; }
+        }
+        if (Slot == POINTER_ZONE_NONE)
+        {
+            *Note = kFullPanel;
+            return false;
+        }
     }
     m_Menu.assign(1, ZoneBinding(Slot, false));
     AddNote(Note, std::string("the menu moved to ") + PointerZoneName(Slot));
@@ -942,7 +954,22 @@ std::string WizardDraft::LoadForRom(const char * RomPath, const char * ExeDir, s
     if (GameConfigPath(RomPath, ExeDir, Own, sizeof(Own)))
     {
         if (LoadBase(Own)) return Own;
-        *Note = "Your layout could not be read (" + m_Error + "); starting from the generic layout";
+        // The reader's own line is "input: <Own>[:<line>:<col>]: reason; using built-in
+        // defaults" (InputConfig::Load's own fprintf). Cut through Own exactly as Validate
+        // cuts through its temp path, leaving ": reason" or ":<line>:<col>: reason", and drop
+        // the trailing clause: this note is about the panel editor, which has no built-in
+        // defaults of its own to fall back to mid-sentence.
+        std::string Reason = m_Error;
+        const size_t Pos = Reason.find(Own);
+        if (Pos != std::string::npos) Reason.erase(0, Pos + strlen(Own));
+        const char * const kSuffix = "; using built-in defaults";
+        const size_t SuffixLen = strlen(kSuffix);
+        if (Reason.size() >= SuffixLen &&
+            Reason.compare(Reason.size() - SuffixLen, SuffixLen, kSuffix) == 0)
+        {
+            Reason.erase(Reason.size() - SuffixLen);
+        }
+        *Note = "Your layout could not be read (" + Reason + "); starting from the generic layout";
     }
     const std::string Generic = std::string(ExeDir) + "/Config/mouse/default.yaml";
     if (LoadBase(Generic.c_str())) return Generic;
@@ -986,14 +1013,18 @@ bool WizardDraft::SaveBesideRom(const char * RomPath, const char * BaseName, std
     FILE * F = fopen(Temp.c_str(), "w");
     if (F == nullptr)
     {
-        m_Error = std::string("could not write ") + Path + ": " + strerror(errno);
+        m_Error = strerror(errno);
         return false;
     }
     const bool Wrote = fwrite(m_LastEmit.data(), 1, m_LastEmit.size(), F) == m_LastEmit.size();
-    if (fclose(F) != 0 || !Wrote)
+    // A power loss between the write and the rename must not leave an empty (or short)
+    // layout behind: flush libc's buffer, then ask the kernel to flush its own before the
+    // file is closed and renamed into place.
+    const bool Flushed = fflush(F) == 0 && fsync(fileno(F)) == 0;
+    if (fclose(F) != 0 || !Wrote || !Flushed)
     {
         remove(Temp.c_str());
-        m_Error = std::string("could not write ") + Path;
+        m_Error = "could not write the file";
         return false;
     }
 
@@ -1003,14 +1034,14 @@ bool WizardDraft::SaveBesideRom(const char * RomPath, const char * BaseName, std
         if (!CopyFile(Path, Orig))
         {
             remove(Temp.c_str());
-            m_Error = "could not keep the original as " + Orig;
+            m_Error = "could not keep the original";
             return false;
         }
         *MadeOrig = true;
     }
     if (rename(Temp.c_str(), Path) != 0)
     {
-        m_Error = std::string("could not write ") + Path + ": " + strerror(errno);
+        m_Error = strerror(errno);
         remove(Temp.c_str());
         return false;
     }

@@ -1,7 +1,10 @@
 // Project64 - A Nintendo 64 emulator
-// Tests for the panel editor's layout and click logic (EditLayout.h). No window, no renderer.
+// Tests for the panel editor's layout and click logic (EditLayout.h), plus EditHandleEvent's
+// window-close handling (EditScreen.h — its own EditDraw needs a renderer and stays untested
+// here). No window, no renderer.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "EditLayout.h"
+#include "EditScreen.h"
 #include <Project64-sdl/UnitTest.h>
 
 #include <Common/PointerLayout.h>
@@ -159,6 +162,15 @@ static void Acts()
     EditAct(&S, &D, Target(EditTargetKind::Back));
     CHECK(S.View == EditView::Panel);
 
+    // Choosing the control already in the slot changes nothing the draft emits, so it never
+    // marks the draft dirty: Cancel quits at once rather than asking to confirm.
+    WizardDraft Same = Small();
+    EditState U;
+    EditAct(&U, &Same, Target(EditTargetKind::Zone, Slot("mid2")));
+    CHECK(EditAct(&U, &Same, Target(EditTargetKind::Choice, (int)N64Control::Z)) == EditCommand::None);
+    CHECK(!U.Dirty);
+    CHECK(EditAct(&U, &Same, Target(EditTargetKind::Cancel)) == EditCommand::Quit);
+
     // A refused choice keeps the chooser, shows the reason and changes nothing.
     WizardDraft Full;
     CHECK(Full.LoadBase(TestWriteTemp(
@@ -209,6 +221,18 @@ static void Acts()
     EditAct(&C, &D, Target(EditTargetKind::Back));
     CHECK(EditAct(&C, &D, Target(EditTargetKind::Cancel)) == EditCommand::None);
     CHECK(EditAct(&C, &D, Target(EditTargetKind::Cancel)) == EditCommand::Quit);
+
+    // The window's close button reaches the same Cancel: on a changed draft it asks once
+    // (returning None, with the confirm status) and only quits on the second close.
+    WizardDraft Closing = Small();
+    EditState W;
+    EditTarget Hover, Pressed;
+    W.Dirty = true;
+    SDL_Event Close = {};
+    Close.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+    CHECK(EditHandleEvent(Close, &W, &Closing, &Hover, &Pressed) == EditCommand::None);
+    CHECK(W.ConfirmCancel && W.Status == "Cancel again to discard your changes");
+    CHECK(EditHandleEvent(Close, &W, &Closing, &Hover, &Pressed) == EditCommand::Quit);
 }
 
 void RunWizardEditTests()

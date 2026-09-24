@@ -159,8 +159,10 @@ private:
     void Replace(N64Control Control, const Binding & Value);
     void ClearControl(N64Control Control, std::string * Note);
     void RemoveHold(std::string * Note);
-    // Moves the menu to the first free slot by AutoMenuSlot, counting Avoid as taken. False,
-    // with the full-panel reason in *Note, when no slot is free.
+    // Moves the menu to AutoMenuSlot's own answer when that is free, counting Avoid as taken;
+    // otherwise to the first free panel slot in zone order (pad-up ... mid5), never the
+    // picture. Editor-only: unlike play time, it never takes a slot from its control. False,
+    // with the full-panel reason in *Note, only when all thirteen slots are taken.
     bool MoveMenu(int Avoid, std::string * Note);
 
     std::vector<Binding> m_Bindings[(int)N64Control::Count];

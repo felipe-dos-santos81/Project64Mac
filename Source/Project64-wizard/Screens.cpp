@@ -591,18 +591,10 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
     }
 }
 
-const char * WizardFaceStatus(uint32_t Face)
-{
-    switch (Face)
-    {
-    case FACE_OFF: return "camera off: the list still works, unlit";
-    case FACE_STARTING: return "camera starting";
-    case FACE_TRACKING: return "tracking";
-    case FACE_NO_FACE: return "no face found";
-    case FACE_DENIED: return "camera denied in Settings > Privacy & Security";
-    default: return "camera unavailable";
-    }
-}
+// WizardFaceStatus itself lives in EditScreen.cpp, not here: it is the one symbol the panel
+// editor's screen needs from this file, and moving it there lets the unit tests link
+// EditScreen.o (for EditHandleEvent) without pulling in the whole step-by-step wizard's
+// screen-drawing code that the rest of this file (1200-odd lines) is made of.
 
 static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t Gestures,
                          uint32_t Face)

@@ -244,7 +244,9 @@ static bool SaveAndReport(WizardDraft & Draft, const char * Rom, const std::stri
         return true;
     }
     S->Status = std::string("Cannot save beside the ROM: ") + Draft.Error();
-    fprintf(stderr, "wizard: cannot save %s: %s\n", Saved.c_str(), Draft.Error());
+    // Saved is only set once GameConfigBesideRom names a path; when that itself failed, it is
+    // still empty, so the ROM's own path stands in rather than printing nothing.
+    fprintf(stderr, "wizard: cannot save %s: %s\n", Saved.empty() ? Rom : Saved.c_str(), Draft.Error());
     return false;
 }
 
@@ -289,6 +291,7 @@ static int RunEditor(const char * Rom)
         return 1;
     }
     fprintf(stderr, "wizard: editing %s from %s\n", Rom, Loaded.c_str());
+    if (!S.Status.empty()) fprintf(stderr, "wizard: %s\n", S.Status.c_str());
     std::string MenuNote;
     if (Draft.EnsureMenu(&MenuNote)) S.Status = S.Status.empty() ? MenuNote : S.Status + "; " + MenuNote;
     if (S.Status.empty()) S.Status = "Click a slot or the picture to change it.";

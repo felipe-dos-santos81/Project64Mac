@@ -547,7 +547,7 @@ wizard-screenshots-check: wizard ## Prove the committed wizard pictures match wh
 UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o PointerMenuTest.o \
                    FaceGesturesTest.o FaceGestures.o GameConfigTest.o GameConfig.o \
                    InputConfigTest.o InputConfig.o) \
-                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o EditLayoutTest.o EditLayout.o) \
+                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o EditLayoutTest.o EditLayout.o EditScreen.o) \
                  $(addprefix $(BUILD)/Project64-launcher/, LauncherModelTest.o LauncherModel.o)
 
 $(BUILD)/unit-tests: $(UNIT_TEST_OBJS)

@@ -138,6 +138,17 @@ static void PanelEditing()
     CHECK(D.PlaceMenu(Slot("c-up"), &N) && N == "CUp is not placed now" && D.MenuZone() == Slot("c-up"));
     CHECK(D.Validate("x"));
 
+    // A free slot elsewhere still gets the menu, even when AutoMenuSlot's own answer is
+    // taken: MoveMenu tries every panel slot in zone order, never the picture, before it
+    // refuses. mid1-mid5 are full (mid5 is the hold), so AutoMenuSlot's own fallback answer
+    // is pad-down itself, which is Avoided while the menu leaves it; pad-right, freed by
+    // moving DPadRight onto pad-left, is what MoveMenu should find instead.
+    WizardDraft Repro = PanelDraft();
+    CHECK(Repro.PlaceControl(At("pad-left"), N64Control::DPadRight, &N));
+    CHECK(Repro.PlaceNothing(At("pad-down"), &N) && N == "the menu moved to pad-right" &&
+          Repro.MenuZone() == Slot("pad-right"));
+    CHECK(Repro.Validate("x"));
+
     // The hold: only with the pointer; moving it frees its old slot; Nothing removes it.
     WizardDraft Plain;
     CHECK(!Plain.CanPlaceHold(Slot("mid5"), &N) && N == "the hold needs the stick to be the pointer");
@@ -230,11 +241,15 @@ static void RomFiles()
     CHECK(TestHas(Loaded, "Config/mouse/default.yaml") && Note.empty());
     CHECK(D.MenuZone() == PointerZoneFromName("pad-down"));
 
-    // A layout that will not load: the generic one, and the reason.
+    // A layout that will not load: the generic one, and the reason, short enough for the
+    // status line — no path, and no dangling "using built-in defaults" (this note is about
+    // the panel editor, not the reader's own fallback).
     WriteAll(Dir + "/game.yaml", "bindings: [1, 2]\n");
     Loaded = D.LoadForRom(Rom.c_str(), g_Root.c_str(), &Note);
     CHECK(TestHas(Loaded, "Config/mouse/default.yaml"));
     CHECK(TestHas(Note, "Your layout could not be read (") && TestHas(Note, "); starting from the generic layout"));
+    CHECK(!TestHas(Note, Dir + "/game.yaml"));
+    CHECK(!TestHas(Note, "using built-in defaults"));
 
     // Saving over it keeps the original as .orig, once; the temporary file never stays.
     std::string Saved;
@@ -257,7 +272,7 @@ static void RomFiles()
     TestTouch(LockedRom);
     chmod(Locked.c_str(), 0555);
     CHECK(!D.SaveBesideRom(LockedRom.c_str(), "x", &Saved, &MadeOrig));
-    CHECK(TestHas(D.Error(), "could not write " + Locked + "/game.yaml"));
+    CHECK(strcmp(D.Error(), "Permission denied") == 0);
     CHECK(access((Locked + "/game.yaml").c_str(), F_OK) != 0 && access((Locked + "/game.yaml.tmp").c_str(), F_OK) != 0);
     chmod(Locked.c_str(), 0755);
 }
