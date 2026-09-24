@@ -493,7 +493,7 @@ config: # Install ROM database, enhancements, input mappings and language files 
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend wizard launcher app config ## [STEP 0-7e] deps, common, core, rsp, video, audio, input, frontend, wizard, launcher, app, config: build everything
+all: deps common core rsp video audio input frontend wizard launcher config app ## [STEP 0-7e] deps, common, core, rsp, video, audio, input, frontend, wizard, launcher, config, app: build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 
