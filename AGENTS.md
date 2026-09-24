@@ -123,7 +123,7 @@ screens and writes one PNG per stop through `SDL_CreateSoftwareRenderer` and
 files by name and `Scripts/wizard_screenshots_check.sh` compares a fresh render with the
 committed `Docs/img/wizard/` byte for byte.
 
-`Bin/macOS/Project64-launcher`, from `Source/Project64-launcher/`, is a fourth binary: no
+`Bin/macOS/Project64-launcher`, from `Source/Project64-launcher/`, is a third binary: no
 ROM, no core, no OpenGL. `LauncherModel.{h,cpp}` is pure and unit-tested — the folder scan,
 titles, pages, the letter strip, recent games, `launcher.yaml`, and every screen target's
 rectangle and rule; `Screens.cpp` draws it the way the wizard's `Screens.cpp` does, with

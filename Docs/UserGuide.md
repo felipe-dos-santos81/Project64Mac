@@ -135,8 +135,9 @@ was bound there does nothing for that game. The layout file itself is never chan
 controls do nothing, which the status line says. `Face: on` lets each game's own layout
 decide, the way starting it from a terminal does. The camera prompt names Project64.
 
-Quit from the menu, or the window's close button, brings the list back; an error starting a
-game shows on the status line instead.
+Quit from the menu, or the window's close button, brings the list back silently. A game
+that cannot start, or one that ends with an error — a crash or a non-zero exit — shows on
+the status line instead.
 
 The settings — the folder, Face, and the recent games — live in
 `~/Library/Application Support/Project64/launcher.yaml`.

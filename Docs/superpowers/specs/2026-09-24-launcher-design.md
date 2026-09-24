@@ -261,6 +261,9 @@ The launcher prints to stderr, which a Finder launch discards and a terminal run
 - `launcher: settings unreadable, using defaults: <path>` for a bad `launcher.yaml`.
 - On screen, `<title> could not start: <reason>` when `posix_spawn` fails.
 - `launcher: cannot start <exe>: <reason>` for that same failure, on stderr.
+- On screen, `<title> ended with an error (exit N)` or `(signal N)` when a game that did
+  start exits non-zero or dies by a signal; Quit and the close button, both a clean exit 0,
+  clear the status line instead.
 - `launcher: cannot write <settings path>` when `launcher.yaml` cannot be saved.
 - `launcher: folder picker failed: <SDL error>` when the folder dialog's callback gets no
   files back.
