@@ -163,9 +163,10 @@ is closed or paused. Its phases:
    late pause: if `GameRunning_CPU_Paused` is true with `GameRunning_CPU_PausedType` ==
    `PauseType_FromMenu`, it resumes (a resume sent before a queued pause lands is wiped
    by `Pause()`).
-2. *Drawing.* Waits for `OverlayFrames` to move by two frames — a frame already in flight
-   when the menu opens may finish without it, so only the second one certainly drew the
-   menu — or 2 s, then queues `PauseCPU_FromMenu` and goes to Pausing.
+2. *Drawing.* Heals a late pause as Closed does, then waits for `OverlayFrames` to move by
+   two frames — a frame already in flight when the menu opens may finish without it, so
+   only the second one certainly drew the menu — or 2 s, then queues `PauseCPU_FromMenu`
+   and goes to Pausing.
 3. *Pausing.* When `GameRunning_CPU_Paused` is true, go to Paused. After 1 s, print one
    stderr line and go to Paused anyway (the game keeps running; every item still works).
 4. *Paused.* `REPAINT`, `FULLSCREEN`, `RECENTRE` → act, publish `MenuArmed`, resume, note
@@ -223,12 +224,12 @@ and say what the menu holds.
   the menu stays usable with the game running.
 - Save or Load failing, or Load finding no save: the core reports it on stderr through
   `g_Notify`, as it does for any save; the menu closes regardless.
-- Quit while paused: the plan's first task confirms that `CN64System::CloseSystem` ends a
-  paused CPU; if it does not, Quit resumes before closing.
+- Quit while paused: `CN64System::CloseSystem` ends a paused CPU itself (`CloseCpu` sets
+  `m_EndEmulation` and triggers the pause event), so Quit needs no resume of its own.
 - With `PJ64_MENU_SELFTEST` set, each phase change prints `menu: <phase>` on stderr, and
   four more lines mark the cases above: `menu: drawn` and `menu: draw timed out` (Drawing's
-  two ways out), `menu: healed a late pause` (Closed undoing a pause that lost its race
-  with a resume), and `menu: resume retried` (Stepping resending a resume that has not
+  two ways out), `menu: healed a late pause` (Closed or Drawing undoing a pause that lost
+  its race with a resume), and `menu: resume retried` (Stepping resending a resume that has not
   taken after 500 ms).
 
 ## Tests
