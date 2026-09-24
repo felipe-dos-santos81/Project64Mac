@@ -261,7 +261,9 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
     }
 
     // The emulator actions menu owns every input while it is open: the game gets nothing,
-    // and the click that closes it must be released first
+    // and the click that closes it must be released first. A press latched from before the
+    // menu opened is dropped too, since no PointerClickStep runs while it is open to see
+    // the release that would otherwise clear it
     // (Docs/superpowers/specs/2026-09-24-emulator-actions-menu-design.md).
     OpenPointerState();
     if (g_Pointer != nullptr)
@@ -269,6 +271,8 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         if (g_Pointer->MenuOpen.load(std::memory_order_acquire) != 0)
         {
             g_PointerClicks.PrevButton = true;
+            g_PointerClicks.Latched = POINTER_ZONE_NONE;
+            g_Pointer->LatchedZone.store(POINTER_ZONE_NONE, std::memory_order_relaxed);
             return;
         }
         const uint32_t Clear = g_Pointer->ClearClicks.load(std::memory_order_acquire);
