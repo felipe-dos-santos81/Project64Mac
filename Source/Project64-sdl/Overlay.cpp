@@ -305,7 +305,7 @@ void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHi
     }
     if (H > GameH)
     {
-        DrawPanel(State, W, H, GameH, Lit, State->ToggleZones.load(std::memory_order_relaxed));
+        DrawPanel(State, W, H, GameH, Lit, State->ToggleMarkZones.load(std::memory_order_relaxed));
     }
     if (!GuideHidden)
     {

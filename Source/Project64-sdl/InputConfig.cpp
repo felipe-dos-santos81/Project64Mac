@@ -106,8 +106,7 @@ uint32_t InputConfig::PointerToggleZones() const
 
 int InputConfig::PointerHoldZone() const
 {
-    const std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
-    return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
+    return StickHoldZone(m_Bindings[(int)N64Control::Stick]);
 }
 
 void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
@@ -430,9 +429,7 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
 // which is never a zone).
 static bool CheckSlots(const char * Path, const std::vector<Binding> * Next, const YAML::Node * Nodes)
 {
-    int Hold = POINTER_ZONE_NONE;
-    const std::vector<Binding> & Stick = Next[(int)N64Control::Stick];
-    if (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) Hold = Stick[0].Hold;
+    const int Hold = StickHoldZone(Next[(int)N64Control::Stick]);
 
     int Owner[POINTER_ZONE_COUNT];
     bool OwnerToggle[POINTER_ZONE_COUNT];

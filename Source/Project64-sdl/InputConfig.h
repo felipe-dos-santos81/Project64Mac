@@ -42,6 +42,13 @@ struct Binding
     int Hold = POINTER_ZONE_NONE;         // Pointer only: the stick's hold slot
 };
 
+// The hold slot of a Stick binding list ({stick: pointer, hold: <slot>}), or
+// POINTER_ZONE_NONE. The reader's table, its slot checks and the wizard's draft all ask this.
+inline int StickHoldZone(const std::vector<Binding> & Stick)
+{
+    return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
+}
+
 class InputConfig
 {
 public:

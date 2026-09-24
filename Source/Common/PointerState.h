@@ -74,7 +74,7 @@ struct PointerState
     std::atomic<uint32_t> OverlayWanted;
     std::atomic<uint32_t> FaceWanted;    // 1 when the layout binds a face gesture
     std::atomic<uint32_t> HeadStickWanted; // 1 when Stick is {stick: head} or {stick: head-digital}
-    std::atomic<uint32_t> ToggleZones;   // one bit per zone: the toggle slots and the hold slot (corner mark)
+    std::atomic<uint32_t> ToggleMarkZones; // one bit per zone: the toggle slots and the hold slot, which draw the corner mark
     char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
     char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
     // Plugin each GetKeys -> overlay.

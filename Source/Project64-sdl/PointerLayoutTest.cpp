@@ -21,11 +21,11 @@ static bool ZoneAt(float X, float Y, int Zone)
 // One poll at (X, Y) in the 640x640 window through the gate and the settle, in the order
 // GetKeys runs them. Returns the evaluated zone.
 static int SettlePoll(PointerGate * G, PointerSettle * S, float X, float Y,
-                      float Radius = POINTER_SETTLE_PX, int Polls = POINTER_SETTLE_POLLS)
+                      const PointerSettleRule & Rule = PointerSettleRule())
 {
     PointerEval E = PointerLayoutEvaluate(X, Y, 640, 640, true);
     PointerGateStick(G, &E, X, Y, POINTER_FLICK_PX);
-    PointerSettleStep(S, E, X, Y, Radius, Polls);
+    PointerSettleStep(S, E, X, Y, Rule);
     return E.Zone;
 }
 
@@ -319,9 +319,11 @@ int main()
     {
         PointerGate G = { false, 0, 0, 0, 0 };
         PointerSettle S = {};
+        PointerSettleRule Never;
+        Never.Radius = 0.0f;
         for (int i = 0; i < 20; i++)
         {
-            SettlePoll(&G, &S, 400, 240, 0.0f, POINTER_SETTLE_POLLS);
+            SettlePoll(&G, &S, 400, 240, Never);
         }
         CHECK(!S.HaveSettled);
     }
@@ -330,7 +332,7 @@ int main()
     // stays held wherever the cursor goes until release, and a press on a gap does nothing.
     {
         const PointerSettle None = {};
-        PointerClicks C = PointerClicksInit();
+        PointerClicks C;
         CHECK(C.Latched == POINTER_ZONE_NONE && C.Toggled == 0u && !C.Holding && !C.PrevButton);
         PointerClickStep(&C, true, 8, 0u, POINTER_ZONE_NONE, None);
         CHECK(C.Latched == 8);
@@ -346,7 +348,7 @@ int main()
     {
         const PointerSettle None = {};
         const uint32_t Mid2 = 1u << 9;
-        PointerClicks C = PointerClicksInit();
+        PointerClicks C;
         PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);
         CHECK(C.Toggled == Mid2 && C.Latched == POINTER_ZONE_NONE);
         PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);   // still down: no second flip
@@ -364,7 +366,7 @@ int main()
     {
         const PointerSettle None = {};
         const uint32_t Mid2 = 1u << 9;
-        PointerClicks C = PointerClicksInit();
+        PointerClicks C;
         PointerClickStep(&C, true, 8, Mid2, POINTER_ZONE_NONE, None);
         PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);
         CHECK(C.Latched == 8 && C.Toggled == 0u);
@@ -374,7 +376,7 @@ int main()
     // settle; a second press lets go; other presses keep it; a settle in the image ends it.
     {
         PointerSettle S = {};
-        PointerClicks C = PointerClicksInit();
+        PointerClicks C;
         PointerClickStep(&C, true, 12, 0u, 12, S);
         CHECK(C.Holding && C.HeldX == 0 && C.HeldY == 0 && C.Latched == POINTER_ZONE_NONE);
         PointerClickStep(&C, false, 12, 0u, 12, S);
@@ -399,21 +401,20 @@ int main()
 
     // PJ64_POINTER_SETTLE: "0" or "<px>,<polls>", both positive; anything else changes nothing.
     {
-        float R = POINTER_SETTLE_PX;
-        int P = POINTER_SETTLE_POLLS;
-        CHECK(PointerParseSettle("12,20", &R, &P) && R == 12.0f && P == 20);
-        CHECK(PointerParseSettle("0", &R, &P) && R == 0.0f && P == 20);
-        R = 5.0f;
-        P = 7;
-        CHECK(!PointerParseSettle("", &R, &P));
-        CHECK(!PointerParseSettle("abc", &R, &P));
-        CHECK(!PointerParseSettle("8", &R, &P));
-        CHECK(!PointerParseSettle("8,0", &R, &P));
-        CHECK(!PointerParseSettle("-1,9", &R, &P));
-        CHECK(!PointerParseSettle("8,9x", &R, &P));
-        CHECK(!PointerParseSettle("nan,9", &R, &P));
-        CHECK(!PointerParseSettle("inf,9", &R, &P));
-        CHECK(R == 5.0f && P == 7);
+        PointerSettleRule Rule;
+        CHECK(PointerParseSettle("12,20", &Rule) && Rule.Radius == 12.0f && Rule.Polls == 20);
+        CHECK(PointerParseSettle("0", &Rule) && Rule.Radius == 0.0f && Rule.Polls == 20);
+        Rule.Radius = 5.0f;
+        Rule.Polls = 7;
+        CHECK(!PointerParseSettle("", &Rule));
+        CHECK(!PointerParseSettle("abc", &Rule));
+        CHECK(!PointerParseSettle("8", &Rule));
+        CHECK(!PointerParseSettle("8,0", &Rule));
+        CHECK(!PointerParseSettle("-1,9", &Rule));
+        CHECK(!PointerParseSettle("8,9x", &Rule));
+        CHECK(!PointerParseSettle("nan,9", &Rule));
+        CHECK(!PointerParseSettle("inf,9", &Rule));
+        CHECK(Rule.Radius == 5.0f && Rule.Polls == 7);
     }
 
     // Gesture names.

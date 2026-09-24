@@ -28,13 +28,14 @@ static const char * WriteTemp(const char * Text)
     return Path;
 }
 
-// Runs one Load with stderr redirected to a scratch file, then reports whether anything
-// was written. A quiet Load's return value is false either way, so this is the only way
-// to prove the Quiet guards actually suppress output rather than merely returning false.
+// Runs one Load with stderr redirected to a scratch file and returns the first line the
+// reader wrote, "" when it wrote nothing, so a test can check the reader's own words. A
+// quiet Load's return value is false either way, so this is also the only way to prove the
+// Quiet guards actually suppress output rather than merely returning false.
 // Redirects the fd underneath stderr with dup2, not freopen: freopen would reassociate
 // the stderr FILE object with a regular file and leave it fully buffered even after the
 // fd is restored, reordering every fprintf(stderr, ...) after the first call.
-static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
+static std::string LoadStderr(InputConfig & C, const char * Path, bool Quiet = false)
 {
     char ScratchPath[64];
     snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-stderr-XXXXXX");
@@ -52,33 +53,6 @@ static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
     dup2(SavedStderr, fileno(stderr));
     close(SavedStderr);
 
-    FILE * Scratch = fopen(ScratchPath, "r");
-    const bool Empty = (Scratch == NULL) || (fgetc(Scratch) == EOF);
-    if (Scratch) fclose(Scratch);
-    remove(ScratchPath);
-    return Empty;
-}
-
-// Loads Path with stderr captured and returns the first line the reader wrote, "" when it
-// wrote nothing, so a test can check the reader's own words.
-static std::string LoadError(InputConfig & C, const char * Path)
-{
-    char ScratchPath[64];
-    snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-stderr-XXXXXX");
-    int Fd = mkstemp(ScratchPath);
-    if (Fd < 0) { perror("mkstemp"); exit(2); }
-
-    fflush(stderr);
-    int SavedStderr = dup(fileno(stderr));
-    dup2(Fd, fileno(stderr));
-    close(Fd);
-
-    C.Load(Path);
-
-    fflush(stderr);
-    dup2(SavedStderr, fileno(stderr));
-    close(SavedStderr);
-
     std::string Line;
     FILE * Scratch = fopen(ScratchPath, "r");
     if (Scratch != NULL)
@@ -89,6 +63,11 @@ static std::string LoadError(InputConfig & C, const char * Path)
     }
     remove(ScratchPath);
     return Line;
+}
+
+static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
+{
+    return LoadStderr(C, Path, Quiet).empty();
 }
 
 static bool Contains(const std::string & Text, const char * Needle)
@@ -308,25 +287,25 @@ int main()
     // Each one-button error is reported in its own words and changes nothing.
     {
         CHECK(C.Load(WriteTemp("bindings:\n  Z: {zone: mid4}\n")));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {zone: mid2, toggle: maybe}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {zone: mid2, toggle: maybe}\n")),
                        "toggle must be true or false"));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {key: X, toggle: true}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {key: X, toggle: true}\n")),
                        "toggle only applies to {zone:}"));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: left, hold: mid5}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: left, hold: mid5}\n")),
                        "hold only applies to {stick: pointer}"));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {zone: mid2, hold: mid5}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {zone: mid2, hold: mid5}\n")),
                        "hold only applies to {stick: pointer}"));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: game}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: game}\n")),
                        "hold must name a panel slot"));
-        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid9}\n")),
+        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid9}\n")),
                        "hold must name a panel slot"));
-        CHECK(Contains(LoadError(C, WriteTemp(
+        CHECK(Contains(LoadStderr(C, WriteTemp(
                            "bindings:\n  Stick: {stick: pointer, hold: mid5}\n  Start: {zone: mid5}\n")),
                        "mid5 is the stick's hold slot and cannot also be bound"));
-        CHECK(Contains(LoadError(C, WriteTemp(
+        CHECK(Contains(LoadStderr(C, WriteTemp(
                            "bindings:\n  Z: {zone: mid2, toggle: true}\n  R: {zone: mid2}\n")),
                        "mid2 is a toggle for Z but not for R"));
-        CHECK(Contains(LoadError(C, WriteTemp(
+        CHECK(Contains(LoadStderr(C, WriteTemp(
                            "bindings:\n  R: {zone: mid2, toggle: true}\n  Z: {zone: mid2}\n")),
                        "mid2 is a toggle for R but not for Z"));
         CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Zone);

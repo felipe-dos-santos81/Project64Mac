@@ -201,37 +201,45 @@ struct PointerSettle
 {
     bool HaveAnchor;
     float AnchorX, AnchorY;
-    int Count;                 // consecutive polls within the radius, capped at Polls + 1
+    int Count;                 // consecutive polls within the radius, capped at Rule.Polls + 1
     bool HaveSettled;
     int8_t SettledX, SettledY; // the gated stick at the last settle
-    bool JustSettled;          // true only on the poll the count reached Polls
+    bool JustSettled;          // true only on the poll the count reached Rule.Polls
+};
+
+// How close the cursor must stay to its anchor, and for how many polls, to settle.
+// PJ64_POINTER_SETTLE overrides both (PointerParseSettle).
+struct PointerSettleRule
+{
+    float Radius = POINTER_SETTLE_PX;
+    int Polls = POINTER_SETTLE_POLLS;
 };
 
 // Feeds one poll, after PointerGateStick, so E carries the gated stick. Outside the game
-// image the anchor and the count reset but the recorded tilt stays. Radius <= 0 or
-// Polls <= 0 never settles.
-inline void PointerSettleStep(PointerSettle * S, const PointerEval & E, float X, float Y, float Radius, int Polls)
+// image the anchor and the count reset but the recorded tilt stays. A rule with
+// Radius <= 0 or Polls <= 0 never settles.
+inline void PointerSettleStep(PointerSettle * S, const PointerEval & E, float X, float Y, const PointerSettleRule & Rule)
 {
     S->JustSettled = false;
-    if (E.Zone != POINTER_ZONE_GAME || Radius <= 0.0f || Polls <= 0)
+    if (E.Zone != POINTER_ZONE_GAME || Rule.Radius <= 0.0f || Rule.Polls <= 0)
     {
         S->HaveAnchor = false;
         S->Count = 0;
         return;
     }
     const float Dx = X - S->AnchorX, Dy = Y - S->AnchorY;
-    if (!S->HaveAnchor || sqrtf(Dx * Dx + Dy * Dy) > Radius)
+    if (!S->HaveAnchor || sqrtf(Dx * Dx + Dy * Dy) > Rule.Radius)
     {
         S->HaveAnchor = true;
         S->AnchorX = X;
         S->AnchorY = Y;
         S->Count = 1;
     }
-    else if (S->Count <= Polls)
+    else if (S->Count <= Rule.Polls)
     {
         S->Count++;
     }
-    if (S->Count == Polls)
+    if (S->Count == Rule.Polls)
     {
         S->HaveSettled = true;
         S->SettledX = E.StickX;
@@ -241,21 +249,15 @@ inline void PointerSettleStep(PointerSettle * S, const PointerEval & E, float X,
 }
 
 // The one button's state across polls: the momentary latch, the toggle slots that are on,
-// and the stick hold. Start from PointerClicksInit().
+// and the stick hold. A default-constructed one is the state before any press.
 struct PointerClicks
 {
-    bool PrevButton;
-    int Latched;               // the zone pressed and still held, or POINTER_ZONE_NONE
-    uint32_t Toggled;          // one bit per zone: the toggle slots that are on
-    bool Holding;
-    int8_t HeldX, HeldY;       // the stick while Holding
+    bool PrevButton = false;
+    int Latched = POINTER_ZONE_NONE;   // the zone pressed and still held
+    uint32_t Toggled = 0u;             // one bit per zone: the toggle slots that are on
+    bool Holding = false;
+    int8_t HeldX = 0, HeldY = 0;       // the stick while Holding
 };
-
-inline PointerClicks PointerClicksInit()
-{
-    PointerClicks C = { false, POINTER_ZONE_NONE, 0u, false, 0, 0 };
-    return C;
-}
 
 // One poll of the button over Zone. On the press edge the hold slot turns the hold on or
 // off (on copies the last settled tilt, or neutral before any settle), a slot in ToggleMask
@@ -293,12 +295,12 @@ inline void PointerClickStep(PointerClicks * C, bool Button, int Zone, uint32_t 
 }
 
 // PJ64_POINTER_SETTLE: "0" never settles; "<px>,<polls>" with both positive sets the two.
-// Anything else returns false and leaves both outputs as they were.
-inline bool PointerParseSettle(const char * Text, float * Radius, int * Polls)
+// Anything else returns false and leaves the rule as it was.
+inline bool PointerParseSettle(const char * Text, PointerSettleRule * Rule)
 {
     if (strcmp(Text, "0") == 0)
     {
-        *Radius = 0.0f;
+        Rule->Radius = 0.0f;
         return true;
     }
     float R = 0.0f;
@@ -308,8 +310,8 @@ inline bool PointerParseSettle(const char * Text, float * Radius, int * Polls)
     {
         return false;
     }
-    *Radius = R;
-    *Polls = P;
+    Rule->Radius = R;
+    Rule->Polls = P;
     return true;
 }
 

@@ -295,19 +295,15 @@ void WizardDraft::SetZone(N64Control Control, int Zone)
     Binding B = {};
     B.kind = Binding::Kind::Zone;
     B.code = Zone;
-    // A slot is a toggle for every control on it or for none (the reader's rule), so a
-    // control joining a toggle slot, or re-capturing its own, is a toggle too.
-    for (int i = 0; i < (int)N64Control::Count; i++)
-    {
-        if (m_Bindings[i].empty()) continue;
-        const Binding & Other = m_Bindings[i][0];
-        if (Other.kind == Binding::Kind::Zone && Other.code == Zone && Other.Toggle) B.Toggle = true;
-    }
+    // A slot is a toggle for every control on it or for none (the reader's rule), so its
+    // first owner speaks for all of them: a control joining a toggle slot, or re-capturing
+    // its own, is a toggle too.
+    const N64Control Owner = ZoneOwner(Zone);
+    B.Toggle = Owner != N64Control::Count && m_Bindings[(int)Owner][0].Toggle;
     // The hold slot is the stick's; a control taking it takes it off the stick.
-    std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
-    if (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer && Stick[0].Hold == Zone)
+    if (Zone != POINTER_ZONE_NONE && Zone == HoldZone())
     {
-        Stick[0].Hold = POINTER_ZONE_NONE;
+        m_Bindings[(int)N64Control::Stick][0].Hold = POINTER_ZONE_NONE;
     }
     Replace(Control, B);
 }
@@ -406,8 +402,7 @@ N64Control WizardDraft::ZoneOwner(int Zone) const
 
 int WizardDraft::HoldZone() const
 {
-    const std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
-    return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
+    return StickHoldZone(m_Bindings[(int)N64Control::Stick]);
 }
 
 // One binding in English. ValueText is the file's voice; this is the screen's. Both read the

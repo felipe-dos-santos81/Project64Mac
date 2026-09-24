@@ -86,9 +86,9 @@ when the ROM closes.
 **Last settled tilt.** The cursor settles when it stays within 8 px of an anchor point for
 9 consecutive polls inside the game image (a poll is one of the game's controller reads:
 about 150 ms at 60 a second, 300 ms at 30). At the poll where that count is reached, the
-gated stick is recorded as the settled tilt; the count then keeps rising without recording
-again until the cursor leaves the 8 px radius, which moves the anchor there and restarts
-the count. Leaving the game image resets the anchor and the count but keeps the recorded
+gated stick is recorded as the settled tilt; the count then stops just past the threshold
+without recording again until the cursor leaves the 8 px radius, which moves the anchor
+there and restarts the count. Leaving the game image resets the anchor and the count but keeps the recorded
 tilt. A slow drag to the panel never stays within 8 px for 9 polls, so it never records
 the backward tilt; a flick does not either, and the flick gate already holds the stick
 during the jump. Before the first settle since the ROM opened the settled tilt is neutral.
@@ -131,10 +131,11 @@ bindings:
 covers it without a window:
 
 - `struct PointerSettle` (anchor, count, `HaveSettled`, `SettledX`, `SettledY`,
-  `JustSettled`) and `PointerSettleStep(PointerSettle *, const PointerEval &, float X,
-  float Y, float Radius, int Polls)`, fed after `PointerGateStick` each poll. `JustSettled`
-  is true only on the poll the count reaches `Polls` inside the game image. `Radius <= 0`
-  never settles.
+  `JustSettled`), `struct PointerSettleRule` (`Radius`, `Polls`, defaulting to the two
+  constants) and `PointerSettleStep(PointerSettle *, const PointerEval &, float X,
+  float Y, const PointerSettleRule &)`, fed after `PointerGateStick` each poll.
+  `JustSettled` is true only on the poll the count reaches `Polls` inside the game image.
+  `Radius <= 0` never settles. `PointerParseSettle` reads `PJ64_POINTER_SETTLE` into a rule.
 - `struct PointerClicks` (`PrevButton`, `Latched`, `Toggled` — one bit per zone —
   `Holding`, `HeldX`, `HeldY`) and `PointerClickStep(PointerClicks *, bool Button, int
   Zone, uint32_t ToggleMask, int HoldZone, const PointerSettle &)`. On the press edge: a
@@ -145,8 +146,8 @@ covers it without a window:
   the old rule and the new ones are tested together.
 - `POINTER_SETTLE_PX` (8) and `POINTER_SETTLE_POLLS` (9) beside `POINTER_FLICK_PX`.
 
-**`Source/Common/PointerState.h`** gains two fields: `ToggleZones` (the toggle slots and
-the hold slot, one bit per zone, written once when the plugin loads the layout, before the
+**`Source/Common/PointerState.h`** gains two fields: `ToggleMarkZones` (the toggle slots
+and the hold slot, which draw the corner mark; one bit per zone, written once when the plugin loads the layout, before the
 ROM opens, like `Labels`) and `ToggledZones` (the slots that are on, written every
 `GetKeys`). The frontend and the plugin compile this one header, so the shared layout stays
 in step.
@@ -160,18 +161,18 @@ in step.
   with the errors below; the other forms stay one-key maps.
 - `Load` runs the two cross-binding checks after the loop.
 - `PointerLabels` writes `Ho` for the hold slot; `PointerToggleZones()` returns the toggle
-  and hold mask; `PointerHoldZone()` returns the hold slot or `POINTER_ZONE_NONE`.
+  slots' mask; `PointerHoldZone()` returns the hold slot or `POINTER_ZONE_NONE`.
 
 **`Source/Project64-sdl/PluginInput.cpp`**: `OpenPointerState` parses
 `PJ64_POINTER_SETTLE` beside `PJ64_POINTER_FLICK`. `PluginLoaded` publishes
-`ToggleZones`. `GetKeys` runs gate, settle and click step; presses every control whose
+`ToggleMarkZones`. `GetKeys` runs gate, settle and click step; presses every control whose
 zone is latched or toggled on; sets the pointer stick to `HeldX/HeldY` while holding and to
 the gated stick otherwise; and publishes `LatchedZone`, `ToggledZones` (toggle bits, plus
 the hold slot's bit while holding) and `Quadrant` (of the stick the game got).
 `RomClosed` resets the settle and click state.
 
 **`Source/Project64-sdl/Overlay.cpp`**: `DrawPanel` lights a slot when it is latched or its
-`ToggledZones` bit is set, and draws the corner mark on `ToggleZones` slots. `DrawGuide`
+`ToggledZones` bit is set, and draws the corner mark on `ToggleMarkZones` slots. `DrawGuide`
 treats a toggled-on `game` bit like a latched `game`.
 
 **The wizard — round trip only.**

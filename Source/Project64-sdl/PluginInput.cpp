@@ -37,10 +37,12 @@ static bool g_PointerChecked = false;
 // (PointerClickStep), and where the cursor last rested, which the hold copies
 // (PointerSettleStep). PJ64_POINTER_SETTLE overrides the rest's radius and length.
 // Design: Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md
-static PointerClicks g_PointerClicks = PointerClicksInit();
+static PointerClicks g_PointerClicks;
 static PointerSettle g_PointerSettle = PointerSettle();
-static float g_PointerSettleRadius = POINTER_SETTLE_PX;
-static int g_PointerSettlePolls = POINTER_SETTLE_POLLS;
+static PointerSettleRule g_PointerSettleRule;
+// Fixed once the layout loads: PublishPointerLabels sets them once, and every poll reads them.
+static uint32_t g_PointerToggleMask = 0u;
+static int g_PointerHoldZone = POINTER_ZONE_NONE;
 // Flick gate: a cursor that jumps more than g_PointerFlick px between polls keeps the
 // previous poll's tilt, so reaching for the panel never reads as a tilt on the way.
 // PJ64_POINTER_FLICK overrides the threshold; 0 disables the gate.
@@ -98,10 +100,10 @@ static void OpenPointerState(void)
         g_PointerFlick = (float)atof(Flick);
     }
     const char * Settle = getenv("PJ64_POINTER_SETTLE");
-    if (Settle != nullptr && !PointerParseSettle(Settle, &g_PointerSettleRadius, &g_PointerSettlePolls))
+    if (Settle != nullptr && !PointerParseSettle(Settle, &g_PointerSettleRule))
     {
         fprintf(stderr, "input: PJ64_POINTER_SETTLE=%s is not 0 or <px>,<polls>; using %g,%d\n",
-                Settle, (double)g_PointerSettleRadius, g_PointerSettlePolls);
+                Settle, (double)g_PointerSettleRule.Radius, g_PointerSettleRule.Polls);
     }
 }
 
@@ -292,16 +294,15 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         PointerSnapshot(g_Pointer, &S);
         PointerEval E = PointerLayoutEvaluate(S.X, S.Y, S.W, S.H, S.Inside);
         PointerGateStick(&g_PointerGate, &E, S.X, S.Y, g_PointerFlick);
-        PointerSettleStep(&g_PointerSettle, E, S.X, S.Y, g_PointerSettleRadius, g_PointerSettlePolls);
-        const int HoldZone = Config.PointerHoldZone();
-        PointerClickStep(&g_PointerClicks, S.Button, E.Zone, Config.PointerToggleZones(), HoldZone, g_PointerSettle);
+        PointerSettleStep(&g_PointerSettle, E, S.X, S.Y, g_PointerSettleRule);
+        PointerClickStep(&g_PointerClicks, S.Button, E.Zone, g_PointerToggleMask, g_PointerHoldZone, g_PointerSettle);
         // While holding, the game's stick is the tilt the hold copied, wherever the cursor is.
         const int8_t StickX = g_PointerClicks.Holding ? g_PointerClicks.HeldX : E.StickX;
         const int8_t StickY = g_PointerClicks.Holding ? g_PointerClicks.HeldY : E.StickY;
         uint32_t On = g_PointerClicks.Toggled;
-        if (g_PointerClicks.Holding && HoldZone != POINTER_ZONE_NONE)
+        if (g_PointerClicks.Holding && g_PointerHoldZone != POINTER_ZONE_NONE)
         {
-            On |= 1u << HoldZone;
+            On |= 1u << g_PointerHoldZone;
         }
         g_Pointer->LatchedZone.store(g_PointerClicks.Latched, std::memory_order_relaxed);
         g_Pointer->ToggledZones.store(On, std::memory_order_relaxed);
@@ -411,7 +412,7 @@ EXPORT void CALL RomClosed(void)
 {
     CloseGamepad();
     // A toggle or a hold never outlives its game, and the next game starts with no rest.
-    g_PointerClicks = PointerClicksInit();
+    g_PointerClicks = PointerClicks();
     g_PointerSettle = PointerSettle();
     if (g_Pointer != nullptr)
     {
@@ -452,8 +453,9 @@ static void PublishPointerLabels(void)
     const InputConfig & Config = InputConfig::Get();
     Config.PointerLabels(g_Pointer->Labels, g_Pointer->GestureLabels);
     g_Pointer->LatchedZone.store(POINTER_ZONE_NONE);
-    const int Hold = Config.PointerHoldZone();
-    g_Pointer->ToggleZones.store(Config.PointerToggleZones() | (Hold != POINTER_ZONE_NONE ? 1u << Hold : 0u));
+    g_PointerToggleMask = Config.PointerToggleZones();
+    g_PointerHoldZone = Config.PointerHoldZone();
+    g_Pointer->ToggleMarkZones.store(g_PointerToggleMask | (g_PointerHoldZone != POINTER_ZONE_NONE ? 1u << g_PointerHoldZone : 0u));
     g_Pointer->ToggledZones.store(0u);
     g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
     g_Pointer->HeadStickWanted.store(Config.UsesHeadStick() ? 1u : 0u, std::memory_order_release);

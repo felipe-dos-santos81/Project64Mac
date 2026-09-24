@@ -280,8 +280,9 @@ Only the `Aarch64` backend directory survives.
   its file through `SDL_GetBasePath()` to load it, and that resolved path only exists where
   `make config` has run. A tour stop that shows the save screen's first choice, or picks a
   shipped-layout row, bakes one machine's state into a committed PNG and the drift check
-  fails everywhere else; the tour only ever picks base row 0. Typed paths in the tour live
-  under `/Users/you/`.
+  fails everywhere else; the tour only ever picks base row 0, the built-in bindings. Row N
+  is `WizardBaseFile(N - 1)`, so row 0 is not `WizardBaseFile(0)`, and editing a shipped
+  layout never changes the pictures. Typed paths in the tour live under `/Users/you/`.
 - **The user guide's tables are copied facts.** `Docs/UserGuide.md` lists the built-in
   bindings (section 3) and every `PJ64_*` variable (section 11) by hand. A change to
   `DefaultBindings` in `Source/Project64-sdl/InputConfig.cpp:160` does fail
