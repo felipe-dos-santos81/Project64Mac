@@ -2,6 +2,7 @@
 // Tests for GameConfigPath. Builds a temp tree; no window and no SDL init.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "GameConfig.h"
+#include "UnitTest.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -10,11 +11,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string>
-
-static int Failures = 0;
-
-#define CHECK(Cond) \
-    do { if (!(Cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #Cond); Failures++; } } while (0)
 
 static void Touch(const std::string & Path)
 {
@@ -28,10 +24,10 @@ static void MakeDir(const std::string & Path)
     if (mkdir(Path.c_str(), 0700) != 0) { perror(Path.c_str()); exit(2); }
 }
 
-int main()
+void RunGameConfigTests()
 {
     char Root[] = "/tmp/pj64-gamecfg-XXXXXX";
-    if (mkdtemp(Root) == nullptr) { perror("mkdtemp"); return 2; }
+    if (mkdtemp(Root) == nullptr) { perror("mkdtemp"); TestFailures()++; return; }
     const std::string Roms = std::string(Root) + "/roms";
     const std::string Exe = std::string(Root) + "/bin";
     MakeDir(Roms);
@@ -71,12 +67,12 @@ int main()
     // A path ending in a slash names no ROM.
     CHECK(!GameConfigPath((Roms + "/").c_str(), Exe.c_str(), Out, sizeof(Out)));
 
-    // No directory component: the sibling is looked up in the working directory.
-    if (chdir(Roms.c_str()) != 0) { perror("chdir"); return 2; }
+    // No directory component: the sibling is looked up in the working directory, which is
+    // put back afterwards for the areas that run next.
+    char Cwd[PATH_MAX];
+    if (getcwd(Cwd, sizeof(Cwd)) == nullptr || chdir(Roms.c_str()) != 0) { perror("chdir"); TestFailures()++; return; }
     CHECK(GameConfigPath("game.z64", Exe.c_str(), Out, sizeof(Out)));
     CHECK(strcmp(Out, "./game.yaml") == 0);
+    if (chdir(Cwd) != 0) { perror("chdir"); TestFailures()++; }
 
-    if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
-    printf("ok: game config\n");
-    return 0;
 }

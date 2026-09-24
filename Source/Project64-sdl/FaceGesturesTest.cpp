@@ -2,14 +2,10 @@
 // Tests for GestureClassifier with synthetic samples. No camera, no SDL.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "FaceGestures.h"
+#include "UnitTest.h"
 
 #include <stdio.h>
 #include <string.h>
-
-static int Failures = 0;
-
-#define CHECK(Cond) \
-    do { if (!(Cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #Cond); Failures++; } } while (0)
 
 static const double kFrame = 1.0 / 30.0;
 
@@ -51,7 +47,7 @@ static uint32_t FeedSample(GestureClassifier & C, double & T, int Frames, Gestur
     return Last;
 }
 
-int main()
+void RunFaceGesturesTests()
 {
     GestureThresholds Th;
     CHECK(Th.Brow == 0.035f && Th.Yaw == 0.25f && Th.ReleaseFraction == 0.6f);
@@ -327,7 +323,4 @@ int main()
         CHECK(C.StickX() == 40);
     }
 
-    if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
-    printf("ok: face gestures\n");
-    return 0;
 }

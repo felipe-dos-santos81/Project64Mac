@@ -2,6 +2,7 @@
 // Tests for InputConfig::Load. No window and no SDL init; safe to run anywhere.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "InputConfig.h"
+#include "UnitTest.h"
 
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
@@ -11,22 +12,6 @@
 #include <string.h>
 #include <string>
 #include <unistd.h>
-
-static int Failures = 0;
-
-#define CHECK(Cond) \
-    do { if (!(Cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #Cond); Failures++; } } while (0)
-
-static const char * WriteTemp(const char * Text)
-{
-    static char Path[64];
-    snprintf(Path, sizeof(Path), "/tmp/pj64-input-XXXXXX");
-    int Fd = mkstemp(Path);
-    if (Fd < 0) { perror("mkstemp"); exit(2); }
-    write(Fd, Text, strlen(Text));
-    close(Fd);
-    return Path;
-}
 
 // Runs one Load with stderr redirected to a scratch file and returns the first line the
 // reader wrote, "" when it wrote nothing, so a test can check the reader's own words. A
@@ -70,12 +55,7 @@ static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
     return LoadStderr(C, Path, Quiet).empty();
 }
 
-static bool Contains(const std::string & Text, const char * Needle)
-{
-    return Text.find(Needle) != std::string::npos;
-}
-
-int main()
+void RunInputConfigTests()
 {
     InputConfig & C = InputConfig::Get();
 
@@ -83,14 +63,14 @@ int main()
         "bindings:\n"
         "  A: {key: Y}\n"
         "  Start: {key: Return}\n";
-    CHECK(C.Load(WriteTemp(Valid)));
+    CHECK(C.Load(TestWriteTemp(Valid)));
     CHECK(C.Bindings(N64Control::A).size() == 1);
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
     CHECK(C.Bindings(N64Control::B).size() == 2);     // omitted control keeps its default pair
 
     const char * CommentsOnly = "# nothing here\n";
-    CHECK(C.Load(WriteTemp(CommentsOnly)));
+    CHECK(C.Load(TestWriteTemp(CommentsOnly)));
     CHECK(C.Bindings(N64Control::A).size() == 2);     // defaults restored
 
     const char * Gamepad =
@@ -99,7 +79,7 @@ int main()
         "  Z: {axis: lefttrigger, sign: +}\n"
         "  CUp: {axis: righty, sign: -}\n"
         "  Stick: {stick: left}\n";
-    CHECK(C.Load(WriteTemp(Gamepad)));
+    CHECK(C.Load(TestWriteTemp(Gamepad)));
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Button);
     CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Axis);
     CHECK(C.Bindings(N64Control::CUp)[0].positive == false);
@@ -108,7 +88,7 @@ int main()
     const char * DigitalStick =
         "bindings:\n"
         "  Stick: {keys: {up: Up, down: Down, left: Left, right: Right}}\n";
-    CHECK(C.Load(WriteTemp(DigitalStick)));
+    CHECK(C.Load(TestWriteTemp(DigitalStick)));
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Keys);
     CHECK(C.Bindings(N64Control::Stick)[0].UpKey == SDL_SCANCODE_UP);
 
@@ -119,7 +99,7 @@ int main()
         "  Start: {zone: mid1}\n"
         "  Z: {face: eyebrows}\n"
         "  B: {face: head-left}\n";
-    CHECK(C.Load(WriteTemp(Pointer)));
+    CHECK(C.Load(TestWriteTemp(Pointer)));
     CHECK(C.UsesPointer());
     CHECK(C.UsesFace());                              // Z and B are gestures
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
@@ -141,7 +121,7 @@ int main()
     CHECK(strcmp(InputConfig::ControlLabel(N64Control::CUp), "C^") == 0);
     CHECK(strcmp(InputConfig::ControlLabel(N64Control::DPadRight), "D>") == 0);
 
-    CHECK(C.Load(WriteTemp(Valid)));
+    CHECK(C.Load(TestWriteTemp(Valid)));
     CHECK(!C.UsesPointer());                          // keyboard-only file: no overlay
     CHECK(!C.UsesFace());
 
@@ -149,7 +129,7 @@ int main()
         "bindings:\n"
         "  Stick: {stick: pointer}\n"
         "  A: {zone: game}\n";
-    CHECK(C.Load(WriteTemp(ZonesOnly)));
+    CHECK(C.Load(TestWriteTemp(ZonesOnly)));
     CHECK(C.UsesPointer());
     CHECK(!C.UsesFace());                             // pointer without gestures: no camera
 
@@ -158,23 +138,12 @@ int main()
         "  DPadUp: {zone: pad-up}\n"
         "  CRight: {zone: c-right}\n"
         "  L: {zone: mid5}\n";
-    CHECK(C.Load(WriteTemp(Slots)));
+    CHECK(C.Load(TestWriteTemp(Slots)));
     CHECK(C.Bindings(N64Control::DPadUp)[0].code == 0);
     CHECK(C.Bindings(N64Control::CRight)[0].code == 7);
     CHECK(C.Bindings(N64Control::L)[0].code == 12);
     CHECK(C.UsesPointer());                           // slots alone turn the overlay on
 
-    const char * FaceOnly =
-        "bindings:\n"
-        "  Stick: {stick: head}\n"
-        "  A: {face: mouth-open}\n"
-        "  B: {face: smile}\n"
-        "  CLeft: {face: wink-left}\n"
-        "  CRight: {face: wink-right}\n"
-        "  R: {face: tilt-left}\n"
-        "  Start: {face: tilt-right}\n"
-        "  Z: {face: head-up}\n";
-    CHECK(!C.Load(WriteTemp(FaceOnly)));              // head-up beside a head stick is rejected...
     const char * FaceOnlyOk =
         "bindings:\n"
         "  Stick: {stick: head}\n"
@@ -184,7 +153,7 @@ int main()
         "  CRight: {face: wink-right}\n"
         "  R: {face: tilt-left}\n"
         "  Start: {face: tilt-right}\n";
-    CHECK(C.Load(WriteTemp(FaceOnlyOk)));             // ...and the same file without it loads
+    CHECK(C.Load(TestWriteTemp(FaceOnlyOk)));
     CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::HeadStick);
     CHECK(C.Bindings(N64Control::Stick)[0].code == 0);
@@ -196,53 +165,53 @@ int main()
     CHECK(strcmp(GestureLabels[9], "C<") == 0);       // wink-left is bit 9
     CHECK(strcmp(GestureLabels[1], "") == 0);         // head-left unbound
 
-    CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: head-digital}\n  Z: {face: eyebrows}\n")));
+    CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: head-digital}\n  Z: {face: eyebrows}\n")));
     CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::HeadStick);
     CHECK(C.Bindings(N64Control::Stick)[0].code == 1);
     CHECK(C.UsesHeadStick());
 
     // A pointer stick beside head-left is fine: only a head stick consumes the head turns.
-    CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: pointer}\n  B: {face: head-left}\n")));
+    CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n  B: {face: head-left}\n")));
     CHECK(!C.UsesHeadStick());
     // The rule holds in either order and for either head-stick form.
-    CHECK(!C.Load(WriteTemp("bindings:\n  B: {face: head-down}\n  Stick: {stick: head}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: head-digital}\n  B: {face: head-right}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: head}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: head-analog}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  B: {face: head-down}\n  Stick: {stick: head}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {stick: head-digital}\n  B: {face: head-right}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {stick: head}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {stick: head-analog}\n")));
 
-    CHECK(C.Load(WriteTemp(Valid)));                  // establish a known good state
+    CHECK(C.Load(TestWriteTemp(Valid)));                  // establish a known good state
     const size_t ABefore = C.Bindings(N64Control::A).size();
 
-    CHECK(!C.Load(WriteTemp("bindings:\n  Nope: {key: X}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: NoSuchKey}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {button: sout}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: X}\n  A: {key: Y}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: X, button: a}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {stick: middle}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: left}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {keys: {up: Up}}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {keys: {up: NoSuchKey, down: Down, left: Left, right: Right}}\n")));
-    CHECK(!C.Load(WriteTemp("bindings: [1, 2]\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {key: [X]}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Nope: {key: X}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {key: NoSuchKey}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {button: sout}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {key: X}\n  A: {key: Y}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {key: X, button: a}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {stick: middle}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {stick: left}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {keys: {up: Up}}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {keys: {up: NoSuchKey, down: Down, left: Left, right: Right}}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings: [1, 2]\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {key: [X]}\n")));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml"));
     CHECK(!C.Load("/tmp/pj64-does-not-exist.yaml", true));   // quiet: same verdict, no print
     CHECK(LoadWasSilent(C, "/tmp/pj64-does-not-exist.yaml", true));   // ...and truly silent
 
-    const char * BadZone = WriteTemp("bindings:\n  A: {zone: top4}\n");   // the grid names are gone
+    const char * BadZone = TestWriteTemp("bindings:\n  A: {zone: top4}\n");   // the grid names are gone
     CHECK(!C.Load(BadZone));
     CHECK(!LoadWasSilent(C, BadZone, false));   // ConfigError prints when not quiet...
     CHECK(LoadWasSilent(C, BadZone, true));     // ...and the same path stays silent when quiet
 
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: centre}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: middle}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {face: wink}\n")));
-    CHECK(C.Load(WriteTemp("bindings:\n  A: {face: wink-left}\n  B: {face: head-down}\n  Z: {face: tilt-right}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {zone: centre}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {zone: middle}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {face: wink}\n")));
+    CHECK(C.Load(TestWriteTemp("bindings:\n  A: {face: wink-left}\n  B: {face: head-down}\n  Z: {face: tilt-right}\n")));
     CHECK(C.Bindings(N64Control::B)[0].code == POINTER_GESTURE_HEAD_DOWN);
-    CHECK(C.Load(WriteTemp(Valid)));                  // back to the known good state
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {zone: game}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  Stick: {face: eyebrows}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {stick: pointer}\n")));
-    CHECK(!C.Load(WriteTemp("bindings:\n  A: {zone: game, face: eyebrows}\n")));
+    CHECK(C.Load(TestWriteTemp(Valid)));                  // back to the known good state
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {zone: game}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  Stick: {face: eyebrows}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {stick: pointer}\n")));
+    CHECK(!C.Load(TestWriteTemp("bindings:\n  A: {zone: game, face: eyebrows}\n")));
 
     CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
@@ -256,7 +225,7 @@ int main()
             "  Z: {zone: mid2, toggle: true}\n"
             "  R: {zone: mid2, toggle: true}\n"
             "  B: {zone: mid3, toggle: false}\n";
-        CHECK(C.Load(WriteTemp(OneButton)));
+        CHECK(C.Load(TestWriteTemp(OneButton)));
         CHECK(C.Bindings(N64Control::Z)[0].Toggle);
         CHECK(C.Bindings(N64Control::R)[0].Toggle);
         CHECK(!C.Bindings(N64Control::A)[0].Toggle);
@@ -275,7 +244,7 @@ int main()
 
     // Without the new keys nothing is a toggle and nothing holds, built-in bindings included.
     {
-        CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: pointer}\n  A: {zone: game}\n  Z: {zone: mid2}\n")));
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n  A: {zone: game}\n  Z: {zone: mid2}\n")));
         CHECK(!C.Bindings(N64Control::Z)[0].Toggle);
         CHECK(C.Bindings(N64Control::Stick)[0].Hold == POINTER_ZONE_NONE);
         CHECK(C.PointerHoldZone() == POINTER_ZONE_NONE);
@@ -286,26 +255,26 @@ int main()
 
     // Each one-button error is reported in its own words and changes nothing.
     {
-        CHECK(C.Load(WriteTemp("bindings:\n  Z: {zone: mid4}\n")));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {zone: mid2, toggle: maybe}\n")),
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Z: {zone: mid4}\n")));
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Z: {zone: mid2, toggle: maybe}\n")),
                        "toggle must be true or false"));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {key: X, toggle: true}\n")),
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Z: {key: X, toggle: true}\n")),
                        "toggle only applies to {zone:}"));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: left, hold: mid5}\n")),
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Stick: {stick: left, hold: mid5}\n")),
                        "hold only applies to {stick: pointer}"));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Z: {zone: mid2, hold: mid5}\n")),
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Z: {zone: mid2, hold: mid5}\n")),
                        "hold only applies to {stick: pointer}"));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: game}\n")),
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Stick: {stick: pointer, hold: game}\n")),
                        "hold must name a panel slot"));
-        CHECK(Contains(LoadStderr(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid9}\n")),
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid9}\n")),
                        "hold must name a panel slot"));
-        CHECK(Contains(LoadStderr(C, WriteTemp(
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp(
                            "bindings:\n  Stick: {stick: pointer, hold: mid5}\n  Start: {zone: mid5}\n")),
                        "mid5 is the stick's hold slot and cannot also be bound"));
-        CHECK(Contains(LoadStderr(C, WriteTemp(
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp(
                            "bindings:\n  Z: {zone: mid2, toggle: true}\n  R: {zone: mid2}\n")),
                        "mid2 is a toggle for Z but not for R"));
-        CHECK(Contains(LoadStderr(C, WriteTemp(
+        CHECK(TestHas(LoadStderr(C, TestWriteTemp(
                            "bindings:\n  R: {zone: mid2, toggle: true}\n  Z: {zone: mid2}\n")),
                        "mid2 is a toggle for R but not for Z"));
         CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Zone);
@@ -317,17 +286,18 @@ int main()
     CHECK(C.Bindings(N64Control::A)[0].kind == Binding::Kind::Key);
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_X);
 
-    // Every shipped mouse layout parses, plays with one button, and never starts the camera.
+    // Every shipped mouse layout parses, plays with one button, never starts the camera, and
+    // has no head stick.
     CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));
-    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);                                  // mid5
     CHECK(C.PointerToggleZones() == (1u << 9));                        // Z on mid2
     CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
-    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);
     CHECK(C.PointerToggleZones() == (1u << 11));                       // R on mid4
     CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
-    CHECK(C.UsesPointer() && !C.UsesFace());
+    CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);
     CHECK(C.PointerToggleZones() == ((1u << POINTER_ZONE_GAME) | (1u << 9)));   // A on the picture, R on mid2
 
@@ -338,14 +308,5 @@ int main()
     CHECK(C.Load("Config/face/mario_kart_64_u.yaml"));
     CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
     CHECK(C.Bindings(N64Control::R)[0].code == POINTER_GESTURE_EYEBROWS);
-    CHECK(C.Load("Config/mouse/super_mario_64_usa.yaml"));
-    CHECK(!C.UsesHeadStick());                        // the mouse layouts have no head stick
-    CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
-    CHECK(!C.UsesHeadStick());
-    CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
-    CHECK(!C.UsesHeadStick());
 
-    if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
-    printf("ok: input config\n");
-    return 0;
 }

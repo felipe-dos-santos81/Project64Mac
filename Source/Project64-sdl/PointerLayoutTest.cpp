@@ -3,14 +3,10 @@
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
+#include "UnitTest.h"
 
 #include <stdio.h>
 #include <string.h>
-
-static int Failures = 0;
-
-#define CHECK(Cond) \
-    do { if (!(Cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #Cond); Failures++; } } while (0)
 
 // True when (X, Y) evaluates to Zone in the 640x640 window.
 static bool ZoneAt(float X, float Y, int Zone)
@@ -29,7 +25,7 @@ static int SettlePoll(PointerGate * G, PointerSettle * S, float X, float Y,
     return E.Zone;
 }
 
-int main()
+void RunPointerLayoutTests()
 {
     // The 640x640 window: game image 640x480, centre (320,240), R = 160, panel from y=480.
     const int W = 640, H = 640;
@@ -435,7 +431,4 @@ int main()
     CHECK(Out.X == 12.5f && Out.Y == 34.0f && Out.W == 640 && Out.H == 640 && Out.Inside && Out.Button);
     CHECK(State.Seq == 2);
 
-    if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
-    printf("ok: pointer layout\n");
-    return 0;
 }

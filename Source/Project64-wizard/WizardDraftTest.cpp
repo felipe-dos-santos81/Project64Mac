@@ -2,6 +2,7 @@
 // Tests for WizardDraft. No window and no renderer; safe to run anywhere.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
 #include "WizardDraft.h"
+#include <Project64-sdl/UnitTest.h>
 
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
@@ -10,30 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-static int Failures = 0;
-
-#define CHECK(Cond) \
-    do { if (!(Cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #Cond); Failures++; } } while (0)
-
-// True when Text contains Needle. The emitted file is small, so substring checks read
-// better here than parsing it back a second time.
-static bool Has(const std::string & Text, const char * Needle)
-{
-    return Text.find(Needle) != std::string::npos;
-}
-
-// A base file under /tmp holding Text; the caller removes it.
-static std::string WriteBase(const char * Text)
-{
-    char Path[64];
-    snprintf(Path, sizeof(Path), "/tmp/pj64-wizard-base-XXXXXX");
-    const int Fd = mkstemp(Path);
-    if (Fd < 0) { perror("mkstemp"); exit(2); }
-    write(Fd, Text, strlen(Text));
-    close(Fd);
-    return Path;
-}
 
 // The shipped layouts this test loads as bases live at the repository root, which is neither
 // the test binary's own directory (build/macos/) nor necessarily the working directory: with
@@ -77,13 +54,14 @@ static std::string Layout(const char * Relative)
     return g_Root + Relative;
 }
 
-int main()
+void RunWizardDraftTests()
 {
     if (!FindRoot())
     {
         fprintf(stderr, "FAIL: cannot find Config/face/super_mario_64_usa.yaml from the "
                         "working directory or from the test binary's own directory\n");
-        return 1;
+        TestFailures()++;
+        return;
     }
 
     // Control names are the reader's own spelling.
@@ -97,7 +75,7 @@ int main()
     {
         WizardDraft D;
         CHECK(!D.Explicit(N64Control::A));
-        CHECK(Has(D.Emit("the built-in bindings"), "bindings: {}"));
+        CHECK(TestHas(D.Emit("the built-in bindings"), "bindings: {}"));
         CHECK(D.Validate("the built-in bindings"));
         CHECK(strcmp(D.Error(), "") == 0);
     }
@@ -112,12 +90,12 @@ int main()
         D.SetZone(N64Control::Start, 8);
         D.SetGesture(N64Control::L, POINTER_GESTURE_MOUTH_OPEN);
         const std::string Text = D.Emit("the built-in bindings");
-        CHECK(Has(Text, "A:         {key: X}"));
-        CHECK(Has(Text, "B:         {button: a}"));
-        CHECK(Has(Text, "Z:         {axis: lefttrigger, sign: +}"));
-        CHECK(Has(Text, "R:         {axis: righty, sign: -}"));
-        CHECK(Has(Text, "Start:     {zone: mid1}"));
-        CHECK(Has(Text, "L:         {face: mouth-open}"));
+        CHECK(TestHas(Text, "A:         {key: X}"));
+        CHECK(TestHas(Text, "B:         {button: a}"));
+        CHECK(TestHas(Text, "Z:         {axis: lefttrigger, sign: +}"));
+        CHECK(TestHas(Text, "R:         {axis: righty, sign: -}"));
+        CHECK(TestHas(Text, "Start:     {zone: mid1}"));
+        CHECK(TestHas(Text, "L:         {face: mouth-open}"));
         CHECK(D.Validate("the built-in bindings"));
         CHECK(D.Explicit(N64Control::A));
         CHECK(D.Bindings(N64Control::A).size() == 1);
@@ -128,7 +106,7 @@ int main()
     {
         WizardDraft D;
         D.SetKey(N64Control::A, SDL_SCANCODE_LSHIFT);
-        CHECK(Has(D.Emit("x"), "{key: \"Left Shift\"}"));
+        CHECK(TestHas(D.Emit("x"), "{key: \"Left Shift\"}"));
         CHECK(D.Validate("x"));
     }
 
@@ -139,17 +117,17 @@ int main()
         const size_t BDefaults = D.Bindings(N64Control::B).size();
         CHECK(BDefaults == 2);
         D.SetKey(N64Control::B, SDL_SCANCODE_Q);
-        CHECK(Has(D.Emit("x"), "B:"));
+        CHECK(TestHas(D.Emit("x"), "B:"));
         D.Clear(N64Control::B);
         CHECK(!D.Explicit(N64Control::B));
         CHECK(D.Bindings(N64Control::B).size() == BDefaults);
-        CHECK(!Has(D.Emit("x"), "\n  B:"));
+        CHECK(!TestHas(D.Emit("x"), "\n  B:"));
     }
 
     // The header names the base, so a file says where it came from.
     {
         WizardDraft D;
-        CHECK(Has(D.Emit("Config/mouse/goldeneye_007_u.yaml"),
+        CHECK(TestHas(D.Emit("Config/mouse/goldeneye_007_u.yaml"),
                   "# Written by Project64-wizard from Config/mouse/goldeneye_007_u.yaml."));
     }
 
@@ -165,7 +143,7 @@ int main()
     // A toggle and a hold survive a round trip and read as such on screen, and the draft
     // never writes a file the reader would reject when a control joins either slot.
     {
-        const std::string Base = WriteBase(
+        const std::string Base = TestWriteTemp(
             "bindings:\n"
             "  Stick: {stick: pointer, hold: mid5}\n"
             "  A: {zone: game}\n"
@@ -175,9 +153,9 @@ int main()
         CHECK(D.Bindings(N64Control::Z)[0].Toggle);
         CHECK(D.HoldZone() == 12);
         const std::string Text = D.Emit("x");
-        CHECK(Has(Text, "Z:         {zone: mid2, toggle: true}\n"));
-        CHECK(Has(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
-        CHECK(Has(Text, "A:         {zone: game}\n"));
+        CHECK(TestHas(Text, "Z:         {zone: mid2, toggle: true}\n"));
+        CHECK(TestHas(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
+        CHECK(TestHas(Text, "A:         {zone: game}\n"));
         CHECK(D.Describe(N64Control::Z) == "zone mid2, toggle");
         CHECK(D.Describe(N64Control::Stick) == "stick pointer, hold mid5");
         CHECK(D.Validate("x"));
@@ -192,7 +170,7 @@ int main()
 
         D.SetZone(N64Control::Start, 12);             // taking the hold slot takes it off the stick
         CHECK(D.HoldZone() == POINTER_ZONE_NONE);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}\n"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: pointer}\n"));
         CHECK(D.Validate("x"));
         remove(Base.c_str());
     }
@@ -202,7 +180,7 @@ int main()
         WizardDraft D;
         D.SetStickPointer();
         CHECK(D.HoldZone() == POINTER_ZONE_NONE);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}\n"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: pointer}\n"));
     }
 
     // The five shipped layouts are offered as bases, by label and by path.
@@ -225,10 +203,9 @@ int main()
         CHECK(D.Bindings(N64Control::A)[0].kind == Binding::Kind::Face);
         CHECK(D.Bindings(N64Control::A)[0].code == (int)POINTER_GESTURE_MOUTH_OPEN);
         const std::string Text = D.Emit("Config/face/super_mario_64_usa.yaml");
-        CHECK(Has(Text, "Stick:     {stick: head}"));
-        CHECK(Has(Text, "A:         {face: mouth-open}"));
-        CHECK(!Has(Text, "\n  DPadUp:"));
-        CHECK(D.Validate("Config/face/super_mario_64_usa.yaml"));
+        CHECK(TestHas(Text, "Stick:     {stick: head}"));
+        CHECK(TestHas(Text, "A:         {face: mouth-open}"));
+        CHECK(!TestHas(Text, "\n  DPadUp:"));
     }
 
     // Every shipped layout survives the same round trip.
@@ -236,8 +213,9 @@ int main()
     {
         WizardDraft D;
         CHECK(D.LoadBase(Layout(WizardBaseFile(i)).c_str()));
-        CHECK(D.Validate(WizardBaseFile(i)));
-        if (!D.Validate(WizardBaseFile(i))) fprintf(stderr, "  base %s: %s\n", WizardBaseFile(i), D.Error());
+        const bool Valid = D.Validate(WizardBaseFile(i));
+        CHECK(Valid);
+        if (!Valid) fprintf(stderr, "  base %s: %s\n", WizardBaseFile(i), D.Error());
     }
 
     // A mouse layout's zones, its toggle and its hold come back as they were.
@@ -247,9 +225,9 @@ int main()
         CHECK(D.Explicit(N64Control::Stick));
         CHECK(D.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
         const std::string Text = D.Emit("x");
-        CHECK(Has(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
-        CHECK(Has(Text, "Z:         {zone: mid2, toggle: true}\n"));
-        CHECK(!Has(Text, "\n  L:"));                                   // L is left out
+        CHECK(TestHas(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
+        CHECK(TestHas(Text, "Z:         {zone: mid2, toggle: true}\n"));
+        CHECK(!TestHas(Text, "\n  L:"));                                   // L is left out
     }
 
     // A base that does not exist, or that the reader rejects, leaves the draft alone and
@@ -280,22 +258,22 @@ int main()
     {
         WizardDraft D;
         D.SetStickWhole(false);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: left}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: left}"));
         CHECK(D.Validate("x"));
         D.SetStickWhole(true);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: right}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: right}"));
         CHECK(D.Validate("x"));
         D.SetStickPointer();
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: pointer}"));
         CHECK(D.Validate("x"));
         D.SetStickHead(false);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: head}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: head}"));
         CHECK(D.Validate("x"));
         D.SetStickHead(true);
-        CHECK(Has(D.Emit("x"), "Stick:     {stick: head-digital}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {stick: head-digital}"));
         CHECK(D.Validate("x"));
         D.SetStickKeys(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT);
-        CHECK(Has(D.Emit("x"), "Stick:     {keys: {up: Up, down: Down, left: Left, right: Right}}"));
+        CHECK(TestHas(D.Emit("x"), "Stick:     {keys: {up: Up, down: Down, left: Left, right: Right}}"));
         CHECK(D.Validate("x"));
     }
 
@@ -351,7 +329,4 @@ int main()
     CHECK(strcmp(WizardStickFormLabel(5), "four keyboard keys") == 0);
     CHECK(strcmp(WizardStickFormLabel(6), "") == 0);
 
-    if (Failures != 0) { fprintf(stderr, "%d failure(s)\n", Failures); return 1; }
-    printf("ok: wizard draft\n");
-    return 0;
 }

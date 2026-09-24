@@ -19,12 +19,8 @@ pulled back in by accident.
 ```sh
 make -j8 all                             # the normal build; a few minutes from clean
 make test                                # smoke test
-make unit-test                           # every headless unit test below, then the screenshot drift check
-make input-config-test                   # parser tests for the YAML input mapping
-make pointer-layout-test                 # geometry tests for the mouse panel and stick
-make face-gesture-test                   # classifier tests for the face gestures
-make game-config-test                    # lookup tests for the per-game YAML
-make wizard-draft-test                   # tests for the wizard's draft and the YAML it writes
+make unit-test                           # every headless unit-test area, then the screenshot drift check
+make unit-test only=input-config         # one area, without the drift check
 make pointer-selftest rom=Roms/game.z64  # prove the injected-pointer path end to end
 make face-selftest rom=Roms/a.z64          # face path end to end, camera never opened
 make wizard-selftest                     # the wizard's screens, driven by synthetic events
@@ -42,11 +38,15 @@ make help                                # user-facing targets; build stages are
 
 `make test` is the smoke suite: the frontend must run `--version`, and each of the four
 plugin dylibs must export `GetDllInfo` (checked with `nm`). Passing output is one version
-line plus four `ok:` lines. `make input-config-test` runs the YAML input-mapping parser
-tests and needs no window. There is no generic unit-test framework, so no other
-single-test command exists. `make pointer-layout-test`, `make face-gesture-test` and
-`make game-config-test` are pure unit tests. `make pointer-selftest` needs a window
-server and takes ~30 s.
+line plus four `ok:` lines.
+
+`make unit-test` builds and runs one program, `build/macos/unit-tests`, which needs no
+window. Its areas, in the order they run: `pointer-layout` (the mouse panel's geometry
+and the one-button rules), `face-gestures` (the gesture classifier), `game-config` (the
+per-game YAML lookup), `input-config` (the YAML reader) and `wizard-draft` (the wizard's
+draft and the YAML it writes). It prints `ok: <area>` for each; `only=<area>` runs one.
+There is no other unit-test command. `make pointer-selftest` needs a window server and
+takes ~30 s.
 
 Stages build individually — `deps`, `version`, `common`, `core`, `rsp`, `video`,
 `audio`, `input`, `frontend`, `config`. Run `make core` after touching the core rather
@@ -107,8 +107,8 @@ and watches for `g_BaseSystem` going null.
 `InputConfig.o`, `FaceGestures.o` and `FaceTracker.o` with the frontend but links no
 OpenGL: it draws with `SDL_Renderer` and SDL's 8x8 debug font, because the overlay's font
 has twenty-one glyphs and cannot spell a scancode name. `WizardDraft` holds the mapping
-and emits the YAML with no SDL window in sight, which is why `make wizard-draft-test` can
-test it headlessly; `Screens.cpp` turns one event into one call on the draft, which is why
+and emits the YAML with no SDL window in sight, which is why the `wizard-draft` unit-test
+area can test it headlessly; `Screens.cpp` turns one event into one call on the draft, which is why
 `--selftest <path>` can drive the real screens with synthetic events — a flag on the
 binary itself, which `Scripts/wizard_selftest.sh` (what `make wizard-selftest` runs) calls
 but does not own.
@@ -203,6 +203,14 @@ Only the `Aarch64` backend directory survives.
   swapped in. The built-in keyboard+gamepad pairing returns when the file is deleted.
 - **`Config/` and `Lang/` are tracked runtime data**, not build inputs. Never delete
   from them.
+- **Unit tests live in one program.** A new area is a `Run<Area>Tests()` in its own
+  `*Test.cpp`, registered in `Source/Project64-sdl/UnitTestMain.cpp` and added to
+  `UNIT_TEST_OBJS` in the Makefile. Never add a test program or a `make` target. Before
+  adding a check, look for one that already covers the behaviour and extend it; shared
+  helpers go in `Source/Project64-sdl/UnitTest.h`, not a copy per file. Every area runs in
+  the same process, so it must leave process-wide state as it found it: the working
+  directory (`game-config` `chdir`s and changes back), the environment, and the
+  `InputConfig` instance, which `input-config` and `wizard-draft` share.
 - **Line endings are mixed.** Many tracked files are CRLF (including
   `Source/Common/Trace.{h,cpp}` and `Source/Project64-video/Renderer/glitchmain.h`).
   Run `file <path>` before editing and preserve what is there. BSD `sed` will not help;

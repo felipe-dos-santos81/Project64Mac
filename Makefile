@@ -345,7 +345,7 @@ $(AUDIO_OBJS) $(INPUT_OBJS) $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS) 
 $(INPUT_OBJS) $(WIZARD_OBJS) $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-wizard/WizardDraftTest.o: CPPFLAGS += $(YAML_CFLAGS)
 $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard config all run grid run-wizard rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -506,29 +506,20 @@ wizard-screenshots-check: wizard ## Prove the committed wizard pictures match wh
 	Scripts/wizard_screenshots_check.sh
 
 # ── Unit tests ───────────────────────────────────────────────────────────────
-# Five headless binaries, one recipe. Each is a Test.o plus the object(s) under test;
-# all five link SDL3 and yaml-cpp, and the linker drops libraries nothing references,
-# so a new test needs no link flags of its own. The per-test names AGENTS.md documents
-# stay as aliases; `make unit-test` builds and runs all five.
-UNIT_TESTS = input-config-test pointer-layout-test face-gesture-test game-config-test wizard-draft-test
+# One headless program: every area's Test.o, the shared main, and the objects under test.
+# It links SDL3 and yaml-cpp; the linker drops libraries nothing references. A new area is a
+# file registered in UnitTestMain.cpp, never a new program or target (AGENTS.md).
+UNIT_TEST_OBJS = $(addprefix $(BUILD)/Project64-sdl/, UnitTestMain.o PointerLayoutTest.o \
+                   FaceGesturesTest.o FaceGestures.o GameConfigTest.o GameConfig.o \
+                   InputConfigTest.o InputConfig.o) \
+                 $(addprefix $(BUILD)/Project64-wizard/, WizardDraftTest.o WizardDraft.o)
 
-$(BUILD)/input-config-test: $(BUILD)/Project64-sdl/InputConfigTest.o $(BUILD)/Project64-sdl/InputConfig.o
-$(BUILD)/pointer-layout-test: $(BUILD)/Project64-sdl/PointerLayoutTest.o
-$(BUILD)/face-gesture-test: $(BUILD)/Project64-sdl/FaceGesturesTest.o $(BUILD)/Project64-sdl/FaceGestures.o
-$(BUILD)/game-config-test: $(BUILD)/Project64-sdl/GameConfigTest.o $(BUILD)/Project64-sdl/GameConfig.o
-$(BUILD)/wizard-draft-test: $(BUILD)/Project64-wizard/WizardDraftTest.o $(BUILD)/Project64-wizard/WizardDraft.o $(BUILD)/Project64-sdl/InputConfig.o
-
-$(BUILD)/%-test:
+$(BUILD)/unit-tests: $(UNIT_TEST_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
-unit-test: $(addprefix $(BUILD)/, $(UNIT_TESTS)) $(BIN)/Project64-wizard ## Build and run all five headless unit tests, then the wizard screenshot drift check
-	@set -e; for t in $(UNIT_TESTS); do $(BUILD)/$$t; done
-	@Scripts/wizard_screenshots_check.sh
-	@echo "ok: unit tests"
-
-# One documented name per binary: `make face-gesture-test` builds then runs it.
-$(UNIT_TESTS): %: $(BUILD)/%
-	@$(BUILD)/$*
+unit-test: $(BUILD)/unit-tests $(BIN)/Project64-wizard ## Run the headless unit tests, then the wizard screenshot drift check (only=<area> runs one area and skips the check)
+	@$(BUILD)/unit-tests $(only)
+	@if [ -z "$(only)" ]; then Scripts/wizard_screenshots_check.sh && echo "ok: unit tests"; fi
 
 test: all ## Smoke test: frontend --version exits 0 and every plugin exports GetDllInfo
 	./$(BIN)/Project64 --version
