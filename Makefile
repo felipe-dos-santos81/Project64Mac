@@ -291,7 +291,7 @@ VIDEO_SRC = $(addprefix Project64-video/, 3dmath.cpp Combine.cpp Config.cpp CRC.
 AUDIO_SRC = $(addprefix Project64-audio/, AudioMain.cpp AudioSettings.cpp trace.cpp Driver/SoundBase.cpp Driver/SdlAudio.cpp)
 INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 # InputConfig.cpp is shared with the input plugin: the frontend parses the layout to size its window.
-FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp GameConfig.cpp InputConfig.cpp)
+FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp MenuHost.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
 WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp Screenshots.cpp)
@@ -487,7 +487,7 @@ grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid
 	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/grid_selftest.sh "$(rom)"
 
-pointer-selftest: ## Prove the injected-pointer path maps a game click to A, mid1 to Start and a toggle slot to Z (usage: make pointer-selftest rom=/path/to/game.z64)
+pointer-selftest: ## Prove the injected-pointer path: a game click, mid1, a per-ROM layout, a toggle slot and the menu (usage: make pointer-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make pointer-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/pointer_selftest.sh "$(rom)"
 

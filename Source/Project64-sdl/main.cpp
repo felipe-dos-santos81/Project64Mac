@@ -10,6 +10,7 @@
 #include "FaceTracker.h"
 #include "GameConfig.h"
 #include "InputConfig.h"
+#include "MenuHost.h"
 #include <Project64-core/AppInit.h>
 #include <Project64-core/N64System/N64System.h>
 #include <Project64-core/N64System/SystemGlobals.h>
@@ -30,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <memory>
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
@@ -475,6 +477,19 @@ int main(int argc, char ** argv)
         return ShutdownSdl(window, context, 1);
     }
 
+    // The emulator actions menu, for a single game whose layout names a Menu slot or gesture
+    // (Docs/superpowers/specs/2026-09-24-emulator-actions-menu-design.md). The frontend's own
+    // InputConfig already holds that layout: LayoutUsesPointer loaded it to size the window.
+    std::unique_ptr<MenuHost> menu;
+    if (pointer != nullptr && !TileMode)
+    {
+        const InputConfig & Layout = InputConfig::Get();
+        if (Layout.MenuZone() != POINTER_ZONE_NONE || Layout.MenuGesture() != 0)
+        {
+            menu.reset(new MenuHost(pointer, window, Layout.MenuZone(), Layout.MenuGesture()));
+        }
+    }
+
     if (TileMode)
     {
         SDL_CreateThread(ParentWatchThread, "pj64-parent-watch", nullptr);
@@ -506,6 +521,10 @@ int main(int argc, char ** argv)
                 FaceTrackerStart(pointer);
                 FaceStarted = true;
             }
+        }
+        if (menu && !menu->Poll())
+        {
+            running = false; // Quit from the menu
         }
         if (g_BaseSystem == nullptr)
         {

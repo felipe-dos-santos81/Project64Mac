@@ -9,6 +9,8 @@
 # must set A again).
 # A fourth run loads a small layout with Z as a toggle on mid2: one static press over mid2 is
 # one press edge, so Z must be on and nothing latched (zone=-1).
+# A fifth run presses the shipped Super Mario 64 layout's menu slot (pad-down) from the first
+# frame, while the game is still booting: the menu host must report that it paused the game.
 # Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md and
 # Docs/superpowers/specs/2026-09-15-per-game-input-yaml-design.md
 set -eu
@@ -52,6 +54,28 @@ one_run() {
     return 1
 }
 
+# $1 = inject spec, $2 = ROM path, $3 = PJ64_INPUT_YAML value. Passes when the menu host
+# reports "menu: paused" (PJ64_MENU_SELFTEST prints each phase).
+menu_run() {
+    LOG="$(mktemp)"
+    PJ64_INPUT_YAML="$3" PJ64_FACE=0 PJ64_MENU_SELFTEST=1 PJ64_POINTER_INJECT="$1" "$BIN" "$2" >"$LOG" 2>&1 &
+    PID=$!
+    I=0
+    while [ "$I" -lt "$TIMEOUT" ]; do
+        grep -q '^menu: paused' "$LOG" 2>/dev/null && break
+        sleep 1
+        I=$((I + 1))
+    done
+    kill -TERM "$PID" 2>/dev/null || true
+    wait "$PID" 2>/dev/null || true
+    if grep -q '^menu: paused' "$LOG"; then
+        rm -f "$LOG"
+        return 0
+    fi
+    echo "FAIL: inject $1: the menu never reported paused (log: $LOG)" >&2
+    return 1
+}
+
 FAIL=0
 one_run "320,240,1" "zone=13 a=1 start=0 z=0 x=0 y=0" "$ROM" "$YAML" || FAIL=1
 one_run "192,512,1" "zone=8 a=0 start=1 z=0 x=0 y=0" "$ROM" "$YAML" || FAIL=1  # mid1's centre at 640x640
@@ -78,7 +102,10 @@ EOF
 one_run "256,512,1" "zone=-1 a=0 start=0 z=1 x=0 y=0" "$ROM" "$TOGGLE_YAML" || FAIL=1  # mid2's centre
 rm -f "$TOGGLE_YAML"
 
+# Fifth run: the menu slot opens the menu and the game pauses.
+menu_run "80,608,1" "$ROM" "$YAML" || FAIL=1   # pad-down's centre at 640x640
+
 if [ "$FAIL" -eq 0 ]; then
-    echo "ok: pointer path maps a game click to A and mid1 to Start, finds a layout named after the ROM, and toggles Z on mid2"
+    echo "ok: pointer path maps a game click to A and mid1 to Start, finds a layout named after the ROM, toggles Z on mid2, and pauses from the menu"
 fi
 exit "$FAIL"

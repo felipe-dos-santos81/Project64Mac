@@ -334,14 +334,17 @@ void RunInputConfigTests()
     CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);                                  // mid5
     CHECK(C.PointerToggleZones() == (1u << 9));                        // Z on mid2
+    CHECK(C.MenuZone() == 1);   // pad-down
     CHECK(C.Load("Config/mouse/goldeneye_007_u.yaml"));
     CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);
     CHECK(C.PointerToggleZones() == (1u << 11));                       // R on mid4
+    CHECK(C.MenuZone() == 1);   // pad-down
     CHECK(C.Load("Config/mouse/mario_kart_64_u.yaml"));
     CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
     CHECK(C.PointerHoldZone() == 12);
     CHECK(C.PointerToggleZones() == ((1u << POINTER_ZONE_GAME) | (1u << 9)));   // A on the picture, R on mid2
+    CHECK(C.MenuZone() == 1);   // pad-down
 
     CHECK(C.Load("Config/face/super_mario_64_usa.yaml"));   // every shipped face layout must parse
     CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());

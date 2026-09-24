@@ -11,6 +11,8 @@
 # you were resting, and keep that while you reach for an item or the brake; it lets go
 # on a second press, or once the cursor rests in the game image again.
 # L is left out: the game does not need it, and it keeps its keyboard key.
+# pad-down is the menu (==): it pauses the game and offers Resume, Full screen, Save, Load,
+# Reset and Quit (Docs/UserGuide.md section 7). D-pad down keeps its keyboard key.
 
 bindings:
   Stick:     {stick: pointer, hold: mid5}
@@ -24,6 +26,6 @@ bindings:
   CLeft:     {zone: c-left}
   CRight:    {zone: c-right}
   DPadUp:    {zone: pad-up}
-  DPadDown:  {zone: pad-down}
+  Menu:      {zone: pad-down}
   DPadLeft:  {zone: pad-left}
   DPadRight: {zone: pad-right}

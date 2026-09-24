@@ -257,6 +257,8 @@ void RunWizardDraftTests()
         CHECK(TestHas(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
         CHECK(TestHas(Text, "Z:         {zone: mid2, toggle: true}\n"));
         CHECK(!TestHas(Text, "\n  L:"));                                   // L is left out
+        CHECK(TestHas(Text, "  Menu:      {zone: pad-down}\n"));
+        CHECK(D.MenuZone() == 1);
     }
 
     // A base that does not exist, or that the reader rejects, leaves the draft alone and
