@@ -23,6 +23,18 @@ const char * WizardBaseFile(int Index);    // "Config/mouse/super_mario_64_usa.y
 int WizardStickFormCount();
 const char * WizardStickFormLabel(int Index);
 
+// A place the panel editor edits: a zone (0 … POINTER_ZONE_COUNT - 1, the picture included)
+// or a face gesture (its index, 0 … POINTER_GESTURE_COUNT - 1).
+struct EditPlace
+{
+    bool Gesture = false;
+    int Index = POINTER_ZONE_NONE;
+};
+
+// The stick forms the panel editor offers; Other is any form it does not (a gamepad stick,
+// four keys), kept as it is until one of the three is chosen.
+enum class EditStick { Pointer, Head, HeadDigital, Other };
+
 class WizardDraft
 {
 public:
@@ -81,6 +93,39 @@ public:
     // choosing it is the clickable wizard's job.
     int MenuZone() const;
 
+    // ---- The panel editor (Docs/superpowers/specs/2026-09-24-clickable-wizard-design.md) ----
+    // A slot holds one thing: a control, the menu, the hold or nothing; a gesture holds one
+    // control or nothing. Each Place/Set call works on a copy and commits only on success: a
+    // refusal leaves the draft as it was, with the reason in *Note. On success *Note lists
+    // what moved as a side effect, joined by "; ", or is empty.
+
+    // Every control bound to Place. A loaded layout may share a slot.
+    std::vector<N64Control> Occupants(EditPlace Place) const;
+    // True when the controls in Zone are a toggle slot.
+    bool Toggled(int Zone) const;
+    // The menu's gesture index, or -1 when the menu is not a gesture.
+    int MenuGesture() const;
+    EditStick StickForm() const;
+    // Every control except Stick with neither a zone nor a gesture, in N64Control order.
+    std::vector<N64Control> NotPlaced() const;
+
+    // Whether a choice is allowed where it would go; *Why gets the reason when not.
+    bool CanPlaceMenu(int Zone, std::string * Why) const;
+    bool CanPlaceHold(int Zone, std::string * Why) const;
+    bool CanToggle(int Zone, std::string * Why) const;
+    bool CanUseGesture(int Gesture, std::string * Why) const;
+
+    bool PlaceControl(EditPlace Place, N64Control Control, std::string * Note);
+    bool PlaceMenu(int Zone, std::string * Note);
+    bool PlaceHold(int Zone, std::string * Note);
+    bool PlaceNothing(EditPlace Place, std::string * Note);
+    bool SetToggle(int Zone, bool On, std::string * Note);
+    bool SetStickForm(EditStick Form, std::string * Note);
+
+    // For a draft with no menu: puts it where PJ64_MENU_AUTO would at play time (AutoMenuSlot),
+    // taking that slot from its control when the panel is full. False when a menu exists.
+    bool EnsureMenu(std::string * Note);
+
     // What the control is bound to, in English: "key X", "zone mid1",
     // "gesture mouth-open (Mo)", "keys Up/Down/Left/Right". An inherited control reads
     // "inherited: " followed by every built-in input, joined by " or ".
@@ -101,6 +146,11 @@ public:
 
 private:
     void Replace(N64Control Control, const Binding & Value);
+    void ClearControl(N64Control Control, std::string * Note);
+    void RemoveHold(std::string * Note);
+    // Moves the menu to the first free slot by AutoMenuSlot, counting Avoid as taken. False,
+    // with the full-panel reason in *Note, when no slot is free.
+    bool MoveMenu(int Avoid, std::string * Note);
 
     std::vector<Binding> m_Bindings[(int)N64Control::Count];
     bool m_Explicit[(int)N64Control::Count];

@@ -54,6 +54,148 @@ static std::string Layout(const char * Relative)
     return g_Root + Relative;
 }
 
+static int Slot(const char * Name) { return PointerZoneFromName(Name); }
+
+static EditPlace At(const char * Name) { EditPlace P; P.Index = Slot(Name); return P; }
+
+static EditPlace OnGesture(uint32_t Bit) { EditPlace P; P.Gesture = true; P.Index = PointerGestureIndex(Bit); return P; }
+
+static bool Holds(const WizardDraft & D, EditPlace P, N64Control C)
+{
+    const std::vector<N64Control> Here = D.Occupants(P);
+    return Here.size() == 1 && Here[0] == C;
+}
+
+// The generic layout's shape, built through the editing rules themselves.
+static WizardDraft PanelDraft()
+{
+    WizardDraft D;
+    std::string N;
+    EditPlace Picture;
+    Picture.Index = POINTER_ZONE_GAME;
+    CHECK(D.SetStickForm(EditStick::Pointer, &N));
+    CHECK(D.PlaceControl(Picture, N64Control::A, &N));
+    CHECK(D.PlaceControl(At("mid1"), N64Control::Start, &N));
+    CHECK(D.PlaceControl(At("mid2"), N64Control::Z, &N));
+    CHECK(D.SetToggle(Slot("mid2"), true, &N));
+    CHECK(D.PlaceControl(At("mid3"), N64Control::B, &N));
+    CHECK(D.PlaceControl(At("mid4"), N64Control::R, &N));
+    CHECK(D.PlaceHold(Slot("mid5"), &N));
+    CHECK(D.PlaceControl(At("pad-up"), N64Control::L, &N));
+    CHECK(D.PlaceControl(At("c-up"), N64Control::CUp, &N));
+    CHECK(D.PlaceControl(At("c-down"), N64Control::CDown, &N));
+    CHECK(D.PlaceControl(At("c-left"), N64Control::CLeft, &N));
+    CHECK(D.PlaceControl(At("c-right"), N64Control::CRight, &N));
+    CHECK(D.PlaceControl(At("pad-left"), N64Control::DPadLeft, &N));
+    CHECK(D.PlaceControl(At("pad-right"), N64Control::DPadRight, &N));
+    CHECK(D.PlaceMenu(Slot("pad-down"), &N));
+    return D;
+}
+
+static void PanelEditing()
+{
+    std::string N;
+    EditPlace Picture;
+    Picture.Index = POINTER_ZONE_GAME;
+
+    // The builder itself: a layout the reader accepts, with every control but D^ and Dv placed.
+    WizardDraft D = PanelDraft();
+    CHECK(D.Validate("x"));
+    CHECK(D.NotPlaced().size() == 2);
+    CHECK(D.StickForm() == EditStick::Pointer && D.HoldZone() == Slot("mid5") && D.MenuZone() == Slot("pad-down"));
+
+    // Placing a control moves it and displaces the target's occupant.
+    CHECK(D.PlaceControl(At("mid4"), N64Control::L, &N));
+    CHECK(N == "R is not placed now");
+    CHECK(Holds(D, At("mid4"), N64Control::L) && D.Occupants(At("pad-up")).empty());
+    CHECK(!D.Explicit(N64Control::R));
+
+    // Toggle follows its control: kept when it is placed again, gone when it moves.
+    CHECK(D.SetToggle(Slot("mid4"), true, &N) && D.Toggled(Slot("mid4")));
+    CHECK(D.PlaceControl(At("mid4"), N64Control::L, &N) && D.Toggled(Slot("mid4")));
+    CHECK(D.PlaceControl(At("mid3"), N64Control::L, &N) && N == "B is not placed now");
+    CHECK(!D.Toggled(Slot("mid3")) && !D.Toggled(Slot("mid4")));
+    CHECK(!D.CanToggle(Slot("mid4"), &N) && N == "a toggle needs a control in the slot");
+    CHECK(!D.SetToggle(Slot("mid4"), true, &N) && N == "a toggle needs a control in the slot");
+
+    // The picture takes a toggle, but neither the menu nor the hold.
+    CHECK(D.SetToggle(POINTER_ZONE_GAME, true, &N) && D.Toggled(POINTER_ZONE_GAME));
+    CHECK(!D.PlaceMenu(POINTER_ZONE_GAME, &N) && N == "the picture cannot hold the menu");
+    CHECK(!D.PlaceHold(POINTER_ZONE_GAME, &N) && N == "the hold cannot go on the picture");
+    CHECK(D.Validate("x"));
+
+    // The menu always has a place. With mid1-mid4 and the hold on mid5, emptying the menu's
+    // slot has nowhere to send it: refused, and nothing changed.
+    D = PanelDraft();
+    const std::string Before = D.Emit("x");
+    CHECK(!D.PlaceNothing(At("pad-down"), &N) && N == "The panel is full: free a slot for the menu first");
+    CHECK(!D.PlaceControl(At("pad-down"), N64Control::DPadUp, &N));
+    CHECK(D.Emit("x") == Before);
+    CHECK(D.PlaceNothing(At("mid4"), &N) && N == "R is not placed now");
+    CHECK(D.PlaceNothing(At("pad-down"), &N) && N == "the menu moved to mid4" && D.MenuZone() == Slot("mid4"));
+    CHECK(D.PlaceControl(At("mid4"), N64Control::R, &N) && N == "the menu moved to pad-down");
+    CHECK(D.PlaceMenu(Slot("c-up"), &N) && N == "CUp is not placed now" && D.MenuZone() == Slot("c-up"));
+    CHECK(D.Validate("x"));
+
+    // The hold: only with the pointer; moving it frees its old slot; Nothing removes it.
+    WizardDraft Plain;
+    CHECK(!Plain.CanPlaceHold(Slot("mid5"), &N) && N == "the hold needs the stick to be the pointer");
+    CHECK(!Plain.PlaceHold(Slot("mid5"), &N));
+    D = PanelDraft();
+    CHECK(D.PlaceNothing(At("pad-up"), &N) && N == "L is not placed now");
+    CHECK(D.PlaceHold(Slot("pad-up"), &N) && D.HoldZone() == Slot("pad-up") && D.Occupants(At("mid5")).empty());
+    CHECK(D.PlaceNothing(At("pad-up"), &N) && N == "the hold is gone" && D.HoldZone() == POINTER_ZONE_NONE);
+    CHECK(D.Validate("x"));
+
+    // A shared slot from a loaded layout is displaced whole.
+    WizardDraft Shared;
+    CHECK(Shared.LoadBase(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n  Z: {zone: mid2}\n  L: {zone: mid2}\n")));
+    CHECK(Shared.Occupants(At("mid2")).size() == 2);
+    CHECK(Shared.PlaceControl(At("mid2"), N64Control::B, &N) && N == "Z is not placed now; L is not placed now");
+    CHECK(Holds(Shared, At("mid2"), N64Control::B));
+    CHECK(Shared.Validate("x"));
+
+    // A gesture menu from a loaded layout: shown, and moved to a slot when replaced.
+    WizardDraft Faced;
+    CHECK(Faced.LoadBase(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n  A: {zone: game}\n  Menu: {face: smile}\n")));
+    CHECK(Faced.MenuGesture() == PointerGestureIndex(POINTER_GESTURE_SMILE));
+    CHECK(!Faced.EnsureMenu(&N));
+    CHECK(Faced.PlaceControl(OnGesture(POINTER_GESTURE_SMILE), N64Control::B, &N) && N == "the menu moved to mid5");
+    CHECK(Faced.MenuZone() == Slot("mid5") && Faced.MenuGesture() == -1);
+    CHECK(Holds(Faced, OnGesture(POINTER_GESTURE_SMILE), N64Control::B));
+    CHECK(Faced.Validate("x"));
+
+    // A head stick clears the four head-direction gestures and the hold, and keeps them shut.
+    D = PanelDraft();
+    CHECK(D.PlaceNothing(At("mid4"), &N));
+    CHECK(D.PlaceControl(OnGesture(POINTER_GESTURE_HEAD_LEFT), N64Control::R, &N));
+    CHECK(D.SetStickForm(EditStick::Head, &N) && N == "the hold is gone; R is not placed now");
+    CHECK(D.StickForm() == EditStick::Head && D.HoldZone() == POINTER_ZONE_NONE);
+    CHECK(!D.CanUseGesture(PointerGestureIndex(POINTER_GESTURE_HEAD_LEFT), &N) && N == "the head moves the stick");
+    CHECK(!D.PlaceControl(OnGesture(POINTER_GESTURE_HEAD_UP), N64Control::R, &N));
+    CHECK(D.PlaceControl(OnGesture(POINTER_GESTURE_MOUTH_OPEN), N64Control::R, &N));
+    CHECK(!D.PlaceHold(Slot("mid5"), &N));
+    CHECK(D.Validate("x"));
+    CHECK(D.SetStickForm(EditStick::Pointer, &N) && D.StickForm() == EditStick::Pointer);
+    CHECK(!D.SetStickForm(EditStick::Other, &N));
+
+    // A base without a menu gets one where play would put it.
+    WizardDraft Bare;
+    CHECK(Bare.SetStickForm(EditStick::Pointer, &N));
+    CHECK(Bare.EnsureMenu(&N) && N == "the menu was added on mid5" && Bare.MenuZone() == Slot("mid5"));
+    CHECK(!Bare.EnsureMenu(&N));
+    WizardDraft Full;
+    CHECK(Full.LoadBase(TestWriteTemp(
+        "bindings:\n  Stick: {stick: pointer}\n"
+        "  A: {zone: pad-up}\n  B: {zone: pad-down}\n  Z: {zone: pad-left}\n  Start: {zone: pad-right}\n"
+        "  CUp: {zone: c-up}\n  CDown: {zone: c-down}\n  CLeft: {zone: c-left}\n  CRight: {zone: c-right}\n"
+        "  L: {zone: mid1}\n  R: {zone: mid2}\n  DPadUp: {zone: mid3}\n  DPadDown: {zone: mid4}\n"
+        "  DPadLeft: {zone: mid5}\n")));
+    CHECK(Full.EnsureMenu(&N) && N == "the menu took pad-down from B");
+    CHECK(Full.MenuZone() == Slot("pad-down") && !Full.Explicit(N64Control::B));
+    CHECK(Full.Validate("x"));
+}
+
 void RunWizardDraftTests()
 {
     if (!FindRoot())
@@ -360,4 +502,5 @@ void RunWizardDraftTests()
     CHECK(strcmp(WizardStickFormLabel(5), "four keyboard keys") == 0);
     CHECK(strcmp(WizardStickFormLabel(6), "") == 0);
 
+    PanelEditing();
 }

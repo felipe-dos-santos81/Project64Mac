@@ -416,6 +416,326 @@ int WizardDraft::MenuZone() const
     return MenuSlotOf(m_Menu);
 }
 
+namespace
+{
+const char * const kFullPanel = "The panel is full: free a slot for the menu first";
+
+bool IsHeadDirection(int Gesture)
+{
+    return Gesture >= 0 && Gesture < POINTER_GESTURE_COUNT && (POINTER_GESTURE_HEAD_DIRECTIONS & (1u << Gesture)) != 0;
+}
+
+void AddNote(std::string * Note, const std::string & Text)
+{
+    if (!Note->empty()) *Note += "; ";
+    *Note += Text;
+}
+
+Binding ZoneBinding(int Zone, bool Toggle)
+{
+    Binding B = {};
+    B.kind = Binding::Kind::Zone;
+    B.code = Zone;
+    B.Toggle = Toggle;
+    return B;
+}
+
+bool BindsPlace(const Binding & B, EditPlace Place)
+{
+    if (Place.Gesture) return B.kind == Binding::Kind::Face && (uint32_t)B.code == (1u << Place.Index);
+    return B.kind == Binding::Kind::Zone && B.code == Place.Index;
+}
+}
+
+std::vector<N64Control> WizardDraft::Occupants(EditPlace Place) const
+{
+    std::vector<N64Control> Out;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (i == (int)N64Control::Stick) continue;
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (BindsPlace(B, Place))
+            {
+                Out.push_back((N64Control)i);
+                break;
+            }
+        }
+    }
+    return Out;
+}
+
+bool WizardDraft::Toggled(int Zone) const
+{
+    EditPlace Place;
+    Place.Index = Zone;
+    for (N64Control C : Occupants(Place))
+    {
+        for (const Binding & B : m_Bindings[(int)C])
+        {
+            if (BindsPlace(B, Place) && B.Toggle) return true;
+        }
+    }
+    return false;
+}
+
+int WizardDraft::MenuGesture() const
+{
+    const uint32_t Bit = MenuGestureOf(m_Menu);
+    return Bit != 0 ? PointerGestureIndex(Bit) : -1;
+}
+
+EditStick WizardDraft::StickForm() const
+{
+    const std::vector<Binding> & S = m_Bindings[(int)N64Control::Stick];
+    if (S.size() != 1) return EditStick::Other;
+    if (S[0].kind == Binding::Kind::Pointer) return EditStick::Pointer;
+    if (S[0].kind == Binding::Kind::HeadStick) return S[0].code == 0 ? EditStick::Head : EditStick::HeadDigital;
+    return EditStick::Other;
+}
+
+std::vector<N64Control> WizardDraft::NotPlaced() const
+{
+    std::vector<N64Control> Out;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (i == (int)N64Control::Stick) continue;
+        bool Placed = false;
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone || B.kind == Binding::Kind::Face) Placed = true;
+        }
+        if (!Placed) Out.push_back((N64Control)i);
+    }
+    return Out;
+}
+
+bool WizardDraft::CanPlaceMenu(int Zone, std::string * Why) const
+{
+    if (Zone == POINTER_ZONE_GAME) { *Why = "the picture cannot hold the menu"; return false; }
+    return true;
+}
+
+bool WizardDraft::CanPlaceHold(int Zone, std::string * Why) const
+{
+    if (Zone == POINTER_ZONE_GAME) { *Why = "the hold cannot go on the picture"; return false; }
+    if (StickForm() != EditStick::Pointer) { *Why = "the hold needs the stick to be the pointer"; return false; }
+    return true;
+}
+
+bool WizardDraft::CanToggle(int Zone, std::string * Why) const
+{
+    EditPlace Place;
+    Place.Index = Zone;
+    if (Occupants(Place).empty()) { *Why = "a toggle needs a control in the slot"; return false; }
+    return true;
+}
+
+bool WizardDraft::CanUseGesture(int Gesture, std::string * Why) const
+{
+    const EditStick Form = StickForm();
+    if ((Form == EditStick::Head || Form == EditStick::HeadDigital) && IsHeadDirection(Gesture))
+    {
+        *Why = "the head moves the stick";
+        return false;
+    }
+    return true;
+}
+
+void WizardDraft::ClearControl(N64Control Control, std::string * Note)
+{
+    Clear(Control);
+    AddNote(Note, std::string(WizardControlName(Control)) + " is not placed now");
+}
+
+void WizardDraft::RemoveHold(std::string * Note)
+{
+    m_Bindings[(int)N64Control::Stick][0].Hold = POINTER_ZONE_NONE;
+    AddNote(Note, "the hold is gone");
+}
+
+bool WizardDraft::MoveMenu(int Avoid, std::string * Note)
+{
+    bool Used[POINTER_ZONE_COUNT] = { false };
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone) Used[B.code] = true;
+        }
+    }
+    const int Hold = HoldZone();
+    if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
+    if (Avoid != POINTER_ZONE_NONE) Used[Avoid] = true;
+    const int Slot = AutoMenuSlot(Used, Hold);
+    if (Used[Slot])
+    {
+        *Note = kFullPanel;
+        return false;
+    }
+    m_Menu.assign(1, ZoneBinding(Slot, false));
+    AddNote(Note, std::string("the menu moved to ") + PointerZoneName(Slot));
+    return true;
+}
+
+bool WizardDraft::PlaceControl(EditPlace Place, N64Control Control, std::string * Note)
+{
+    Note->clear();
+    WizardDraft Next = *this;
+    if (Place.Gesture)
+    {
+        if (!CanUseGesture(Place.Index, Note)) return false;
+        for (N64Control C : Occupants(Place))
+        {
+            if (C != Control) Next.ClearControl(C, Note);
+        }
+        Binding B = {};
+        B.kind = Binding::Kind::Face;
+        B.code = (int)(1u << Place.Index);
+        Next.Replace(Control, B);
+        if (Next.MenuGesture() == Place.Index && !Next.MoveMenu(POINTER_ZONE_NONE, Note)) return false;
+    }
+    else
+    {
+        const int Zone = Place.Index;
+        bool KeepToggle = false;
+        for (N64Control C : Occupants(Place))
+        {
+            if (C == Control) KeepToggle = Toggled(Zone);
+            else Next.ClearControl(C, Note);
+        }
+        if (Next.HoldZone() == Zone) Next.RemoveHold(Note);
+        Next.Replace(Control, ZoneBinding(Zone, KeepToggle));
+        if (Next.MenuZone() == Zone && !Next.MoveMenu(Zone, Note)) return false;
+    }
+    *this = Next;
+    return true;
+}
+
+bool WizardDraft::PlaceMenu(int Zone, std::string * Note)
+{
+    Note->clear();
+    if (!CanPlaceMenu(Zone, Note)) return false;
+    WizardDraft Next = *this;
+    EditPlace Place;
+    Place.Index = Zone;
+    for (N64Control C : Occupants(Place)) Next.ClearControl(C, Note);
+    if (Next.HoldZone() == Zone) Next.RemoveHold(Note);
+    Next.m_Menu.assign(1, ZoneBinding(Zone, false));
+    *this = Next;
+    return true;
+}
+
+bool WizardDraft::PlaceHold(int Zone, std::string * Note)
+{
+    Note->clear();
+    if (!CanPlaceHold(Zone, Note)) return false;
+    WizardDraft Next = *this;
+    EditPlace Place;
+    Place.Index = Zone;
+    for (N64Control C : Occupants(Place)) Next.ClearControl(C, Note);
+    Next.m_Bindings[(int)N64Control::Stick][0].Hold = Zone;
+    if (Next.MenuZone() == Zone && !Next.MoveMenu(Zone, Note)) return false;
+    *this = Next;
+    return true;
+}
+
+bool WizardDraft::PlaceNothing(EditPlace Place, std::string * Note)
+{
+    Note->clear();
+    WizardDraft Next = *this;
+    for (N64Control C : Occupants(Place)) Next.ClearControl(C, Note);
+    if (Place.Gesture)
+    {
+        if (Next.MenuGesture() == Place.Index && !Next.MoveMenu(POINTER_ZONE_NONE, Note)) return false;
+    }
+    else
+    {
+        if (Next.HoldZone() == Place.Index) Next.RemoveHold(Note);
+        if (Next.MenuZone() == Place.Index && !Next.MoveMenu(Place.Index, Note)) return false;
+    }
+    *this = Next;
+    return true;
+}
+
+bool WizardDraft::SetToggle(int Zone, bool On, std::string * Note)
+{
+    Note->clear();
+    if (!CanToggle(Zone, Note)) return false;
+    EditPlace Place;
+    Place.Index = Zone;
+    // Every control on the slot, so a shared slot stays all-or-nothing, as the reader requires.
+    for (N64Control C : Occupants(Place))
+    {
+        for (Binding & B : m_Bindings[(int)C])
+        {
+            if (BindsPlace(B, Place)) B.Toggle = On;
+        }
+    }
+    return true;
+}
+
+bool WizardDraft::SetStickForm(EditStick Form, std::string * Note)
+{
+    Note->clear();
+    if (Form == EditStick::Other)
+    {
+        *Note = "that stick form is set in the step-by-step wizard";
+        return false;
+    }
+    if (Form == StickForm()) return true;
+    WizardDraft Next = *this;
+    if (Form == EditStick::Pointer)
+    {
+        Next.SetStickPointer();
+    }
+    else
+    {
+        if (Next.HoldZone() != POINTER_ZONE_NONE) Next.RemoveHold(Note);
+        for (int G = 0; G < POINTER_GESTURE_COUNT; G++)
+        {
+            if (!IsHeadDirection(G)) continue;
+            EditPlace Place;
+            Place.Gesture = true;
+            Place.Index = G;
+            for (N64Control C : Next.Occupants(Place)) Next.ClearControl(C, Note);
+            if (Next.MenuGesture() == G && !Next.MoveMenu(POINTER_ZONE_NONE, Note)) return false;
+        }
+        Next.SetStickHead(Form == EditStick::HeadDigital);
+    }
+    *this = Next;
+    return true;
+}
+
+bool WizardDraft::EnsureMenu(std::string * Note)
+{
+    Note->clear();
+    if (!m_Menu.empty()) return false;
+    bool Used[POINTER_ZONE_COUNT] = { false };
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone) Used[B.code] = true;
+        }
+    }
+    const int Hold = HoldZone();
+    if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
+    const int Slot = AutoMenuSlot(Used, Hold);
+    EditPlace Place;
+    Place.Index = Slot;
+    const char * Taken = nullptr;
+    for (N64Control C : Occupants(Place))
+    {
+        Clear(C);
+        if (Taken == nullptr) Taken = WizardControlName(C);
+    }
+    m_Menu.assign(1, ZoneBinding(Slot, false));
+    *Note = Taken != nullptr ? std::string("the menu took ") + PointerZoneName(Slot) + " from " + Taken
+                             : std::string("the menu was added on ") + PointerZoneName(Slot);
+    return true;
+}
+
 // One binding in English. ValueText is the file's voice; this is the screen's. Both read the
 // same BindingFacts and render it differently, which is the whole point of the split: nothing
 // here is quoted, bracketed or comma-separated, and the gesture kind reads by its English
