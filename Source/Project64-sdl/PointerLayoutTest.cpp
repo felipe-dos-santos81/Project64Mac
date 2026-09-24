@@ -18,6 +18,17 @@ static bool ZoneAt(float X, float Y, int Zone)
     return PointerLayoutEvaluate(X, Y, 640, 640, true).Zone == Zone;
 }
 
+// One poll at (X, Y) in the 640x640 window through the gate and the settle, in the order
+// GetKeys runs them. Returns the evaluated zone.
+static int SettlePoll(PointerGate * G, PointerSettle * S, float X, float Y,
+                      float Radius = POINTER_SETTLE_PX, int Polls = POINTER_SETTLE_POLLS)
+{
+    PointerEval E = PointerLayoutEvaluate(X, Y, 640, 640, true);
+    PointerGateStick(G, &E, X, Y, POINTER_FLICK_PX);
+    PointerSettleStep(S, E, X, Y, Radius, Polls);
+    return E.Zone;
+}
+
 int main()
 {
     // The 640x640 window: game image 640x480, centre (320,240), R = 160, panel from y=480.
@@ -238,6 +249,169 @@ int main()
         CHECK(!PointerFitToBase(640, -1, 640, 640, 10.0f, 10.0f, &Bx, &By));
         CHECK(!PointerFitToBase(640, 640, 0, 640, 10.0f, 10.0f, &Bx, &By));
         CHECK(!PointerFitToBase(640, 640, 640, -5, 10.0f, 10.0f, &Bx, &By));
+    }
+
+    // Settling: nine polls within 8 px in the game image record the gated stick, once.
+    // (400,240) is half tilt right: X 40, Y 0.
+    {
+        PointerGate G = { false, 0, 0, 0, 0 };
+        PointerSettle S = {};
+        CHECK(!S.HaveSettled);                        // nothing before any rest
+        for (int i = 0; i < 8; i++)
+        {
+            SettlePoll(&G, &S, i % 2 == 0 ? 400.0f : 405.0f, 240);   // jitter inside the radius
+            CHECK(!S.JustSettled);
+        }
+        CHECK(!S.HaveSettled);
+        SettlePoll(&G, &S, 400, 240);
+        CHECK(S.JustSettled && S.HaveSettled);
+        CHECK(S.SettledX == 40 && S.SettledY == 0);
+        SettlePoll(&G, &S, 400, 240);
+        CHECK(!S.JustSettled && S.HaveSettled);       // resting on does not record again
+
+        // Leaving the image resets the count and keeps the tilt; resting in the panel never
+        // settles, however long.
+        for (int i = 0; i < 20; i++)
+        {
+            CHECK(SettlePoll(&G, &S, 256, 512) == 9); // mid2
+            CHECK(!S.JustSettled);
+        }
+        CHECK(S.HaveSettled && S.SettledX == 40 && S.SettledY == 0);
+
+        // Back in the image at the top edge: the flick from the panel reads neutral on its
+        // first poll (the gate), then the rest records full tilt up.
+        for (int i = 0; i < 8; i++)
+        {
+            SettlePoll(&G, &S, 320, 80);
+            CHECK(!S.JustSettled);
+        }
+        SettlePoll(&G, &S, 320, 80);
+        CHECK(S.JustSettled && S.SettledX == 0 && S.SettledY == 80);
+    }
+
+    // A slow drag from the centre to the panel, 2 px a poll, never rests, so it never records
+    // the backward tilt the bottom edge reads as.
+    {
+        PointerGate G = { false, 0, 0, 0, 0 };
+        PointerSettle S = {};
+        for (float Y = 240; Y < 480; Y += 2)
+        {
+            SettlePoll(&G, &S, 320, Y);
+        }
+        CHECK(!S.HaveSettled);
+    }
+
+    // A flick from a rest to the panel keeps the tilt the rest recorded.
+    {
+        PointerGate G = { false, 0, 0, 0, 0 };
+        PointerSettle S = {};
+        for (int i = 0; i < 9; i++)
+        {
+            SettlePoll(&G, &S, 400, 240);
+        }
+        CHECK(S.JustSettled && S.SettledX == 40);
+        SettlePoll(&G, &S, 330, 470);                 // one 239 px jump inside the image
+        CHECK(SettlePoll(&G, &S, 320, 512) == 10);    // mid3
+        CHECK(S.HaveSettled && S.SettledX == 40 && S.SettledY == 0);
+    }
+
+    // A radius of 0 never settles.
+    {
+        PointerGate G = { false, 0, 0, 0, 0 };
+        PointerSettle S = {};
+        for (int i = 0; i < 20; i++)
+        {
+            SettlePoll(&G, &S, 400, 240, 0.0f, POINTER_SETTLE_POLLS);
+        }
+        CHECK(!S.HaveSettled);
+    }
+
+    // The click step with no toggles and no hold is the old latch: the zone under the press
+    // stays held wherever the cursor goes until release, and a press on a gap does nothing.
+    {
+        const PointerSettle None = {};
+        PointerClicks C = PointerClicksInit();
+        CHECK(C.Latched == POINTER_ZONE_NONE && C.Toggled == 0u && !C.Holding && !C.PrevButton);
+        PointerClickStep(&C, true, 8, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == 8);
+        PointerClickStep(&C, true, POINTER_ZONE_GAME, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == 8);
+        PointerClickStep(&C, false, POINTER_ZONE_GAME, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == POINTER_ZONE_NONE);
+        PointerClickStep(&C, true, POINTER_ZONE_NONE, 0u, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == POINTER_ZONE_NONE && C.Toggled == 0u && !C.Holding);
+    }
+
+    // A toggle slot flips on the press edge, ignores the release, and leaves the button free.
+    {
+        const PointerSettle None = {};
+        const uint32_t Mid2 = 1u << 9;
+        PointerClicks C = PointerClicksInit();
+        PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);
+        CHECK(C.Toggled == Mid2 && C.Latched == POINTER_ZONE_NONE);
+        PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);   // still down: no second flip
+        CHECK(C.Toggled == Mid2);
+        PointerClickStep(&C, false, 9, Mid2, POINTER_ZONE_NONE, None);
+        CHECK(C.Toggled == Mid2);                                        // the release does nothing
+        PointerClickStep(&C, true, POINTER_ZONE_GAME, Mid2, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == POINTER_ZONE_GAME && C.Toggled == Mid2);      // Z and A together
+        PointerClickStep(&C, false, POINTER_ZONE_GAME, Mid2, POINTER_ZONE_NONE, None);
+        PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);
+        CHECK(C.Toggled == 0u);                                          // the next press lets go
+    }
+
+    // Dragging onto a toggle slot with the button already down does not flip it.
+    {
+        const PointerSettle None = {};
+        const uint32_t Mid2 = 1u << 9;
+        PointerClicks C = PointerClicksInit();
+        PointerClickStep(&C, true, 8, Mid2, POINTER_ZONE_NONE, None);
+        PointerClickStep(&C, true, 9, Mid2, POINTER_ZONE_NONE, None);
+        CHECK(C.Latched == 8 && C.Toggled == 0u);
+    }
+
+    // The hold slot (mid5, zone 12): a press copies the settled tilt, or neutral before any
+    // settle; a second press lets go; other presses keep it; a settle in the image ends it.
+    {
+        PointerSettle S = {};
+        PointerClicks C = PointerClicksInit();
+        PointerClickStep(&C, true, 12, 0u, 12, S);
+        CHECK(C.Holding && C.HeldX == 0 && C.HeldY == 0 && C.Latched == POINTER_ZONE_NONE);
+        PointerClickStep(&C, false, 12, 0u, 12, S);
+        PointerClickStep(&C, true, 12, 0u, 12, S);
+        CHECK(!C.Holding);
+        S.HaveSettled = true;
+        S.SettledX = 40;
+        S.SettledY = -20;
+        PointerClickStep(&C, false, 12, 0u, 12, S);
+        PointerClickStep(&C, true, 12, 0u, 12, S);
+        CHECK(C.Holding && C.HeldX == 40 && C.HeldY == -20);
+        PointerClickStep(&C, false, 10, 0u, 12, S);
+        PointerClickStep(&C, true, 10, 0u, 12, S);                       // B on mid3 while holding
+        CHECK(C.Holding && C.Latched == 10);
+        PointerClickStep(&C, false, POINTER_ZONE_GAME, 0u, 12, S);
+        PointerClickStep(&C, true, POINTER_ZONE_GAME, 0u, 12, S);        // A before the cursor rests
+        CHECK(C.Holding && C.Latched == POINTER_ZONE_GAME);
+        S.JustSettled = true;
+        PointerClickStep(&C, true, POINTER_ZONE_GAME, 0u, 12, S);
+        CHECK(!C.Holding);
+    }
+
+    // PJ64_POINTER_SETTLE: "0" or "<px>,<polls>", both positive; anything else changes nothing.
+    {
+        float R = POINTER_SETTLE_PX;
+        int P = POINTER_SETTLE_POLLS;
+        CHECK(PointerParseSettle("12,20", &R, &P) && R == 12.0f && P == 20);
+        CHECK(PointerParseSettle("0", &R, &P) && R == 0.0f && P == 20);
+        R = 5.0f;
+        P = 7;
+        CHECK(!PointerParseSettle("", &R, &P));
+        CHECK(!PointerParseSettle("abc", &R, &P));
+        CHECK(!PointerParseSettle("8", &R, &P));
+        CHECK(!PointerParseSettle("8,0", &R, &P));
+        CHECK(!PointerParseSettle("-1,9", &R, &P));
+        CHECK(!PointerParseSettle("8,9x", &R, &P));
+        CHECK(R == 5.0f && P == 7);
     }
 
     // Gesture names.

@@ -7,6 +7,7 @@
 #pragma once
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 enum
@@ -17,6 +18,8 @@ enum
 
 #define POINTER_PANEL_HEIGHT 160   // rows below the game image, in launch-size pixels
 #define POINTER_FLICK_PX 24.0f     // cursor travel per poll above which the stick holds
+#define POINTER_SETTLE_PX 8.0f     // a cursor within this distance of its anchor is resting
+#define POINTER_SETTLE_POLLS 9     // polls it must rest for to settle (about 150 ms at 60 a second)
 
 // Zone order: the left cross, the right cross, the five middle slots, then the game image.
 inline const char * PointerZoneName(int Zone)
@@ -188,6 +191,126 @@ inline void PointerGateStick(PointerGate * G, PointerEval * E, float X, float Y,
     G->PrevY = Y;
     G->PrevStickX = E->StickX;
     G->PrevStickY = E->StickY;
+}
+
+// Where the cursor last rested in the game image, for the stick hold. A slow drag to the
+// panel never rests, so it never records the backward tilt the image's bottom edge reads
+// as. Zero-initialise for "nothing yet".
+// Design: Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md
+struct PointerSettle
+{
+    bool HaveAnchor;
+    float AnchorX, AnchorY;
+    int Count;                 // consecutive polls within the radius, capped at Polls + 1
+    bool HaveSettled;
+    int8_t SettledX, SettledY; // the gated stick at the last settle
+    bool JustSettled;          // true only on the poll the count reached Polls
+};
+
+// Feeds one poll, after PointerGateStick, so E carries the gated stick. Outside the game
+// image the anchor and the count reset but the recorded tilt stays. Radius <= 0 or
+// Polls <= 0 never settles.
+inline void PointerSettleStep(PointerSettle * S, const PointerEval & E, float X, float Y, float Radius, int Polls)
+{
+    S->JustSettled = false;
+    if (E.Zone != POINTER_ZONE_GAME || Radius <= 0.0f || Polls <= 0)
+    {
+        S->HaveAnchor = false;
+        S->Count = 0;
+        return;
+    }
+    const float Dx = X - S->AnchorX, Dy = Y - S->AnchorY;
+    if (!S->HaveAnchor || sqrtf(Dx * Dx + Dy * Dy) > Radius)
+    {
+        S->HaveAnchor = true;
+        S->AnchorX = X;
+        S->AnchorY = Y;
+        S->Count = 1;
+    }
+    else if (S->Count <= Polls)
+    {
+        S->Count++;
+    }
+    if (S->Count == Polls)
+    {
+        S->HaveSettled = true;
+        S->SettledX = E.StickX;
+        S->SettledY = E.StickY;
+        S->JustSettled = true;
+    }
+}
+
+// The one button's state across polls: the momentary latch, the toggle slots that are on,
+// and the stick hold. Start from PointerClicksInit().
+struct PointerClicks
+{
+    bool PrevButton;
+    int Latched;               // the zone pressed and still held, or POINTER_ZONE_NONE
+    uint32_t Toggled;          // one bit per zone: the toggle slots that are on
+    bool Holding;
+    int8_t HeldX, HeldY;       // the stick while Holding
+};
+
+inline PointerClicks PointerClicksInit()
+{
+    PointerClicks C = { false, POINTER_ZONE_NONE, 0u, false, 0, 0 };
+    return C;
+}
+
+// One poll of the button over Zone. On the press edge the hold slot turns the hold on or
+// off (on copies the last settled tilt, or neutral before any settle), a slot in ToggleMask
+// flips its bit and latches nothing, and anything else is latched until release. A settle
+// in the game image ends the hold. With ToggleMask 0 and HoldZone POINTER_ZONE_NONE this is
+// exactly the latch GetKeys always had.
+inline void PointerClickStep(PointerClicks * C, bool Button, int Zone, uint32_t ToggleMask, int HoldZone, const PointerSettle & Settle)
+{
+    if (Button && !C->PrevButton && Zone != POINTER_ZONE_NONE)
+    {
+        if (Zone == HoldZone)
+        {
+            C->Holding = !C->Holding;
+            C->HeldX = C->Holding && Settle.HaveSettled ? Settle.SettledX : 0;
+            C->HeldY = C->Holding && Settle.HaveSettled ? Settle.SettledY : 0;
+        }
+        else if ((ToggleMask & (1u << Zone)) != 0)
+        {
+            C->Toggled ^= 1u << Zone;
+        }
+        else
+        {
+            C->Latched = Zone;
+        }
+    }
+    if (!Button)
+    {
+        C->Latched = POINTER_ZONE_NONE;
+    }
+    if (C->Holding && Settle.JustSettled)
+    {
+        C->Holding = false;
+    }
+    C->PrevButton = Button;
+}
+
+// PJ64_POINTER_SETTLE: "0" never settles; "<px>,<polls>" with both positive sets the two.
+// Anything else returns false and leaves both outputs as they were.
+inline bool PointerParseSettle(const char * Text, float * Radius, int * Polls)
+{
+    if (strcmp(Text, "0") == 0)
+    {
+        *Radius = 0.0f;
+        return true;
+    }
+    float R = 0.0f;
+    int P = 0;
+    char Tail = '\0';
+    if (sscanf(Text, "%f,%d%c", &R, &P, &Tail) != 2 || R <= 0.0f || P <= 0)
+    {
+        return false;
+    }
+    *Radius = R;
+    *Polls = P;
+    return true;
 }
 
 // The single-game window can be resized or taken full screen, but the GL surface stays at
