@@ -1,0 +1,24 @@
+# Generic one-button mouse layout. The launcher starts any game that has no layout of its
+# own with this one (Docs/UserGuide.md section 3, "Starting from the launcher"): the left
+# button and the cursor are the whole controller, and the camera never starts. A game's own
+# <rom>.yaml, beside the ROM or here in Config/mouse/, always wins over it.
+#
+# The game image is the stick and the zone "game" (a click anywhere in it). Z is a toggle
+# slot: one press holds it, the next lets go. mid5 is the stick's hold slot (Ho). pad-down
+# is the menu (==). D-pad up and down are left out and keep their keyboard keys.
+
+bindings:
+  Stick:     {stick: pointer, hold: mid5}
+  A:         {zone: game}
+  Start:     {zone: mid1}
+  Z:         {zone: mid2, toggle: true}
+  B:         {zone: mid3}
+  R:         {zone: mid4}
+  L:         {zone: pad-up}
+  CUp:       {zone: c-up}
+  CDown:     {zone: c-down}
+  CLeft:     {zone: c-left}
+  CRight:    {zone: c-right}
+  DPadLeft:  {zone: pad-left}
+  DPadRight: {zone: pad-right}
+  Menu:      {zone: pad-down}

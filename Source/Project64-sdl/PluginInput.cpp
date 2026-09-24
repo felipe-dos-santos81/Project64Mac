@@ -516,5 +516,7 @@ EXPORT void CALL PluginLoaded(void)
             InputConfig::Get().Load(Path);
         }
     }
+    // The launcher's added menu (PJ64_MENU_AUTO), before the labels and MenuZone are published.
+    if (AutoMenuWanted()) InputConfig::Get().ApplyAutoMenu(false);
     PublishPointerLabels();
 }

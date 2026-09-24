@@ -272,7 +272,11 @@ static bool LayoutUsesPointer(const std::string & ExeDir)
     const char * Env = getenv("PJ64_INPUT_YAML");
     const std::string Path = (Env != nullptr && Env[0] != '\0') ? std::string(Env) : ExeDir + "/Config/input.yaml";
     InputConfig & Config = InputConfig::Get();
-    return Config.Load(Path.c_str(), true) && Config.UsesPointer();
+    if (!Config.Load(Path.c_str(), true)) return false;
+    // The launcher's added menu (PJ64_MENU_AUTO): quiet here, the plugin reports it. Applied
+    // before MenuHost reads MenuZone below, so the host and the plugin agree on the slot.
+    if (AutoMenuWanted()) Config.ApplyAutoMenu(true);
+    return Config.UsesPointer();
 }
 
 // Plugin directory is the core default: <base dir>/Plugin/ (Directory_PluginInitial).

@@ -13,14 +13,15 @@
 #include <string>
 #include <unistd.h>
 
-// Runs one Load with stderr redirected to a scratch file and returns the first line the
-// reader wrote, "" when it wrote nothing, so a test can check the reader's own words. A
-// quiet Load's return value is false either way, so this is also the only way to prove the
-// Quiet guards actually suppress output rather than merely returning false.
+// Runs Run with stderr redirected to a scratch file and returns the first line it wrote,
+// "" when it wrote nothing, so a test can check the reader's own words. A quiet Load's
+// return value is false either way, so this is also the only way to prove the Quiet guards
+// actually suppress output rather than merely returning false.
 // Redirects the fd underneath stderr with dup2, not freopen: freopen would reassociate
 // the stderr FILE object with a regular file and leave it fully buffered even after the
 // fd is restored, reordering every fprintf(stderr, ...) after the first call.
-static std::string LoadStderr(InputConfig & C, const char * Path, bool Quiet = false)
+template <class Fn>
+static std::string FirstStderrLine(Fn Run)
 {
     char ScratchPath[64];
     snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-stderr-XXXXXX");
@@ -32,7 +33,7 @@ static std::string LoadStderr(InputConfig & C, const char * Path, bool Quiet = f
     dup2(Fd, fileno(stderr));
     close(Fd);
 
-    C.Load(Path, Quiet);
+    Run();
 
     fflush(stderr);
     dup2(SavedStderr, fileno(stderr));
@@ -48,6 +49,11 @@ static std::string LoadStderr(InputConfig & C, const char * Path, bool Quiet = f
     }
     remove(ScratchPath);
     return Line;
+}
+
+static std::string LoadStderr(InputConfig & C, const char * Path, bool Quiet = false)
+{
+    return FirstStderrLine([&] { C.Load(Path, Quiet); });
 }
 
 static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
@@ -354,4 +360,65 @@ void RunInputConfigTests()
     CHECK(C.UsesPointer() && C.UsesFace() && C.UsesHeadStick());
     CHECK(C.Bindings(N64Control::R)[0].code == POINTER_GESTURE_EYEBROWS);
 
+    // The launcher's added menu (PJ64_MENU_AUTO, Docs/superpowers/specs/2026-09-24-launcher-design.md):
+    // the first free middle slot from mid5 down, the stick's hold counting as used; pad-down,
+    // taken from its control, when every slot is used; nothing when the layout already has a
+    // menu or has no panel.
+    {
+        const int Mid5 = PointerZoneFromName("mid5");
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n  A: {zone: game}\n")));
+        CHECK(C.ApplyAutoMenu(true) == Mid5);
+        CHECK(C.MenuZone() == Mid5);
+        CHECK(C.ApplyAutoMenu(true) == POINTER_ZONE_NONE);                  // it has one now
+        CHECK(C.MenuZone() == Mid5);
+
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid5}\n  B: {zone: mid4}\n  Z: {zone: mid3, toggle: true}\n")));
+        CHECK(C.ApplyAutoMenu(true) == PointerZoneFromName("mid2"));
+
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Menu: {zone: c-up}\n  A: {zone: game}\n")));
+        CHECK(C.ApplyAutoMenu(true) == POINTER_ZONE_NONE);
+        CHECK(C.MenuZone() == PointerZoneFromName("c-up"));
+
+        CHECK(C.Load(TestWriteTemp("bindings:\n  A: {key: X}\n")));             // no panel
+        CHECK(C.ApplyAutoMenu(true) == POINTER_ZONE_NONE);
+        CHECK(C.MenuZone() == POINTER_ZONE_NONE);
+
+        const char * Full =
+            "bindings:\n"
+            "  A: {zone: pad-up}\n  B: {zone: pad-down}\n  Z: {zone: pad-left}\n  Start: {zone: pad-right}\n"
+            "  CUp: {zone: c-up}\n  CDown: {zone: c-down}\n  CLeft: {zone: c-left}\n  CRight: {zone: c-right}\n"
+            "  L: {zone: mid1}\n  R: {zone: mid2}\n  DPadUp: {zone: mid3}\n  DPadDown: {zone: mid4}\n"
+            "  DPadLeft: {zone: mid5}\n";
+        CHECK(C.Load(TestWriteTemp(Full)));
+        CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(false); }) == "menu: took pad-down from B\n");
+        CHECK(C.MenuZone() == PointerZoneFromName("pad-down"));
+        CHECK(C.Bindings(N64Control::B).empty());
+
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));
+        CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(false); }) == "menu: added on mid5\n");
+        CHECK(C.Load(TestWriteTemp("bindings:\n  Stick: {stick: pointer}\n")));
+        CHECK(FirstStderrLine([&] { C.ApplyAutoMenu(true); }).empty());
+
+        // Only exactly "1" asks for it. The caller's value is put back afterwards.
+        const char * Before = getenv("PJ64_MENU_AUTO");
+        const std::string Saved = Before != nullptr ? Before : "";
+        unsetenv("PJ64_MENU_AUTO");
+        CHECK(!AutoMenuWanted());
+        setenv("PJ64_MENU_AUTO", "0", 1);
+        CHECK(!AutoMenuWanted());
+        setenv("PJ64_MENU_AUTO", "1", 1);
+        CHECK(AutoMenuWanted());
+        if (Before != nullptr) setenv("PJ64_MENU_AUTO", Saved.c_str(), 1);
+        else unsetenv("PJ64_MENU_AUTO");
+    }
+
+    // The launcher's generic layout: one button, no camera, its own menu on pad-down.
+    CHECK(C.Load("Config/mouse/default.yaml"));
+    CHECK(C.UsesPointer() && !C.UsesFace() && !C.UsesHeadStick());
+    CHECK(C.PointerHoldZone() == 12);                                  // mid5
+    CHECK(C.PointerToggleZones() == (1u << 9));                        // Z on mid2
+    CHECK(C.MenuZone() == 1);                                          // pad-down
+    CHECK(C.Bindings(N64Control::L)[0].code == 0);                     // pad-up
+    CHECK(C.Bindings(N64Control::DPadUp).size() == 2);                 // unbound: keeps key and gamepad
+    CHECK(C.ApplyAutoMenu(true) == POINTER_ZONE_NONE);
 }

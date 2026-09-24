@@ -13,6 +13,8 @@
 #include <Common/PointerLayout.h>
 #include <Common/PointerState.h>
 #include <cstddef>
+#include <stdlib.h>
+#include <string.h>
 #include <vector>
 
 enum class N64Control
@@ -59,6 +61,14 @@ inline int MenuSlotOf(const std::vector<Binding> & Menu)
 inline uint32_t MenuGestureOf(const std::vector<Binding> & Menu)
 {
     return (!Menu.empty() && Menu[0].kind == Binding::Kind::Face) ? (uint32_t)Menu[0].code : 0u;
+}
+
+// True when PJ64_MENU_AUTO is exactly "1": the launcher asks for a menu slot on a layout that
+// has none (InputConfig::ApplyAutoMenu). The frontend and the input plugin each ask this.
+inline bool AutoMenuWanted()
+{
+    const char * Env = getenv("PJ64_MENU_AUTO");
+    return Env != nullptr && strcmp(Env, "1") == 0;
 }
 
 class InputConfig
@@ -114,6 +124,14 @@ public:
     // The menu's slot, or POINTER_ZONE_NONE; its gesture bit, or 0.
     int MenuZone() const;
     uint32_t MenuGesture() const;
+
+    // Give a layout with a panel and no Menu key a menu slot, for the launcher
+    // (Docs/superpowers/specs/2026-09-24-launcher-design.md): the first of mid5, mid4, mid3,
+    // mid2, mid1 no zone binding or stick hold uses, else pad-down, taken from whichever
+    // control is bound there. Returns the slot, or POINTER_ZONE_NONE when nothing was added.
+    // Prints "menu: added on <slot>" or "menu: took pad-down from <control>" unless Quiet.
+    // Not part of Load: the wizard loads layouts too and must never write an added menu.
+    int ApplyAutoMenu(bool Quiet);
 
     // Overlay labels: for each zone and each gesture, the label of the control bound to
     // it, or "" when nothing is.

@@ -618,6 +618,57 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
     return true;
 }
 
+int InputConfig::ApplyAutoMenu(bool Quiet)
+{
+    if (!m_Menu.empty() || !UsesPointer()) return POINTER_ZONE_NONE;
+    bool Used[POINTER_ZONE_COUNT] = { false };
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone) Used[B.code] = true;
+        }
+    }
+    const int Hold = PointerHoldZone();
+    if (Hold != POINTER_ZONE_NONE) Used[Hold] = true;
+
+    static const char * const kOrder[] = { "mid5", "mid4", "mid3", "mid2", "mid1" };
+    for (const char * Name : kOrder)
+    {
+        const int Zone = PointerZoneFromName(Name);
+        if (Used[Zone]) continue;
+        m_Menu.assign(1, MakeZone(Zone));
+        if (!Quiet) fprintf(stderr, "menu: added on %s\n", Name);
+        return Zone;
+    }
+
+    const int PadDown = PointerZoneFromName("pad-down");
+    const char * Taken = nullptr;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        std::vector<Binding> & List = m_Bindings[i];
+        for (size_t j = 0; j < List.size();)
+        {
+            if (List[j].kind == Binding::Kind::Zone && List[j].code == PadDown)
+            {
+                List.erase(List.begin() + j);
+                if (Taken == nullptr) Taken = kControlNames[i];
+            }
+            else
+            {
+                j++;
+            }
+        }
+    }
+    m_Menu.assign(1, MakeZone(PadDown));
+    if (!Quiet)
+    {
+        if (Taken != nullptr) fprintf(stderr, "menu: took pad-down from %s\n", Taken);
+        else fprintf(stderr, "menu: added on pad-down\n");
+    }
+    return PadDown;
+}
+
 // The plugin lives at <bin>/Plugin/Input/<name>.dylib. Stripping the file name and then
 // Input/ and Plugin/ (three strips) reaches <bin>, where Config/input.yaml sits.
 // Resolving from the dylib keeps the result independent of the working directory, which
