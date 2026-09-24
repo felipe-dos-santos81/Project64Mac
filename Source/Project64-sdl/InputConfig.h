@@ -34,6 +34,12 @@ struct Binding
                      // Pointer: unused; HeadStick: 0 for {stick: head}, 1 for {stick: head-digital}
     bool positive;   // Axis: true fires on +, false on -
     SDL_Scancode UpKey, DownKey, LeftKey, RightKey;   // Keys only
+    // One-button play (Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md). A
+    // member of its own each, with a default, so every existing Binding{...} and Binding{}
+    // stays valid; Hold is not the pointer's unused code, which every constructor sets to 0,
+    // the pad-up zone.
+    bool Toggle = false;                  // Zone only: a press turns it on, the next off
+    int Hold = POINTER_ZONE_NONE;         // Pointer only: the stick's hold slot
 };
 
 class InputConfig
@@ -75,6 +81,12 @@ public:
     // True when Stick is {stick: head} or {stick: head-digital}: the tracker's yaw and
     // pitch baselines then hold while the stick is tilted (PointerState::HeadStickWanted).
     bool UsesHeadStick() const;
+
+    // One bit per zone bound with {zone: ..., toggle: true}.
+    uint32_t PointerToggleZones() const;
+
+    // The stick's hold slot from {stick: pointer, hold: <slot>}, or POINTER_ZONE_NONE.
+    int PointerHoldZone() const;
 
     // Overlay labels: for each zone and each gesture, the label of the control bound to
     // it, or "" when nothing is.

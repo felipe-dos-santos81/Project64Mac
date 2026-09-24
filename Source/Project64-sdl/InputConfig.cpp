@@ -91,6 +91,25 @@ bool InputConfig::UsesHeadStick() const
     return false;
 }
 
+uint32_t InputConfig::PointerToggleZones() const
+{
+    uint32_t Mask = 0;
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : m_Bindings[i])
+        {
+            if (B.kind == Binding::Kind::Zone && B.Toggle) Mask |= 1u << B.code;
+        }
+    }
+    return Mask;
+}
+
+int InputConfig::PointerHoldZone() const
+{
+    const std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
+    return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
+}
+
 void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE],
                                 char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE]) const
 {
@@ -109,6 +128,12 @@ void InputConfig::PointerLabels(char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SI
                 snprintf(GestureLabels[PointerGestureIndex((uint32_t)B.code)], POINTER_LABEL_SIZE, "%s", ControlLabel((N64Control)i));
             }
         }
+    }
+    // The hold slot belongs to no control; the overlay still has to say it is taken.
+    const int Hold = PointerHoldZone();
+    if (Hold != POINTER_ZONE_NONE)
+    {
+        snprintf(Labels[Hold], POINTER_LABEL_SIZE, "%s", "Ho");
     }
 }
 
@@ -197,17 +222,18 @@ void InputConfig::DefaultBindings(std::vector<Binding> * Out)
     add(N64Control::Stick, MakeStick(SDL_GAMEPAD_AXIS_LEFTX));
 }
 
+static const char * const kControlNames[] = {
+    "A", "B", "Z", "Start", "L", "R",
+    "CUp", "CDown", "CLeft", "CRight",
+    "DPadUp", "DPadDown", "DPadLeft", "DPadRight",
+    "Stick"
+};
+
 static int ControlFromName(const std::string & Name)
 {
-    static const char * kNames[] = {
-        "A", "B", "Z", "Start", "L", "R",
-        "CUp", "CDown", "CLeft", "CRight",
-        "DPadUp", "DPadDown", "DPadLeft", "DPadRight",
-        "Stick"
-    };
     for (int i = 0; i < (int)N64Control::Count; i++)
     {
-        if (Name == kNames[i]) return i;
+        if (Name == kControlNames[i]) return i;
     }
     return -1;
 }
@@ -261,18 +287,22 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
             Form = Key;
         }
     }
-    if (Form.empty() || (Form != "axis" && Value.size() != 1))
+    if (Form.empty())
     {
         ConfigError(Path, Value, FormError);
         return false;
     }
-    if (Form == "axis")
+    // Three forms take a second key: {axis:, sign:}, {zone:, toggle:}, {stick:, hold:}. The
+    // two one-button keys name their own form when they turn up anywhere else.
+    for (const auto & Entry : Value)
     {
-        for (const auto & Entry : Value)
-        {
-            const std::string Key = Entry.first.as<std::string>();
-            if (Key != "axis" && Key != "sign") { ConfigError(Path, Value, FormError); return false; }
-        }
+        const std::string Key = Entry.first.as<std::string>();
+        if (Key == Form) continue;
+        if ((Form == "axis" && Key == "sign") || (Form == "zone" && Key == "toggle") || (Form == "stick" && Key == "hold")) continue;
+        if (Key == "toggle") { ConfigError(Path, Entry.first, "toggle only applies to {zone:}"); return false; }
+        if (Key == "hold") { ConfigError(Path, Entry.first, "hold only applies to {stick: pointer}"); return false; }
+        ConfigError(Path, Value, FormError);
+        return false;
     }
 
     const bool ForStick = (Control == N64Control::Stick);
@@ -320,6 +350,16 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
         const int Zone = PointerZoneFromName(Name.c_str());
         if (Zone == POINTER_ZONE_NONE) { ConfigError(Path, Value[Form], "unknown zone \"" + Name + "\""); return false; }
         Out = MakeZone(Zone);
+        if (Value["toggle"])
+        {
+            bool Toggle = false;
+            if (!YAML::convert<bool>::decode(Value["toggle"], Toggle))
+            {
+                ConfigError(Path, Value["toggle"], "toggle must be true or false");
+                return false;
+            }
+            Out.Toggle = Toggle;
+        }
         return true;
     }
     if (Form == "face")
@@ -334,9 +374,26 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     {
         if (!ForStick) { ConfigError(Path, Value[Form], "stick is only valid on Stick"); return false; }
         const std::string Name = Value[Form].as<std::string>();
+        const bool HasHold = (bool)Value["hold"];
+        if (HasHold && Name != "pointer") { ConfigError(Path, Value["hold"], "hold only applies to {stick: pointer}"); return false; }
         if (Name == "left") { Out = MakeStick(SDL_GAMEPAD_AXIS_LEFTX); return true; }
         if (Name == "right") { Out = MakeStick(SDL_GAMEPAD_AXIS_RIGHTX); return true; }
-        if (Name == "pointer") { Out = MakePointer(); return true; }
+        if (Name == "pointer")
+        {
+            Out = MakePointer();
+            if (HasHold)
+            {
+                const std::string Slot = Value["hold"].as<std::string>();
+                const int Zone = PointerZoneFromName(Slot.c_str());
+                if (Zone == POINTER_ZONE_NONE || Zone == POINTER_ZONE_GAME)
+                {
+                    ConfigError(Path, Value["hold"], "hold must name a panel slot");
+                    return false;
+                }
+                Out.Hold = Zone;
+            }
+            return true;
+        }
         if (Name == "head") { Out = MakeHeadStick(false); return true; }
         if (Name == "head-digital") { Out = MakeHeadStick(true); return true; }
         ConfigError(Path, Value[Form], "stick must be left, right, pointer, head or head-digital");
@@ -365,6 +422,54 @@ static bool ParseBinding(const char * Path, const YAML::Node & Value, N64Control
     }
 }
 
+// The one-button slot rules (Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md):
+// every zone binding on one slot agrees on toggle, and the stick's hold slot is no control's
+// zone. Run over the resolved table after every control is read, so the order the file
+// names them in does not matter; controls are compared in enum order, which fixes which one
+// an error names. Nodes[i] is the file's value for control i (null for an unnamed one,
+// which is never a zone).
+static bool CheckSlots(const char * Path, const std::vector<Binding> * Next, const YAML::Node * Nodes)
+{
+    int Hold = POINTER_ZONE_NONE;
+    const std::vector<Binding> & Stick = Next[(int)N64Control::Stick];
+    if (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) Hold = Stick[0].Hold;
+
+    int Owner[POINTER_ZONE_COUNT];
+    bool OwnerToggle[POINTER_ZONE_COUNT];
+    for (int z = 0; z < POINTER_ZONE_COUNT; z++)
+    {
+        Owner[z] = -1;
+        OwnerToggle[z] = false;
+    }
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        for (const Binding & B : Next[i])
+        {
+            if (B.kind != Binding::Kind::Zone) continue;
+            const std::string Slot = PointerZoneName(B.code);
+            if (B.code == Hold)
+            {
+                ConfigError(Path, Nodes[i], Slot + " is the stick's hold slot and cannot also be bound");
+                return false;
+            }
+            if (Owner[B.code] < 0)
+            {
+                Owner[B.code] = i;
+                OwnerToggle[B.code] = B.Toggle;
+                continue;
+            }
+            if (OwnerToggle[B.code] != B.Toggle)
+            {
+                const int T = B.Toggle ? i : Owner[B.code];
+                const int M = B.Toggle ? Owner[B.code] : i;
+                ConfigError(Path, Nodes[i], Slot + " is a toggle for " + kControlNames[T] + " but not for " + kControlNames[M]);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
 {
     QuietScope Scope(Quiet);
@@ -382,6 +487,7 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
     std::vector<Binding> Next[(int)N64Control::Count];
     DefaultBindings(Next);
     bool Seen[(int)N64Control::Count] = { false };
+    YAML::Node ControlNodes[(int)N64Control::Count];
 
     // The head-direction rule (spec Part 1): remembered during the loop, checked after it,
     // so it holds whichever order the file names Stick and the gesture in.
@@ -402,6 +508,7 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
                 if (Index < 0) { ConfigError(Path, Entry.first, "unknown control \"" + ControlName + "\""); return false; }
                 if (Seen[Index]) { ConfigError(Path, Entry.first, "control named twice"); return false; }
                 Seen[Index] = true;
+                ControlNodes[Index] = Entry.second;
                 Binding B;
                 if (!ParseBinding(Path, Entry.second, (N64Control)Index, B)) return false;
                 Next[Index].clear();
@@ -414,6 +521,7 @@ bool InputConfig::Load(const char * Path, bool Quiet, bool * SeenOut)
                 }
             }
         }
+        if (!CheckSlots(Path, Next, ControlNodes)) return false;
         if (StickIsHead && !HeadGestureName.empty())
         {
             ConfigError(Path, HeadGestureNode, HeadGestureName + " cannot be bound while Stick is head");

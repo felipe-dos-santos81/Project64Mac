@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <unistd.h>
 
 static int Failures = 0;
@@ -56,6 +57,43 @@ static bool LoadWasSilent(InputConfig & C, const char * Path, bool Quiet)
     if (Scratch) fclose(Scratch);
     remove(ScratchPath);
     return Empty;
+}
+
+// Loads Path with stderr captured and returns the first line the reader wrote, "" when it
+// wrote nothing, so a test can check the reader's own words.
+static std::string LoadError(InputConfig & C, const char * Path)
+{
+    char ScratchPath[64];
+    snprintf(ScratchPath, sizeof(ScratchPath), "/tmp/pj64-stderr-XXXXXX");
+    int Fd = mkstemp(ScratchPath);
+    if (Fd < 0) { perror("mkstemp"); exit(2); }
+
+    fflush(stderr);
+    int SavedStderr = dup(fileno(stderr));
+    dup2(Fd, fileno(stderr));
+    close(Fd);
+
+    C.Load(Path);
+
+    fflush(stderr);
+    dup2(SavedStderr, fileno(stderr));
+    close(SavedStderr);
+
+    std::string Line;
+    FILE * Scratch = fopen(ScratchPath, "r");
+    if (Scratch != NULL)
+    {
+        char Buf[512];
+        if (fgets(Buf, sizeof(Buf), Scratch) != NULL) Line = Buf;
+        fclose(Scratch);
+    }
+    remove(ScratchPath);
+    return Line;
+}
+
+static bool Contains(const std::string & Text, const char * Needle)
+{
+    return Text.find(Needle) != std::string::npos;
 }
 
 int main()
@@ -229,6 +267,71 @@ int main()
 
     CHECK(C.Bindings(N64Control::A).size() == ABefore);   // failed loads changed nothing
     CHECK(C.Bindings(N64Control::A)[0].code == SDL_SCANCODE_Y);
+
+    // One-button forms: toggle slots (two controls may share one) and the stick's hold slot.
+    {
+        const char * OneButton =
+            "bindings:\n"
+            "  Stick: {stick: pointer, hold: mid5}\n"
+            "  A: {zone: game}\n"
+            "  Z: {zone: mid2, toggle: true}\n"
+            "  R: {zone: mid2, toggle: true}\n"
+            "  B: {zone: mid3, toggle: false}\n";
+        CHECK(C.Load(WriteTemp(OneButton)));
+        CHECK(C.Bindings(N64Control::Z)[0].Toggle);
+        CHECK(C.Bindings(N64Control::R)[0].Toggle);
+        CHECK(!C.Bindings(N64Control::A)[0].Toggle);
+        CHECK(!C.Bindings(N64Control::B)[0].Toggle);         // toggle: false is the same as leaving it out
+        CHECK(C.Bindings(N64Control::Stick)[0].kind == Binding::Kind::Pointer);
+        CHECK(C.Bindings(N64Control::Stick)[0].Hold == 12);
+        CHECK(C.PointerHoldZone() == 12);
+        CHECK(C.PointerToggleZones() == (1u << 9));
+        CHECK(C.UsesPointer() && !C.UsesFace());
+        char Labels[POINTER_ZONE_COUNT][POINTER_LABEL_SIZE];
+        char GestureLabels[POINTER_GESTURE_COUNT][POINTER_LABEL_SIZE];
+        C.PointerLabels(Labels, GestureLabels);
+        CHECK(strcmp(Labels[12], "Ho") == 0);
+        CHECK(strcmp(Labels[POINTER_ZONE_GAME], "A") == 0);
+    }
+
+    // Without the new keys nothing is a toggle and nothing holds, built-in bindings included.
+    {
+        CHECK(C.Load(WriteTemp("bindings:\n  Stick: {stick: pointer}\n  A: {zone: game}\n  Z: {zone: mid2}\n")));
+        CHECK(!C.Bindings(N64Control::Z)[0].Toggle);
+        CHECK(C.Bindings(N64Control::Stick)[0].Hold == POINTER_ZONE_NONE);
+        CHECK(C.PointerHoldZone() == POINTER_ZONE_NONE);
+        CHECK(C.PointerToggleZones() == 0u);
+        CHECK(!C.Bindings(N64Control::B)[0].Toggle);
+        CHECK(C.Bindings(N64Control::B)[0].Hold == POINTER_ZONE_NONE);
+    }
+
+    // Each one-button error is reported in its own words and changes nothing.
+    {
+        CHECK(C.Load(WriteTemp("bindings:\n  Z: {zone: mid4}\n")));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {zone: mid2, toggle: maybe}\n")),
+                       "toggle must be true or false"));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {key: X, toggle: true}\n")),
+                       "toggle only applies to {zone:}"));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: left, hold: mid5}\n")),
+                       "hold only applies to {stick: pointer}"));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Z: {zone: mid2, hold: mid5}\n")),
+                       "hold only applies to {stick: pointer}"));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: game}\n")),
+                       "hold must name a panel slot"));
+        CHECK(Contains(LoadError(C, WriteTemp("bindings:\n  Stick: {stick: pointer, hold: mid9}\n")),
+                       "hold must name a panel slot"));
+        CHECK(Contains(LoadError(C, WriteTemp(
+                           "bindings:\n  Stick: {stick: pointer, hold: mid5}\n  Start: {zone: mid5}\n")),
+                       "mid5 is the stick's hold slot and cannot also be bound"));
+        CHECK(Contains(LoadError(C, WriteTemp(
+                           "bindings:\n  Z: {zone: mid2, toggle: true}\n  R: {zone: mid2}\n")),
+                       "mid2 is a toggle for Z but not for R"));
+        CHECK(Contains(LoadError(C, WriteTemp(
+                           "bindings:\n  R: {zone: mid2, toggle: true}\n  Z: {zone: mid2}\n")),
+                       "mid2 is a toggle for R but not for Z"));
+        CHECK(C.Bindings(N64Control::Z)[0].kind == Binding::Kind::Zone);
+        CHECK(C.Bindings(N64Control::Z)[0].code == 11);      // still mid4 after every rejection
+    }
 
     CHECK(C.Load("Config/input.yaml"));               // the tracked file must parse
     CHECK(C.Bindings(N64Control::A).size() == 1);
