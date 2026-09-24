@@ -7,6 +7,8 @@
 # is) must set Start; and with no PJ64_INPUT_YAML at all, a copy of the layout named after
 # the ROM and sitting beside it must be found by the frontend's own lookup (the game click
 # must set A again).
+# A fourth run loads a small layout with Z as a toggle on mid2: one static press over mid2 is
+# one press edge, so Z must be on and nothing latched (zone=-1).
 # Design: Docs/superpowers/specs/2026-09-15-mouse-panel-design.md and
 # Docs/superpowers/specs/2026-09-15-per-game-input-yaml-design.md
 set -eu
@@ -65,7 +67,18 @@ cp "$YAML" "$TMP/$BASE.yaml"
 one_run "320,240,1" "zone=13 a=1 start=0 z=0 x=0 y=0" "$TMP/$NAME" "" || FAIL=1
 rm -rf "$TMP"
 
+# Fourth run: a toggle slot turns its control on without latching the press.
+TOGGLE_YAML="$(mktemp /tmp/pj64-toggle-XXXXXX)"
+cat >"$TOGGLE_YAML" <<'EOF'
+bindings:
+  Stick: {stick: pointer}
+  A:     {zone: game}
+  Z:     {zone: mid2, toggle: true}
+EOF
+one_run "256,512,1" "zone=-1 a=0 start=0 z=1 x=0 y=0" "$ROM" "$TOGGLE_YAML" || FAIL=1  # mid2's centre
+rm -f "$TOGGLE_YAML"
+
 if [ "$FAIL" -eq 0 ]; then
-    echo "ok: pointer path maps a game click to A and mid1 to Start, and finds a layout named after the ROM"
+    echo "ok: pointer path maps a game click to A and mid1 to Start, finds a layout named after the ROM, and toggles Z on mid2"
 fi
 exit "$FAIL"

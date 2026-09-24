@@ -33,9 +33,14 @@ static GridKeys * g_GridKeys = nullptr;
 static bool g_GridKeysChecked = false;
 static PointerState * g_Pointer = nullptr;
 static bool g_PointerChecked = false;
-// Latch: the zone under the cursor when the button went down stays pressed until release.
-static bool g_PointerPrevButton = false;
-static int g_PointerLatched = POINTER_ZONE_NONE;
+// The one button: the momentary latch, the toggle slots that are on and the stick hold
+// (PointerClickStep), and where the cursor last rested, which the hold copies
+// (PointerSettleStep). PJ64_POINTER_SETTLE overrides the rest's radius and length.
+// Design: Docs/superpowers/specs/2026-09-24-one-button-mouse-design.md
+static PointerClicks g_PointerClicks = PointerClicksInit();
+static PointerSettle g_PointerSettle = PointerSettle();
+static float g_PointerSettleRadius = POINTER_SETTLE_PX;
+static int g_PointerSettlePolls = POINTER_SETTLE_POLLS;
 // Flick gate: a cursor that jumps more than g_PointerFlick px between polls keeps the
 // previous poll's tilt, so reaching for the panel never reads as a tilt on the way.
 // PJ64_POINTER_FLICK overrides the threshold; 0 disables the gate.
@@ -91,6 +96,12 @@ static void OpenPointerState(void)
     if (Flick != nullptr)
     {
         g_PointerFlick = (float)atof(Flick);
+    }
+    const char * Settle = getenv("PJ64_POINTER_SETTLE");
+    if (Settle != nullptr && !PointerParseSettle(Settle, &g_PointerSettleRadius, &g_PointerSettlePolls))
+    {
+        fprintf(stderr, "input: PJ64_POINTER_SETTLE=%s is not 0 or <px>,<polls>; using %g,%d\n",
+                Settle, (double)g_PointerSettleRadius, g_PointerSettlePolls);
     }
 }
 
@@ -281,17 +292,20 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
         PointerSnapshot(g_Pointer, &S);
         PointerEval E = PointerLayoutEvaluate(S.X, S.Y, S.W, S.H, S.Inside);
         PointerGateStick(&g_PointerGate, &E, S.X, S.Y, g_PointerFlick);
-        if (S.Button && !g_PointerPrevButton)
+        PointerSettleStep(&g_PointerSettle, E, S.X, S.Y, g_PointerSettleRadius, g_PointerSettlePolls);
+        const int HoldZone = Config.PointerHoldZone();
+        PointerClickStep(&g_PointerClicks, S.Button, E.Zone, Config.PointerToggleZones(), HoldZone, g_PointerSettle);
+        // While holding, the game's stick is the tilt the hold copied, wherever the cursor is.
+        const int8_t StickX = g_PointerClicks.Holding ? g_PointerClicks.HeldX : E.StickX;
+        const int8_t StickY = g_PointerClicks.Holding ? g_PointerClicks.HeldY : E.StickY;
+        uint32_t On = g_PointerClicks.Toggled;
+        if (g_PointerClicks.Holding && HoldZone != POINTER_ZONE_NONE)
         {
-            g_PointerLatched = E.Zone; // press edge: latch whatever is under the cursor now
+            On |= 1u << HoldZone;
         }
-        if (!S.Button)
-        {
-            g_PointerLatched = POINTER_ZONE_NONE;
-        }
-        g_PointerPrevButton = S.Button;
-        g_Pointer->LatchedZone.store(g_PointerLatched, std::memory_order_relaxed);
-        g_Pointer->Quadrant.store(PointerQuadrant(E.StickX, E.StickY), std::memory_order_relaxed);
+        g_Pointer->LatchedZone.store(g_PointerClicks.Latched, std::memory_order_relaxed);
+        g_Pointer->ToggledZones.store(On, std::memory_order_relaxed);
+        g_Pointer->Quadrant.store(PointerQuadrant(StickX, StickY), std::memory_order_relaxed);
         const uint32_t Gestures = g_Pointer->Gestures.load(std::memory_order_relaxed);
 
         for (int i = 0; i < (int)N64Control::Count; i++)
@@ -300,7 +314,7 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
             {
                 if (B.kind == Binding::Kind::Zone)
                 {
-                    if (g_PointerLatched == B.code)
+                    if (g_PointerClicks.Latched == B.code || (g_PointerClicks.Toggled & (1u << B.code)) != 0)
                     {
                         SetControl(Keys, (N64Control)i);
                     }
@@ -314,8 +328,8 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
                 }
                 else if (B.kind == Binding::Kind::Pointer)
                 {
-                    Keys->X_AXIS = E.StickX;
-                    Keys->Y_AXIS = E.StickY;
+                    Keys->X_AXIS = StickX;
+                    Keys->Y_AXIS = StickY;
                     StickFromKeys = true; // the pointer owns the stick; the gamepad must not overwrite it
                 }
                 else if (B.kind == Binding::Kind::HeadStick)
@@ -336,7 +350,7 @@ EXPORT void CALL GetKeys(int32_t Control, BUTTONS * Keys)
                 }
             }
         }
-        PointerSelftestReport(S.Button, g_PointerLatched, Gestures, Keys);
+        PointerSelftestReport(S.Button, g_PointerClicks.Latched, Gestures, Keys);
     }
 
     OpenFirstGamepad();
@@ -396,6 +410,13 @@ EXPORT void CALL RomOpen(void)
 EXPORT void CALL RomClosed(void)
 {
     CloseGamepad();
+    // A toggle or a hold never outlives its game, and the next game starts with no rest.
+    g_PointerClicks = PointerClicksInit();
+    g_PointerSettle = PointerSettle();
+    if (g_Pointer != nullptr)
+    {
+        g_Pointer->ToggledZones.store(0u, std::memory_order_relaxed);
+    }
 }
 
 EXPORT void CALL CloseDLL(void)
@@ -431,6 +452,9 @@ static void PublishPointerLabels(void)
     const InputConfig & Config = InputConfig::Get();
     Config.PointerLabels(g_Pointer->Labels, g_Pointer->GestureLabels);
     g_Pointer->LatchedZone.store(POINTER_ZONE_NONE);
+    const int Hold = Config.PointerHoldZone();
+    g_Pointer->ToggleZones.store(Config.PointerToggleZones() | (Hold != POINTER_ZONE_NONE ? 1u << Hold : 0u));
+    g_Pointer->ToggledZones.store(0u);
     g_Pointer->OverlayWanted.store(Config.UsesPointer() ? 1u : 0u);
     g_Pointer->HeadStickWanted.store(Config.UsesHeadStick() ? 1u : 0u, std::memory_order_release);
     // The frontend's main loop polls this to start the camera; it may run on another

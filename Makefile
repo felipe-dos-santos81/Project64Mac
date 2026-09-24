@@ -487,7 +487,7 @@ grid-selftest: ## Prove key broadcast across a grid of 4 tiles (usage: make grid
 	@test -n "$(rom)" || { echo "usage: make grid-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/grid_selftest.sh "$(rom)"
 
-pointer-selftest: ## Prove the injected-pointer path maps a game click to A and mid1 to Start (usage: make pointer-selftest rom=/path/to/game.z64)
+pointer-selftest: ## Prove the injected-pointer path maps a game click to A, mid1 to Start and a toggle slot to Z (usage: make pointer-selftest rom=/path/to/game.z64)
 	@test -n "$(rom)" || { echo "usage: make pointer-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/pointer_selftest.sh "$(rom)"
 

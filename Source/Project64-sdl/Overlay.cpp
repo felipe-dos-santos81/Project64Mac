@@ -170,8 +170,9 @@ static void DrawFaceStatus(const PointerState * State, float Cx, float Cy)
 }
 
 // The panel: an opaque ground over the rows below the game, every slot with its label, the
-// latched one bright, and the tracker under the middle slots.
-static void DrawPanel(const PointerState * State, int W, int H, int GameH, int Latched)
+// lit ones bright (latched, toggled on, or the hold slot while holding), a mark across the
+// top-right corner of each toggle and hold slot, and the tracker under the middle slots.
+static void DrawPanel(const PointerState * State, int W, int H, int GameH, uint32_t Lit, uint32_t Toggles)
 {
     glColor4f(kPanelGrey, kPanelGrey, kPanelGrey, 1.0f);
     glBegin(GL_QUADS);
@@ -182,10 +183,14 @@ static void DrawPanel(const PointerState * State, int W, int H, int GameH, int L
     glEnd();
     for (int Zone = 0; Zone < POINTER_ZONE_GAME; Zone++)
     {
-        const float Alpha = Zone == Latched ? kBright : kDim;
+        const float Alpha = (Lit & (1u << Zone)) != 0 ? kBright : kDim;
         float X0, Y0, X1, Y1;
         PointerZoneRect(Zone, W, H, &X0, &Y0, &X1, &Y1);
         DrawRect(X0, Y0, X1, Y1, Alpha);
+        if ((Toggles & (1u << Zone)) != 0)
+        {
+            DrawLine(X1 - 12.0f, Y0 + 1.0f, X1 - 1.0f, Y0 + 12.0f, Alpha);
+        }
         DrawText(State->Labels[Zone], (X0 + X1) / 2.0f, (Y0 + Y1) / 2.0f, Alpha);
     }
     DrawFaceStatus(State, 178.0f, (float)H - 88.0f);
@@ -193,7 +198,7 @@ static void DrawPanel(const PointerState * State, int W, int H, int GameH, int L
 
 // The guide over the game: the lit quadrant's wedge, the four 45-degree rays, the ring and
 // dead zone, the game zone's label, and an arrow per edge with the lit one bright.
-static void DrawGuide(const PointerState * State, int W, int H, int GameH, int Latched, int Quadrant)
+static void DrawGuide(const PointerState * State, int W, int H, int GameH, bool GameLit, int Quadrant)
 {
     const float R = PointerStickRadius(W, H);
     const float Cx = (float)W / 2.0f, Cy = (float)GameH / 2.0f;
@@ -217,7 +222,7 @@ static void DrawGuide(const PointerState * State, int W, int H, int GameH, int L
     DrawLine(Cx, Cy, Rx, 0.0f, kDim);
     DrawLine(Cx, Cy, Lx, Gh, kDim);
     DrawLine(Cx, Cy, Rx, Gh, kDim);
-    const float GameAlpha = Latched == POINTER_ZONE_GAME ? kBright : kDim;
+    const float GameAlpha = GameLit ? kBright : kDim;
     DrawCircle(Cx, Cy, R, GameAlpha, false);
     DrawCircle(Cx, Cy, R * 0.1f, GameAlpha, false);
     DrawText(State->Labels[POINTER_ZONE_GAME], Cx, Cy - R + 7.0f * kScale, GameAlpha); // just inside the ring's top
@@ -293,13 +298,18 @@ void OverlayDraw(const PointerState * State, const int Viewport[4], bool GuideHi
 
     const int Latched = State->LatchedZone.load(std::memory_order_relaxed);
     const int Quadrant = State->Quadrant.load(std::memory_order_relaxed);
+    uint32_t Lit = State->ToggledZones.load(std::memory_order_relaxed);
+    if (Latched >= 0 && Latched < POINTER_ZONE_COUNT)
+    {
+        Lit |= 1u << Latched;
+    }
     if (H > GameH)
     {
-        DrawPanel(State, W, H, GameH, Latched);
+        DrawPanel(State, W, H, GameH, Lit, State->ToggleZones.load(std::memory_order_relaxed));
     }
     if (!GuideHidden)
     {
-        DrawGuide(State, W, H, GameH, Latched, Quadrant);
+        DrawGuide(State, W, H, GameH, (Lit & (1u << POINTER_ZONE_GAME)) != 0, Quadrant);
     }
 
     glMatrixMode(GL_MODELVIEW);
