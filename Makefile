@@ -349,7 +349,7 @@ $(FRONTEND_OBJS) $(FRONTEND_MM_OBJS) $(WIZARD_OBJS): WARN = -Wall
 $(LAUNCHER_OBJS): CPPFLAGS += $(SDL_CFLAGS) $(YAML_CFLAGS)
 $(LAUNCHER_OBJS): WARN = -Wall
 
-.PHONY: help deps version common core rsp video audio input frontend wizard launcher config all run grid run-wizard run-launcher rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
+.PHONY: help deps version common core rsp video audio input frontend wizard launcher app config all run grid run-wizard run-launcher rom-test grid-selftest pointer-selftest face-selftest wizard-selftest wizard-screenshots wizard-screenshots-check unit-test test clean
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -450,6 +450,21 @@ $(BIN)/Project64-launcher: $(LAUNCHER_OBJS) $(BUILD)/Project64-sdl/GameConfig.o
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(YAML_LIBS)
 
+# ── Stage 7e · App bundle ─────────────────────────────────────────────────────
+
+# A thin bundle: the launcher and its Info.plist. The emulator, its data and the player's
+# saves stay in Bin/macOS, which the launcher finds three directories up from
+# Contents/MacOS; so the app works only here, and make clean removes it with the saves.
+APP = $(BIN)/Project64.app
+APP_VERSION := $(shell awk '/define VERSION_(MAJOR|MINOR|REVISION)[[:space:]]/ {v = v (v == "" ? "" : ".") $$3} END {print v}' $(SRC)/Project64-core/Version.h.in)
+
+app: launcher ## Build Bin/macOS/Project64.app: double-click it, or keep it in the Dock
+	@mkdir -p $(APP)/Contents/MacOS
+	cp -f $(BIN)/Project64-launcher $(APP)/Contents/MacOS/Project64-launcher
+	sed 's/@VERSION@/$(APP_VERSION)/g' $(SRC)/Project64-launcher/Info.plist.in > $(APP)/Contents/Info.plist
+	plutil -lint -s $(APP)/Contents/Info.plist
+	codesign --force -s - $(APP)
+
 # ── Stage 7b · Data files ─────────────────────────────────────────────────────
 
 # The core reads its ROM database, enhancement and language data from the base directory
@@ -478,7 +493,7 @@ config: # Install ROM database, enhancements, input mappings and language files 
 	@cp -f Lang/*.pj.Lang Lang/*.pj.lang $(BIN)/Lang/ 2>/dev/null || true
 	@echo "config installed into $(BIN)"
 
-all: deps common core rsp video audio input frontend wizard launcher config ## [STEP 0-7c] deps, common, core, rsp, video, audio, input, frontend, wizard, launcher, config: build everything
+all: deps common core rsp video audio input frontend wizard launcher app config ## [STEP 0-7e] deps, common, core, rsp, video, audio, input, frontend, wizard, launcher, app, config: build everything
 
 # ── Stage 8 · Run / test ─────────────────────────────────────────────────────
 

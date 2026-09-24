@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Project64.app: the launcher and nothing else. It finds the emulator three directories up,
+     in Bin/macOS, so the app only works where make built it (AGENTS.md). -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>Project64-launcher</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.felipe-dos-santos81.Project64Mac</string>
+    <key>CFBundleName</key>
+    <string>Project64</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@VERSION@</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSCameraUsageDescription</key>
+    <string>Project64 uses the camera to read face gestures when a game's layout binds them.</string>
+</dict>
+</plist>
