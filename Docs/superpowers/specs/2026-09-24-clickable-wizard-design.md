@@ -101,8 +101,8 @@ target it was pressed in, as in the launcher.
 - **The chooser.** Clicking a slot or the picture opens a chooser over the picture area: a
   header naming the place and what it holds (`mid2: Z, toggle`, or `mid2: Z and L` for a
   shared slot), then a grid of large buttons — the fourteen controls other than Stick
-  (`A B Z St L R C^ Cv C< C> D^ Dv D< D>`), `Menu`, `Hold`, `Nothing`, `Toggle: on/off` (shown
-  while a control sits there), and `Back`, which closes it without a change. The current
+  (`A B Z St L R C^ Cv C< C> D^ Dv D< D>`), `Menu`, `Hold`, `Nothing`, `Toggle: on/off` (dimmed
+  until a control sits there), and `Back`, which closes it without a change. The current
   choice is lit; a choice not allowed there is dimmed and says why on the status line when
   clicked (the picture takes neither `Menu` nor `Hold`; `Hold` needs the stick to be the
   pointer).
