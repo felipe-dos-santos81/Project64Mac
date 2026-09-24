@@ -2,12 +2,14 @@
 // The binding wizard: a window, an event loop and nothing else. It never loads a ROM and
 // never starts the camera until a gesture list asks for one.
 // GNU/GPLv2 licensed: https://gnu.org/licenses/gpl-2.0.html
+#include "EditScreen.h"
 #include "Screens.h"
 #include "Screenshots.h"
 #include "SyntheticEvents.h"
 #include "WizardDraft.h"
 
 #include <Common/PointerState.h>
+#include <Project64-sdl/ExecutablePath.h>
 #include <Project64-sdl/FaceTracker.h>
 
 #include <SDL3/SDL.h>
@@ -15,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 // SDL3 delivers SDL_EVENT_GAMEPAD_BUTTON_DOWN and SDL_EVENT_GAMEPAD_AXIS_MOTION only for a
 // gamepad that has been opened, so mode 2 and 3 capture would otherwise see nothing.
@@ -222,6 +225,129 @@ static int Selftest(const char * Path)
     return 0;
 }
 
+// The ROM's file name, for the editor's title.
+static std::string FileName(const char * Path)
+{
+    const char * Slash = strrchr(Path, '/');
+    return Slash != nullptr ? Slash + 1 : Path;
+}
+
+// Saves beside the ROM and says so on stderr, or puts the reason on the status line.
+static bool SaveAndReport(WizardDraft & Draft, const char * Rom, const std::string & BaseName, EditState * S)
+{
+    std::string Saved;
+    bool MadeOrig = false;
+    if (Draft.SaveBesideRom(Rom, BaseName.c_str(), &Saved, &MadeOrig))
+    {
+        if (MadeOrig) fprintf(stderr, "wizard: kept the original as %s.orig\n", Saved.c_str());
+        fprintf(stderr, "wizard: saved %s\n", Saved.c_str());
+        return true;
+    }
+    S->Status = std::string("Cannot save beside the ROM: ") + Draft.Error();
+    fprintf(stderr, "wizard: cannot save %s: %s\n", Saved.c_str(), Draft.Error());
+    return false;
+}
+
+// PJ64_EDIT_SELFTEST=1: the scripted edit behind Scripts/wizard_selftest.sh and the launcher's
+// self-test, driven through the real editor handler with no window. On the generic layout it
+// moves L onto mid4 as a toggle (R leaves the panel), puts the hold on pad-up, R on pad-down
+// (so the menu moves to mid5, freed by the hold) and Z on the picture (A leaves), then saves.
+static int EditScript(EditState & S, WizardDraft & Draft, const char * Rom, const std::string & BaseName)
+{
+    const EditTarget Steps[] = {
+        { EditTargetKind::Zone, PointerZoneFromName("mid4") }, { EditTargetKind::Choice, (int)N64Control::L },
+        { EditTargetKind::Zone, PointerZoneFromName("mid4") }, { EditTargetKind::Toggle, 0 }, { EditTargetKind::Back, 0 },
+        { EditTargetKind::Zone, PointerZoneFromName("pad-up") }, { EditTargetKind::Choice, EDIT_CHOICE_HOLD },
+        { EditTargetKind::Zone, PointerZoneFromName("pad-down") }, { EditTargetKind::Choice, (int)N64Control::R },
+        { EditTargetKind::Zone, POINTER_ZONE_GAME }, { EditTargetKind::Choice, (int)N64Control::Z },
+        { EditTargetKind::Save, 0 },
+    };
+    EditTarget Hover, Pressed;
+    for (const EditTarget & T : Steps)
+    {
+        const EditRect R = EditTargetRect(T);
+        const float X = R.X + R.W / 2, Y = R.Y + R.H / 2;
+        EditHandleEvent(ClickEvent(X, Y), &S, &Draft, &Hover, &Pressed);
+        const EditCommand C = EditHandleEvent(ReleaseEvent(X, Y), &S, &Draft, &Hover, &Pressed);
+        if (!S.Status.empty()) fprintf(stderr, "wizard: %s\n", S.Status.c_str());
+        if (C == EditCommand::Save) return SaveAndReport(Draft, Rom, BaseName, &S) ? 0 : 1;
+    }
+    fprintf(stderr, "wizard: the scripted edit never reached Save\n");
+    return 1;
+}
+
+// --edit <rom>: the panel editor for one game (Docs/superpowers/specs/2026-09-24-clickable-wizard-design.md).
+static int RunEditor(const char * Rom)
+{
+    WizardDraft Draft;
+    EditState S;
+    const std::string ExeDir = ExecutableDirectory();
+    const std::string Loaded = Draft.LoadForRom(Rom, ExeDir.c_str(), &S.Status);
+    if (Loaded.empty())
+    {
+        fprintf(stderr, "wizard: cannot load a layout for %s: %s\n", Rom, Draft.Error());
+        return 1;
+    }
+    fprintf(stderr, "wizard: editing %s from %s\n", Rom, Loaded.c_str());
+    std::string MenuNote;
+    if (Draft.EnsureMenu(&MenuNote)) S.Status = S.Status.empty() ? MenuNote : S.Status + "; " + MenuNote;
+    if (S.Status.empty()) S.Status = "Click a slot or the picture to change it.";
+    const std::string BaseName = FileName(Loaded.c_str());
+    const std::string Title = "Layout for " + FileName(Rom);
+
+    const char * Script = getenv("PJ64_EDIT_SELFTEST");
+    if (Script != nullptr && strcmp(Script, "1") == 0) return EditScript(S, Draft, Rom, BaseName);
+
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
+    }
+    SDL_Window * Window = SDL_CreateWindow("Project64 layout editor", EDIT_WIDTH, EDIT_HEIGHT, 0);
+    SDL_Renderer * Renderer = Window != nullptr ? SDL_CreateRenderer(Window, nullptr) : nullptr;
+    if (Renderer == nullptr)
+    {
+        fprintf(stderr, "wizard: cannot open a window: %s\n", SDL_GetError());
+        if (Window != nullptr) SDL_DestroyWindow(Window);
+        SDL_Quit();
+        return 1;
+    }
+
+    memset(&g_State, 0, sizeof(g_State));
+    bool CameraStarted = false;
+    bool CameraAsked = false;
+    EditTarget Hover, Pressed;
+    bool Running = true;
+    while (Running)
+    {
+        SDL_Event E;
+        while (Running && SDL_PollEvent(&E))
+        {
+            const EditCommand C = EditHandleEvent(E, &S, &Draft, &Hover, &Pressed);
+            if (C == EditCommand::Quit) Running = false;
+            else if (C == EditCommand::Save && SaveAndReport(Draft, Rom, BaseName, &S)) Running = false;
+        }
+        // The camera starts the first time the gesture list opens, and never before; PJ64_FACE=0 keeps it shut.
+        if (!CameraAsked && EditShowsGestures(S))
+        {
+            CameraAsked = true;
+            const char * Off = getenv("PJ64_FACE");
+            if (Off != nullptr && strcmp(Off, "0") == 0) g_State.Face.store(FACE_OFF, std::memory_order_relaxed);
+            else CameraStarted = FaceTrackerStart(&g_State);
+        }
+        EditDraw(Renderer, S, Draft, Title.c_str(), Hover,
+                 g_State.Gestures.load(std::memory_order_relaxed), g_State.Face.load(std::memory_order_relaxed));
+        SDL_RenderPresent(Renderer);
+        SDL_Delay(16);
+    }
+    if (CameraStarted) FaceTrackerStop();
+    SDL_DestroyRenderer(Renderer);
+    SDL_DestroyWindow(Window);
+    SDL_Quit();
+    return 0;
+}
+
 int main(int argc, char ** argv)
 {
     if (argc >= 2 && strcmp(argv[1], "--version") == 0)
@@ -248,6 +374,16 @@ int main(int argc, char ** argv)
             return 1;
         }
         return WizardScreenshots(argv[2]);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "--edit") == 0)
+    {
+        if (argc < 3)
+        {
+            fprintf(stderr, "usage: %s --edit <rom>\n", argv[0]);
+            return 2;
+        }
+        return RunEditor(argv[2]);
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))

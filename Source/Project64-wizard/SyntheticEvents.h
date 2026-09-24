@@ -59,6 +59,14 @@ static inline SDL_Event ClickEvent(float X, float Y)
     return E;
 }
 
+// The release that completes ClickEvent, for screens that act on release (the panel editor).
+static inline SDL_Event ReleaseEvent(float X, float Y)
+{
+    SDL_Event E = ClickEvent(X, Y);
+    E.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    return E;
+}
+
 // HandleTyping (Screens.cpp) fills Ui.Typed from SDL_EVENT_TEXT_INPUT events, reading only
 // Event.text.text, and appends whatever string that event carries. SDL itself may deliver a
 // typed path one character (or one IME composition) at a time, but HandleTyping just appends

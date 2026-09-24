@@ -294,7 +294,7 @@ INPUT_SRC = Project64-sdl/PluginInput.cpp Project64-sdl/InputConfig.cpp
 FRONTEND_SRC = $(addprefix Project64-sdl/, main.cpp SdlNotification.cpp SdlRenderWindow.cpp GridHost.cpp FaceGestures.cpp Overlay.cpp MenuHost.cpp GameConfig.cpp InputConfig.cpp)
 # Objective-C++: the face tracker talks to AVFoundation and Vision. Frontend only.
 FRONTEND_MM_SRC = Project64-sdl/FaceTracker.mm
-WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp EditLayout.cpp Screenshots.cpp)
+WIZARD_SRC = $(addprefix Project64-wizard/, main.cpp Screens.cpp WizardDraft.cpp EditLayout.cpp EditScreen.cpp Screenshots.cpp)
 LAUNCHER_SRC = $(addprefix Project64-launcher/, main.cpp Screens.cpp LauncherModel.cpp)
 
 COMMON_OBJS   = $(call objs,$(COMMON_SRC))
@@ -530,7 +530,7 @@ launcher-selftest: ## Prove the app's launcher starts two games in turn, the sec
 	@test -n "$(rom)" || { echo "usage: make launcher-selftest rom=/path/to/game.z64"; exit 1; }
 	Scripts/launcher_selftest.sh "$(rom)"
 
-wizard-selftest: wizard ## Prove the wizard's screens write the mapping they show, with no window and no camera
+wizard-selftest: wizard config ## Prove the wizard's screens write the mapping they show, and the panel editor's --edit, with no window and no camera
 	Scripts/wizard_selftest.sh
 
 wizard-screenshots: wizard ## Render the user guide's wizard pictures into Docs/img/wizard (no window, no camera)

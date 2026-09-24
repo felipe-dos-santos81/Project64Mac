@@ -591,7 +591,7 @@ static bool CaptureGesture(const SDL_Event & Event, WizardUi * Ui, WizardDraft *
     }
 }
 
-static const char * FaceStatusText(uint32_t Face)
+const char * WizardFaceStatus(uint32_t Face)
 {
     switch (Face)
     {
@@ -618,11 +618,11 @@ static void DrawGestures(SDL_Renderer * Renderer, const WizardUi & Ui, uint32_t 
         if (Firing) WizardText(Renderer, 320.0f, Y, kBody, "<- now");
     }
     Colour(Renderer, false);
-    // Every FaceStatusText string fits x=40's budget whole (kWindowWidth - 40.0f), but
+    // Every WizardFaceStatus string fits x=40's budget whole (kWindowWidth - 40.0f), but
     // this is variable text like any other status line, so it gets the same Fit
     // truncation as a defence against a future string that doesn't.
     WizardTextFit(Renderer, 40.0f, 140.0f + kLine * (float)POINTER_GESTURE_COUNT + 12.0f, kBody,
-                  FaceStatusText(Face), kWindowWidth - 40.0f);
+                  WizardFaceStatus(Face), kWindowWidth - 40.0f);
 }
 
 // Modes 2 and 3 are the two that need a pad open, and they refuse the same way. Gated on

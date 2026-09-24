@@ -80,3 +80,6 @@ void WizardText(SDL_Renderer * Renderer, float X, float Y, int Scale, const char
 // pixels from X. MaxWidth is pixels, not characters, so a caller doesn't have to redo the
 // glyph-width arithmetic for its own window position.
 void WizardTextFit(SDL_Renderer * Renderer, float X, float Y, int Scale, const char * Text, float MaxWidth);
+
+// What the camera is doing, in one line for a gesture list: "tracking", "camera off: …".
+const char * WizardFaceStatus(uint32_t Face);
