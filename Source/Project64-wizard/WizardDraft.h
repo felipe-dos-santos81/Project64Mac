@@ -72,6 +72,10 @@ public:
     // actually find in the slot rather than only what this draft will write.
     N64Control ZoneOwner(int Zone) const;
 
+    // The stick's hold slot ({stick: pointer, hold: <slot>}), or POINTER_ZONE_NONE. It
+    // belongs to no control, so ZoneOwner never names it.
+    int HoldZone() const;
+
     // What the control is bound to, in English: "key X", "zone mid1",
     // "gesture mouth-open (Mo)", "keys Up/Down/Left/Right". An inherited control reads
     // "inherited: " followed by every built-in input, joined by " or ".

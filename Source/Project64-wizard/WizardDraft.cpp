@@ -116,6 +116,8 @@ struct BindingFacts
     const char * Tag;       // Kind::Face only: the gesture's two-character overlay tag
     char Sign;              // Kind::Axis only: '+' or '-'
     const char * Keys[4];   // Kind::Keys only: up, down, left, right
+    bool Toggle;            // Kind::Zone only: {zone: ..., toggle: true}
+    const char * Hold;      // Kind::Pointer only: the hold slot's name, or nullptr
 };
 
 // Every name stored here outlives the call: SDL's and PointerLayout's name functions all
@@ -147,6 +149,7 @@ BindingFacts FactsOf(const Binding & B)
         F.YamlKey = "zone";
         F.Noun = "zone";
         F.Name = PointerZoneName(B.code);
+        F.Toggle = B.Toggle;
         break;
     case Binding::Kind::Face:
     {
@@ -168,6 +171,7 @@ BindingFacts FactsOf(const Binding & B)
         F.YamlKey = "stick";
         F.Noun = "stick";
         F.Name = "pointer";
+        F.Hold = B.Hold != POINTER_ZONE_NONE ? PointerZoneName(B.Hold) : nullptr;
         break;
     case Binding::Kind::HeadStick:
         F.YamlKey = "stick";
@@ -208,7 +212,10 @@ static std::string ValueText(const Binding & B)
         // Every name goes through Scalar, though only a scancode name ("Left Shift", "Keypad
         // Enter") has ever needed the quoting: a zone, gesture or stick name is already a
         // plain scalar, and Scalar hands those back unchanged.
-        snprintf(Buf, sizeof(Buf), "{%s: %s}", F.YamlKey, Scalar(F.Name).c_str());
+        std::string Extra;
+        if (F.Toggle) Extra += ", toggle: true";
+        if (F.Hold != nullptr) { Extra += ", hold: "; Extra += F.Hold; }
+        snprintf(Buf, sizeof(Buf), "{%s: %s%s}", F.YamlKey, Scalar(F.Name).c_str(), Extra.c_str());
     }
     return Buf;
 }
@@ -288,6 +295,20 @@ void WizardDraft::SetZone(N64Control Control, int Zone)
     Binding B = {};
     B.kind = Binding::Kind::Zone;
     B.code = Zone;
+    // A slot is a toggle for every control on it or for none (the reader's rule), so a
+    // control joining a toggle slot, or re-capturing its own, is a toggle too.
+    for (int i = 0; i < (int)N64Control::Count; i++)
+    {
+        if (m_Bindings[i].empty()) continue;
+        const Binding & Other = m_Bindings[i][0];
+        if (Other.kind == Binding::Kind::Zone && Other.code == Zone && Other.Toggle) B.Toggle = true;
+    }
+    // The hold slot is the stick's; a control taking it takes it off the stick.
+    std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
+    if (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer && Stick[0].Hold == Zone)
+    {
+        Stick[0].Hold = POINTER_ZONE_NONE;
+    }
     Replace(Control, B);
 }
 
@@ -383,6 +404,12 @@ N64Control WizardDraft::ZoneOwner(int Zone) const
     return N64Control::Count;
 }
 
+int WizardDraft::HoldZone() const
+{
+    const std::vector<Binding> & Stick = m_Bindings[(int)N64Control::Stick];
+    return (!Stick.empty() && Stick[0].kind == Binding::Kind::Pointer) ? Stick[0].Hold : POINTER_ZONE_NONE;
+}
+
 // One binding in English. ValueText is the file's voice; this is the screen's. Both read the
 // same BindingFacts and render it differently, which is the whole point of the split: nothing
 // here is quoted, bracketed or comma-separated, and the gesture kind reads by its English
@@ -407,7 +434,10 @@ static std::string DescribeBinding(const Binding & B)
     }
     else
     {
-        snprintf(Buf, sizeof(Buf), "%s %s", F.Noun, F.Name);
+        std::string Extra;
+        if (F.Toggle) Extra += ", toggle";
+        if (F.Hold != nullptr) { Extra += ", hold "; Extra += F.Hold; }
+        snprintf(Buf, sizeof(Buf), "%s %s%s", F.Noun, F.Name, Extra.c_str());
     }
     return Buf;
 }

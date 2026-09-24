@@ -7,7 +7,9 @@
 #include <Common/PointerState.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int Failures = 0;
 
@@ -19,6 +21,18 @@ static int Failures = 0;
 static bool Has(const std::string & Text, const char * Needle)
 {
     return Text.find(Needle) != std::string::npos;
+}
+
+// A base file under /tmp holding Text; the caller removes it.
+static std::string WriteBase(const char * Text)
+{
+    char Path[64];
+    snprintf(Path, sizeof(Path), "/tmp/pj64-wizard-base-XXXXXX");
+    const int Fd = mkstemp(Path);
+    if (Fd < 0) { perror("mkstemp"); exit(2); }
+    write(Fd, Text, strlen(Text));
+    close(Fd);
+    return Path;
 }
 
 // The shipped layouts this test loads as bases live at the repository root, which is neither
@@ -146,6 +160,49 @@ int main()
         D.SetKey(N64Control::A, SDL_SCANCODE_X);
         CHECK(D.Validate("x"));            // head-up alone is fine
         CHECK(strcmp(D.Error(), "") == 0);
+    }
+
+    // A toggle and a hold survive a round trip and read as such on screen, and the draft
+    // never writes a file the reader would reject when a control joins either slot.
+    {
+        const std::string Base = WriteBase(
+            "bindings:\n"
+            "  Stick: {stick: pointer, hold: mid5}\n"
+            "  A: {zone: game}\n"
+            "  Z: {zone: mid2, toggle: true}\n");
+        WizardDraft D;
+        CHECK(D.LoadBase(Base.c_str()));
+        CHECK(D.Bindings(N64Control::Z)[0].Toggle);
+        CHECK(D.HoldZone() == 12);
+        const std::string Text = D.Emit("x");
+        CHECK(Has(Text, "Z:         {zone: mid2, toggle: true}\n"));
+        CHECK(Has(Text, "Stick:     {stick: pointer, hold: mid5}\n"));
+        CHECK(Has(Text, "A:         {zone: game}\n"));
+        CHECK(D.Describe(N64Control::Z) == "zone mid2, toggle");
+        CHECK(D.Describe(N64Control::Stick) == "stick pointer, hold mid5");
+        CHECK(D.Validate("x"));
+
+        D.SetZone(N64Control::Z, 9);                  // re-capturing its own slot keeps the toggle
+        CHECK(D.Bindings(N64Control::Z)[0].Toggle);
+        D.SetZone(N64Control::R, 9);                  // joining a toggle slot makes a toggle
+        CHECK(D.Bindings(N64Control::R)[0].Toggle);
+        CHECK(D.Validate("x"));
+        D.SetZone(N64Control::B, 10);                 // an empty slot stays momentary
+        CHECK(!D.Bindings(N64Control::B)[0].Toggle);
+
+        D.SetZone(N64Control::Start, 12);             // taking the hold slot takes it off the stick
+        CHECK(D.HoldZone() == POINTER_ZONE_NONE);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}\n"));
+        CHECK(D.Validate("x"));
+        remove(Base.c_str());
+    }
+
+    // Choosing the pointer stick afresh starts with no hold.
+    {
+        WizardDraft D;
+        D.SetStickPointer();
+        CHECK(D.HoldZone() == POINTER_ZONE_NONE);
+        CHECK(Has(D.Emit("x"), "Stick:     {stick: pointer}\n"));
     }
 
     // The five shipped layouts are offered as bases, by label and by path.

@@ -512,6 +512,15 @@ static void DrawPanel(SDL_Renderer * Renderer, const WizardDraft & Draft)
                                Zone == POINTER_ZONE_GAME ? 34 : 52, 255);
         SDL_RenderFillRect(Renderer, &R);
 
+        // The stick's hold slot belongs to no control, so ZoneOwner never names it; show the
+        // overlay's own label so the player sees it is taken.
+        if (Zone == Draft.HoldZone())
+        {
+            Colour(Renderer, false);
+            WizardText(Renderer, R.x + 4.0f, R.y + 4.0f, 1, "Ho");
+            continue;
+        }
+
         // Whatever the draft already puts in this slot, so the choice is made in context.
         // The same two-character label the game's own overlay draws here, not the full
         // control name, which would spill across neighbouring slots. Stick has no overlay
